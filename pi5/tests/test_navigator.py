@@ -20,8 +20,9 @@ class TestComputeThrottle:
 
     def test_arrived_within_radius(self):
         left, right, dist, brg, err, arrived = self.nav.compute_throttle(
-            51.5067, -0.0714, 51.5067, -0.0714,  # Same point
-            0.0,
+            51.5067, -0.0714,  # Current pos
+            0.0,               # Heading
+            51.5067, -0.0714,  # Target (same point)
         )
         assert arrived is True
         assert left == 0

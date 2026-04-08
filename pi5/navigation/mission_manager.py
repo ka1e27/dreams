@@ -227,7 +227,8 @@ class MissionManager:
     def abort(self, reason: str = "ABORTED") -> None:
         """Abort the mission immediately."""
         self._abort_event.set()
-        self._nav.stop_nav()
+        if self._nav is not None:
+            self._nav.stop_nav()
         self.state.running = False
         self.state.paused = False
         logger.info("Mission aborted: %s", reason)
