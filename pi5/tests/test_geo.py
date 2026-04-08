@@ -2,7 +2,6 @@
 
 Validates against known reference values and edge cases.
 """
-import math
 import pytest
 
 from pi5.navigation.geo import bearing, haversine_distance, heading_diff

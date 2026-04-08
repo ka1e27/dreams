@@ -7,10 +7,8 @@ when cellular is unavailable and flushes when connectivity returns.
 from __future__ import annotations
 
 import asyncio
-import datetime
 import json
 import logging
-import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 

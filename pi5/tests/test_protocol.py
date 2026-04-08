@@ -1,7 +1,6 @@
 """Tests for serial protocol — framing, checksum, parsing, building commands."""
-import pytest
 
-from pi5.comms.protocol import ParsedFrame, build_command, checksum, frame, parse_frame
+from pi5.comms.protocol import build_command, checksum, frame, parse_frame
 
 
 class TestChecksum:

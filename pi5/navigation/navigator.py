@@ -12,7 +12,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from ..comms.pico_serial import PicoSerial, Telemetry
+from ..comms.pico_serial import PicoSerial
 from .geo import bearing, haversine_distance, heading_diff
 
 logger = logging.getLogger(__name__)

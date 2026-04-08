@@ -15,14 +15,14 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import time
-import logging
 from dataclasses import dataclass
 
-from ..comms.pico_serial import PicoSerial, Telemetry, Environment, PodData, Alert
+from ..comms.pico_serial import Environment, Telemetry
 from ..comms.protocol import ParsedFrame
-from .geo import EARTH_R, DEG_TO_RAD, RAD_TO_DEG
+from .geo import DEG_TO_RAD, EARTH_R, RAD_TO_DEG
 
 logger = logging.getLogger(__name__)
 

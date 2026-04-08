@@ -8,12 +8,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import serial_asyncio
 
-from .protocol import ParsedFrame, build_command, checksum, parse_frame
+from .protocol import ParsedFrame, build_command, parse_frame
 
 logger = logging.getLogger(__name__)
 

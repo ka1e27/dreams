@@ -22,16 +22,13 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
-from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth
-from .rate_limit import RateLimitMiddleware
 from .models import (
     EnvironmentOut,
     GotoIn,
@@ -42,6 +39,7 @@ from .models import (
     StatusOut,
     TelemetryOut,
 )
+from .rate_limit import RateLimitMiddleware
 
 logger = logging.getLogger(__name__)
 

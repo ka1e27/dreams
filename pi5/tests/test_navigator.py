@@ -1,5 +1,4 @@
 """Tests for the Navigator — throttle computation and waypoint arrival."""
-import pytest
 
 from pi5.navigation.navigator import NavConfig, Navigator
 

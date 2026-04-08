@@ -10,13 +10,12 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
 
 from ..comms.pico_serial import PicoSerial
 from ..comms.pod_bridge import PodBridge, PodReading
-from .geo import haversine_distance
 from .navigator import Navigator
 
 logger = logging.getLogger(__name__)

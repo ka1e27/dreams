@@ -1,13 +1,12 @@
 """Tests for MissionManager — load, validate, and mission state."""
 import json
-import pytest
 from pathlib import Path
 
+import pytest
+
 from pi5.navigation.mission_manager import (
-    MissionConfig,
     MissionManager,
     MissionPhase,
-    Waypoint,
     WaypointType,
 )
 
