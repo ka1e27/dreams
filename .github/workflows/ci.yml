@@ -16,7 +16,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: Install dependencies
         run: |
@@ -27,6 +26,8 @@ jobs:
         run: ruff check pi5/
 
       - name: Run Pi 5 tests
+        env:
+          PYTHONPATH: .
         run: pytest pi5/tests/ -v --tb=short
 
   # ---- Cloud API: lint + integration test against PostGIS ----
@@ -54,7 +55,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libgeos-dev
@@ -89,12 +89,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: dashboard/package.json
 
       - name: Install dependencies
         working-directory: dashboard
-        run: npm ci
+        run: npm install
 
       - name: Build
         working-directory: dashboard
@@ -110,12 +108,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
-          cache-dependency-path: cloud/map-viewer/package.json
 
       - name: Install dependencies
         working-directory: cloud/map-viewer
-        run: npm ci
+        run: npm install
 
       - name: Build
         working-directory: cloud/map-viewer
