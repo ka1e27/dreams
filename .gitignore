@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Node
+node_modules/
+dashboard/dist/
+cloud/map-viewer/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Data files (generated at runtime)
+*.csv
+upload_buffer.json
+
+# Docker
+pgdata/

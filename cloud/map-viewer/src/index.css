@@ -1,0 +1,107 @@
+:root {
+  --bg: #0a0f1a;
+  --card: #111827;
+  --border: #1e2d3d;
+  --text: #e2e8f0;
+  --dim: #64748b;
+  --accent: #38bdf8;
+  --font: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.viewer {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  grid-template-rows: 48px 1fr;
+  height: 100vh;
+  gap: 1px;
+  background: var(--border);
+}
+
+.header {
+  grid-column: 1 / -1;
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+}
+
+.header h1 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.panel {
+  background: var(--card);
+  padding: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.map-area {
+  position: relative;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+}
+
+label {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+select, input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.btn {
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.btn:hover { background: rgba(56,189,248,0.1); }
+
+.legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+@media (max-width: 768px) {
+  .viewer { grid-template-columns: 1fr; grid-template-rows: 48px 200px 1fr; }
+}

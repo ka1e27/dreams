@@ -1,0 +1,103 @@
+# Pi 5 Autonomous Boat Configuration
+# ------------------------------------
+
+serial:
+  # USB serial port to Boat Pico
+  port: "/dev/ttyACM0"
+  baud: 115200
+  # Timeout for waiting for ACK/NAK after sending a command (ms)
+  command_timeout_ms: 2000
+  # Number of retries before declaring command failure
+  max_retries: 3
+
+heartbeat:
+  # Interval between HB messages sent to Boat Pico (seconds)
+  interval_s: 1.0
+  # Pico-side timeout is 3s — keep interval well under that
+
+navigation:
+  # Distance (metres) at which the boat is considered "arrived" at a waypoint
+  arrive_radius_m: 5.0
+  # Distance before re-acquiring a hold position (metres)
+  hold_drift_m: 8.0
+  # Default throttle during waypoint transit (0–100)
+  cruise_throttle: 40
+  # Heading tolerance — below this error, go straight (degrees)
+  heading_tolerance_deg: 10.0
+  # Max heading error for proportional steering (degrees)
+  max_heading_error_deg: 90.0
+  # Minimum turn throttle (prevents stalling during sharp turns)
+  turn_min_throttle: 15
+  # Navigation update rate (Hz)
+  update_rate_hz: 5
+
+mission:
+  # Default max time at a data waypoint if not specified (seconds)
+  default_sample_timeout_s: 300
+  # Winch descent speed sent to Pico (-100 to 100, positive = down)
+  winch_down_speed: 50
+  # Winch ascent speed
+  winch_up_speed: -50
+  # Estimated descent rate (metres/second) for depth estimation
+  descent_rate_m_per_s: 0.10
+  # Margin multiplier for winch-up time (1.5 = 50% longer than descent)
+  winch_up_margin: 1.5
+  # Bottom contact confirmations needed before sampling
+  bottom_confirm_count: 3
+  # Seconds between bottom samples
+  sample_interval_s: 5.0
+  # Consecutive no-contact reads to confirm lift-off
+  bottom_lost_confirm: 3
+  # Minimum samples before allowing lift-off exit
+  min_bottom_samples: 2
+  # Pod poll interval during sampling (seconds)
+  pod_poll_interval_s: 2.0
+
+pod:
+  # Pod poll interval during transit (seconds)
+  poll_interval_s: 5.0
+  # Timeout before declaring pod lost (ms)
+  timeout_ms: 10000
+
+battery:
+  # Voltage thresholds (4S LiPo)
+  full_v: 16.8
+  empty_v: 13.2
+  warn_v: 14.0
+  critical_v: 13.6
+
+cellular:
+  # SIM7600 modem configuration
+  device: "/dev/ttyUSB2"
+  baud: 115200
+  apn: "internet"
+  # API endpoint for cloud data upload
+  cloud_api_url: "https://your-cloud-api.example.com/api/v1"
+  cloud_api_key: ""  # Set via environment variable BOAT_CLOUD_API_KEY
+  # Upload interval (seconds) — buffer locally if offline
+  upload_interval_s: 30
+
+camera:
+  # USB camera device
+  device: "/dev/video0"
+  # Resolution for obstacle detection
+  width: 640
+  height: 480
+  fps: 10
+
+server:
+  # FastAPI web server (dashboard + API)
+  host: "0.0.0.0"
+  port: 8080
+  # API key for authenticating shore commands
+  api_key: ""  # Set via environment variable BOAT_API_KEY
+  # CORS allowed origins (dashboard URL)
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://localhost:3000"
+
+logging:
+  # Local CSV log file for sensor data
+  data_log: "/home/pi/boat/data/survey.csv"
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
