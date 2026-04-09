@@ -319,8 +319,6 @@ class MockPicoSerial:
 
         # Depth-dependent sensor simulation
         depth = s._pod_pressure_depth_m
-        depth_frac = depth / max(s._bottom_depth_m, 1.0) if s._bottom_depth_m > 0 else 0.0
-
         # Temperature: drops ~1°C per 5m depth (thermocline effect)
         s._pod_water_temp = s._surface_temp - (depth / 5.0) + random.gauss(0, 0.1)
 
