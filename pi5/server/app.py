@@ -24,9 +24,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from . import auth
 from .models import (
@@ -48,21 +50,23 @@ _pico = None      # PicoSerial
 _navigator = None  # Navigator
 _mission = None    # MissionManager
 _pod = None        # PodBridge
+_sim = None        # BoatSimulator (only in sim mode)
 _home_lat = None
 _home_lon = None
 
 
 def configure(pico, navigator, mission_mgr, pod_bridge,
               home_lat=None, home_lon=None, api_key=None,
-              cors_origins=None):
+              cors_origins=None, simulator=None):
     """Inject dependencies. Called before app startup."""
-    global _pico, _navigator, _mission, _pod, _home_lat, _home_lon
+    global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
     _pod = pod_bridge
     _home_lat = home_lat
     _home_lon = home_lon
+    _sim = simulator
     auth.configure(api_key)
 
     if cors_origins:
@@ -76,6 +80,14 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
 
 
 app = FastAPI(title="Autonomous Boat API", version="1.0.0")
+
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Serve the dashboard UI."""
+    return FileResponse(_STATIC_DIR / "index.html")
 
 # Rate limiting — 60 req/min default, 10/min for sensitive endpoints
 app.add_middleware(RateLimitMiddleware, default_rpm=60, burst_rpm=120)
@@ -165,6 +177,7 @@ async def get_pod_history(
             timestamp=r.timestamp, water_temp=r.water_temp,
             salinity_ec=r.salinity_ec, light_pct=r.light_pct,
             bottom_contact=r.bottom_contact, leak_detected=r.leak_detected,
+            pressure_depth_m=r.pressure_depth_m,
         )
         for r in readings
     ]
@@ -226,6 +239,13 @@ async def abort_mission(_: str = Depends(auth.require_api_key)):
     return {"status": "aborted"}
 
 
+@app.post("/api/mission/skip")
+async def skip_site(_: str = Depends(auth.require_api_key)):
+    """Skip the current data waypoint — winch up and continue mission."""
+    _mission.skip_site()
+    return {"status": "skipping"}
+
+
 @app.post("/api/goto")
 async def goto(
     payload: GotoIn,
@@ -253,6 +273,89 @@ async def resume_estop(_: str = Depends(auth.require_api_key)):
     """Resume after emergency stop."""
     await _pico.resume()
     return {"status": "resumed"}
+
+
+@app.get("/api/mission/waypoints")
+async def get_mission_waypoints(_: str = Depends(auth.require_api_key)):
+    """Return the loaded mission waypoints."""
+    return [
+        {"lat": wp.lat, "lon": wp.lon, "type": wp.wp_type.name.lower(), "label": wp.label}
+        for wp in _mission.waypoints
+    ]
+
+
+@app.post("/api/sim/speed")
+async def set_sim_speed(
+    payload: dict,
+    _: str = Depends(auth.require_api_key),
+):
+    """Set simulator speed (max_speed_mps). Only works in simulator mode."""
+    if _sim is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Not in simulator mode")
+    speed = payload.get("max_speed_mps")
+    if speed is None or not (0.1 <= speed <= 50.0):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="max_speed_mps must be 0.1–50.0")
+    _sim._config.max_speed_mps = float(speed)
+    return {"status": "ok", "max_speed_mps": _sim._config.max_speed_mps}
+
+
+@app.get("/api/sim/speed")
+async def get_sim_speed(_: str = Depends(auth.require_api_key)):
+    """Get current simulator speed."""
+    if _sim is None:
+        return {"max_speed_mps": None}
+    return {"max_speed_mps": _sim._config.max_speed_mps}
+
+
+@app.post("/api/nav/throttle")
+async def set_cruise_throttle(
+    payload: dict,
+    _: str = Depends(auth.require_api_key),
+):
+    """Set cruise throttle (0–100)."""
+    val = payload.get("cruise_throttle")
+    if val is None or not (1 <= val <= 100):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="cruise_throttle must be 1–100")
+    _navigator._config.cruise_throttle = int(val)
+    return {"status": "ok", "cruise_throttle": _navigator._config.cruise_throttle}
+
+
+@app.get("/api/nav/throttle")
+async def get_cruise_throttle(_: str = Depends(auth.require_api_key)):
+    """Get current cruise throttle."""
+    return {"cruise_throttle": _navigator._config.cruise_throttle}
+
+
+@app.post("/api/winch/speed")
+async def set_winch_speed(
+    payload: dict,
+    _: str = Depends(auth.require_api_key),
+):
+    """Set winch down/up speeds."""
+    down = payload.get("down_speed")
+    up = payload.get("up_speed")
+    cfg = _mission._config
+    if down is not None:
+        if not (1 <= down <= 100):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="down_speed must be 1–100")
+        cfg.winch_down_speed = int(down)
+    if up is not None:
+        if not (-100 <= up <= -1):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="up_speed must be -100 to -1")
+        cfg.winch_up_speed = int(up)
+    return {"status": "ok", "down_speed": cfg.winch_down_speed, "up_speed": cfg.winch_up_speed}
+
+
+@app.get("/api/winch/speed")
+async def get_winch_speed(_: str = Depends(auth.require_api_key)):
+    """Get current winch speeds."""
+    cfg = _mission._config
+    return {"down_speed": cfg.winch_down_speed, "up_speed": cfg.winch_up_speed}
 
 
 @app.post("/api/rth")

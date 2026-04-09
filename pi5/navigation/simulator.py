@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import random
 import time
 from dataclasses import dataclass
 
@@ -66,11 +67,21 @@ class BoatSimulator:
         self._estopped = False
         self._rc_override = False
 
-        # Simulated pod
+        # Simulated pod — surface baseline values
         self._pod_water_temp = 15.0
         self._pod_ec = 3500.0
         self._pod_light = 50
         self._pod_bottom = False
+        self._pod_pressure_depth_m = 0.0
+
+        # Simulated air conditions (randomized once, drift slowly)
+        self._air_temp = random.uniform(12.0, 28.0)
+        self._air_humidity = random.uniform(40.0, 85.0)
+
+        # Simulated bottom depth for current waypoint (randomised per data WP)
+        # Converts ft to metres: 15–100 ft → ~4.6–30.5 m
+        self._bottom_depth_m = 0.0
+        self._surface_temp = 15.0
 
         # Track
         self._track: list[tuple[float, float, float]] = []
@@ -96,7 +107,8 @@ class BoatSimulator:
         self.speed_mps += (target_speed - self.speed_mps) * min(dt * 2.0, 1.0)
 
         # Differential throttle → heading change
-        diff = self._thr_right - self._thr_left
+        # Left motor pushing harder → boat turns right (heading increases)
+        diff = self._thr_left - self._thr_right
         turn_rate = (diff / 200.0) * cfg.max_turn_rate_dps
         self.heading = (self.heading + turn_rate * dt) % 360.0
 
@@ -118,8 +130,16 @@ class BoatSimulator:
     async def _sim_loop(self) -> None:
         """Background simulation loop."""
         dt = 1.0 / self._config.update_rate_hz
+        tick = 0
         while True:
             self._move(dt)
+            # Slowly drift air conditions every ~5 seconds
+            tick += 1
+            if tick % int(5 * self._config.update_rate_hz) == 0:
+                self._air_temp += random.gauss(0, 0.2)
+                self._air_temp = max(5.0, min(40.0, self._air_temp))
+                self._air_humidity += random.gauss(0, 0.5)
+                self._air_humidity = max(20.0, min(98.0, self._air_humidity))
             await asyncio.sleep(dt)
 
     async def start(self) -> None:
@@ -213,8 +233,8 @@ class MockPicoSerial:
         """Build environment from simulator state."""
         s = self._sim
         return Environment(
-            air_temp=20,
-            air_humidity=60,
+            air_temp=int(round(s._air_temp)),
+            air_humidity=int(round(s._air_humidity)),
             water_temp=s._pod_water_temp,
             water_ec=s._pod_ec,
             water_light=s._pod_light,
@@ -245,7 +265,22 @@ class MockPicoSerial:
         return ParsedFrame(msg_type="ACK", seq=0, fields=["SET_THR", str(left), str(right)], raw="")
 
     async def set_winch(self, speed: int) -> ParsedFrame:
-        self._sim._winch_speed = speed
+        s = self._sim
+        prev_speed = s._winch_speed
+        s._winch_speed = speed
+
+        # When winch starts going down, assign a random bottom depth (15–100 ft)
+        if speed > 0 and prev_speed <= 0:
+            s._bottom_depth_m = random.uniform(15, 100) * 0.3048  # ft → m
+            s._surface_temp = s._pod_water_temp
+            s._pod_bottom = False
+            logger.info("Sim: bottom depth for this site = %.1f m (%.0f ft)",
+                        s._bottom_depth_m, s._bottom_depth_m / 0.3048)
+
+        # When winch comes back up, reset pod to surface conditions
+        if speed < 0 and prev_speed >= 0:
+            s._pod_bottom = False
+
         return ParsedFrame(msg_type="ACK", seq=0, fields=["SET_WINCH", str(speed)], raw="")
 
     async def set_heading(self, heading: float) -> ParsedFrame:
@@ -261,9 +296,48 @@ class MockPicoSerial:
 
     async def poll_pod(self) -> ParsedFrame:
         s = self._sim
+        # Descent/ascent rate scales with winch speed (0–100 → 0–1.0 m per poll)
+        rate = abs(s._winch_speed) / 100.0 * 1.0
+
+        # Update pressure depth based on winch state
+        if s._winch_speed > 0:
+            # Going down — increase depth, but cap at bottom
+            if s._bottom_depth_m > 0 and s._pod_pressure_depth_m < s._bottom_depth_m:
+                s._pod_pressure_depth_m = min(
+                    s._pod_pressure_depth_m + rate,
+                    s._bottom_depth_m,
+                )
+            # At bottom — pressure plateaus, set bottom contact
+            if s._bottom_depth_m > 0 and s._pod_pressure_depth_m >= s._bottom_depth_m - 0.05:
+                s._pod_bottom = True
+        elif s._winch_speed < 0:
+            # Coming back up — ascent slightly faster than descent
+            s._pod_pressure_depth_m = max(0.0, s._pod_pressure_depth_m - rate * 1.3)
+            s._pod_bottom = False
+            if s._pod_pressure_depth_m < 0.1:
+                s._pod_pressure_depth_m = 0.0
+
+        # Depth-dependent sensor simulation
+        depth = s._pod_pressure_depth_m
+        depth_frac = depth / max(s._bottom_depth_m, 1.0) if s._bottom_depth_m > 0 else 0.0
+
+        # Temperature: drops ~1°C per 5m depth (thermocline effect)
+        s._pod_water_temp = s._surface_temp - (depth / 5.0) + random.gauss(0, 0.1)
+
+        # EC/salinity: increases slightly with depth (stratification)
+        s._pod_ec = 3500 + depth * 40 + random.gauss(0, 20)
+
+        # Light: exponential decay with depth (Beer-Lambert law)
+        # 50% at surface, approaches 0 at depth
+        s._pod_light = max(0, int(50 * math.exp(-0.08 * depth) + random.gauss(0, 1)))
+
         return ParsedFrame(msg_type="POD_DATA", seq=0, fields=[
-            str(s._pod_water_temp), str(s._pod_ec), str(s._pod_light),
-            "1" if s._pod_bottom else "0", "0",
+            "%.1f" % s._pod_water_temp,
+            "%.1f" % s._pod_ec,
+            str(s._pod_light),
+            "1" if s._pod_bottom else "0",
+            "0",
+            "%.2f" % s._pod_pressure_depth_m,
         ], raw="")
 
     async def emergency_stop(self) -> ParsedFrame:

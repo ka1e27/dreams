@@ -3,7 +3,7 @@
 The Pod Pico is connected to Boat Pico's UART1 (shared with GPS).
 This module sends POLL commands and parses POD responses.
 
-The pod responds with: $POD,temp,ec,light_pct,bottom*cs\n
+The pod responds with: $POD,temp,ec,light_pct,bottom,leak,pressure_depth_m*cs\n
 
 Pin assignments (shared with GPS on UART1):
   - TX: GP4
@@ -17,7 +17,8 @@ water_temp = -999.0
 salinity_ec = 0.0
 light_pct = 0
 bottom_contact = False
-leak_detected = False  # Future: pod-side leak sensor
+leak_detected = False
+pressure_depth_m = 0.0
 
 # State
 pod_ok = False
@@ -74,7 +75,7 @@ def process_line(line):
         True if this was a valid POD message, False otherwise.
     """
     global water_temp, salinity_ec, light_pct, bottom_contact
-    global pod_ok, last_response_ms, leak_detected
+    global pod_ok, last_response_ms, leak_detected, pressure_depth_m
     if not line or len(line) < 5:
         return False
     if line[1:4] != 'POD':
@@ -94,9 +95,10 @@ def process_line(line):
             salinity_ec = float(parts[2])
             light_pct = int(parts[3])
             bottom_contact = parts[4] == '1'
-            # Optional leak field (future pod firmware)
             if len(parts) >= 6:
                 leak_detected = parts[5] == '1'
+            if len(parts) >= 7:
+                pressure_depth_m = float(parts[6])
             pod_ok = True
             last_response_ms = time.ticks_ms()
             return True
@@ -129,5 +131,6 @@ def get_data():
         "light_pct": light_pct,
         "bottom": bottom_contact,
         "leak": leak_detected,
+        "pressure_depth_m": pressure_depth_m,
         "ok": pod_ok
     }

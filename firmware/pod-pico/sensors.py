@@ -10,6 +10,7 @@ Pin assignments:
   - EC ADC:          GP27 (ADC1)
   - Light sensor:    GP28 (ADC2)
   - Bottom contact:  GP21 (pull-up, active low)
+  - Pressure sensor: GP22 (ADC, submersible pressure transducer)
 """
 from machine import Pin, ADC
 import math
@@ -26,12 +27,22 @@ INV_B = 1.0 / TH_B
 EC_CELL_K = 1000.0
 EC_SERIES = 4700  # Series resistor in ohms
 
+# Pressure sensor constants
+# Sensor outputs 0.5V at 0 psi, 4.5V at max psi (typically 15 psi for shallow water)
+# Voltage divider scales 4.5V → 3.3V range for Pico ADC
+PRESSURE_MAX_PSI = 15.0
+PRESSURE_V_MIN = 0.5
+PRESSURE_V_MAX = 4.5
+# 1 psi = 0.703 metres of water head
+PSI_TO_METRES = 0.703
+
 # Hardware handles
 _temp_adc = None
 _ec_adc = None
 _ec_drive = None
 _light_adc = None
 _bottom_btn = None
+_pressure_adc = None
 
 # Sensor readings
 water_temp = -999.0
@@ -39,11 +50,12 @@ salinity_ec = 0.0
 light_raw = 0
 light_pct = 0
 bottom_contact = False
+pressure_depth_m = 0.0
 
 
 def init():
     """Initialise all sensor hardware."""
-    global _temp_adc, _ec_adc, _ec_drive, _light_adc, _bottom_btn
+    global _temp_adc, _ec_adc, _ec_drive, _light_adc, _bottom_btn, _pressure_adc
     try:
         _temp_adc = ADC(26)
     except:
@@ -59,6 +71,10 @@ def init():
         pass
     try:
         _bottom_btn = Pin(21, Pin.IN, Pin.PULL_UP)
+    except:
+        pass
+    try:
+        _pressure_adc = ADC(22)
     except:
         pass
 
@@ -152,9 +168,36 @@ def read_bottom():
     bottom_contact = _bottom_btn.value() == 0
 
 
+def read_pressure():
+    """Read depth from submersible pressure transducer.
+
+    Converts raw ADC to PSI, then to metres of water. 8-sample average.
+    Assumes voltage divider scales sensor output to 0–3.3V Pico ADC range.
+    """
+    global pressure_depth_m
+    if _pressure_adc is None:
+        pressure_depth_m = 0.0
+        return
+    try:
+        total = 0
+        for _ in range(8):
+            total += _pressure_adc.read_u16()
+        raw = total >> 3
+        voltage = raw / 65535.0 * 3.3
+        # Map sensor voltage to PSI (linear 0.5V–4.5V → 0–max PSI)
+        if voltage < PRESSURE_V_MIN:
+            pressure_depth_m = 0.0
+            return
+        psi = (voltage - PRESSURE_V_MIN) / (PRESSURE_V_MAX - PRESSURE_V_MIN) * PRESSURE_MAX_PSI
+        pressure_depth_m = max(0.0, psi * PSI_TO_METRES)
+    except:
+        pressure_depth_m = 0.0
+
+
 def read_all():
     """Read all sensors. Call from main loop."""
     read_temp()
     read_ec()
     read_light()
     read_bottom()
+    read_pressure()

@@ -1,7 +1,7 @@
 """UART poll-response handler for the underwater sensor pod.
 
 Listens for $POLL*cs\\n commands from the Boat Pico and responds with
-sensor data in the format: $POD,temp,ec,light_pct,bottom,leak*cs\\n
+sensor data in the format: $POD,temp,ec,light_pct,bottom,leak,pressure_depth_m*cs\\n
 
 Pin assignments:
   - TX: GP0
@@ -50,9 +50,9 @@ def _send_response():
         return
     btm = 1 if _sensors.bottom_contact else 0
     lk = 1 if (_leak is not None and _leak.leak_detected) else 0
-    msg = "POD,%.1f,%.1f,%d,%d,%d" % (
+    msg = "POD,%.1f,%.1f,%d,%d,%d,%.2f" % (
         _sensors.water_temp, _sensors.salinity_ec,
-        _sensors.light_pct, btm, lk)
+        _sensors.light_pct, btm, lk, _sensors.pressure_depth_m)
     _uart.write("$%s*%d\n" % (msg, _xor_cs(msg)))
 
 

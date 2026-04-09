@@ -36,6 +36,7 @@ class PodReadingOut(BaseModel):
     light_pct: int
     bottom_contact: bool
     leak_detected: bool
+    pressure_depth_m: float
 
 
 class MissionWaypointIn(BaseModel):

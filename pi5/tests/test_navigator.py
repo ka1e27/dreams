@@ -49,7 +49,7 @@ class TestComputeThrottle:
             51.5000, -0.0600,  # Target east
         )
         assert arrived is False
-        # Right turn: left motor should be faster than right
+        # Right turn: left motor faster → boat pivots right
         assert left >= right
 
     def test_target_to_the_left(self):
@@ -60,7 +60,7 @@ class TestComputeThrottle:
             51.5000, -0.0800,
         )
         assert arrived is False
-        # Left turn: right motor should be faster than left
+        # Left turn: right motor faster → boat pivots left
         assert right >= left
 
     def test_within_heading_tolerance_goes_straight(self):

@@ -52,6 +52,7 @@ class PodData:
     light_pct: int = 0
     bottom: bool = False
     leak: bool = False
+    pressure_depth_m: float = 0.0
 
 
 @dataclass
@@ -330,6 +331,7 @@ class PicoSerial:
                 light_pct=int(f[2]),
                 bottom=f[3] == "1",
                 leak=f[4] == "1",
+                pressure_depth_m=float(f[5]) if len(f) > 5 else 0.0,
             )
             if self._on_pod_data:
                 self._on_pod_data(pod)

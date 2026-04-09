@@ -25,6 +25,7 @@ class PodReading:
     light_pct: int
     bottom_contact: bool
     leak_detected: bool
+    pressure_depth_m: float = 0.0
 
     @classmethod
     def from_pod_data(cls, pod: PodData) -> PodReading:
@@ -36,6 +37,7 @@ class PodReading:
             light_pct=pod.light_pct,
             bottom_contact=pod.bottom,
             leak_detected=pod.leak,
+            pressure_depth_m=pod.pressure_depth_m,
         )
 
 
@@ -71,12 +73,14 @@ class PodBridge:
         try:
             response = await self._pico.poll_pod()
             if response.msg_type == "POD_DATA":
+                f = response.fields
                 pod = PodData(
-                    water_temp=float(response.fields[0]),
-                    salinity_ec=float(response.fields[1]),
-                    light_pct=int(response.fields[2]),
-                    bottom=response.fields[3] == "1",
-                    leak=response.fields[4] == "1",
+                    water_temp=float(f[0]),
+                    salinity_ec=float(f[1]),
+                    light_pct=int(f[2]),
+                    bottom=f[3] == "1",
+                    leak=f[4] == "1",
+                    pressure_depth_m=float(f[5]) if len(f) > 5 else 0.0,
                 )
                 reading = PodReading.from_pod_data(pod)
                 self._latest = reading

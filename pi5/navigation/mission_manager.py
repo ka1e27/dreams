@@ -98,6 +98,7 @@ class MissionManager:
         self._abort_event = asyncio.Event()
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # Not paused initially
+        self._skip_site_event = asyncio.Event()
 
         # Callbacks
         self._on_mission_complete: asyncio.Event = asyncio.Event()
@@ -233,6 +234,14 @@ class MissionManager:
         self.state.paused = False
         logger.info("Mission aborted: %s", reason)
 
+    def skip_site(self) -> None:
+        """Skip the current data waypoint — winch up and move to next WP."""
+        if self.state.running and self.state.phase in (
+            MissionPhase.WINCH_DOWN, MissionPhase.SAMPLING
+        ):
+            self._skip_site_event.set()
+            logger.info("Skip site requested at WP %d", self.state.current_wp)
+
     async def wait_complete(self, timeout: float | None = None) -> bool:
         """Wait for the mission to complete. Returns False on timeout."""
         try:
@@ -326,6 +335,8 @@ class MissionManager:
         Phases: WINCH_DOWN → SAMPLING → WINCH_UP
         """
         cfg = self._config
+        self._skip_site_event.clear()
+        skipped = False
 
         # Phase 1: Winch down
         self.state.phase = MissionPhase.WINCH_DOWN
@@ -338,23 +349,45 @@ class MissionManager:
 
         winch_start = time.monotonic()
         bottom_count = 0
+        prev_depth = 0.0
+        plateau_count = 0
+        plateau_threshold = 0.02  # metres — if depth changes less than this, it's a plateau
 
-        while not self._abort_event.is_set():
+        while not self._abort_event.is_set() and not self._skip_site_event.is_set():
             await self._pause_event.wait()
             elapsed = time.monotonic() - winch_start
             self.state.est_depth_m = elapsed * cfg.descent_rate_m_per_s
             self.state.elapsed_s = elapsed
 
-            # Poll pod for bottom contact
+            # Poll pod for pressure depth and bottom contact
             reading = await self._pod.poll_once()
-            if reading and reading.bottom_contact:
-                bottom_count += 1
+            if reading:
+                # Use pressure sensor for actual depth measurement
+                if reading.pressure_depth_m > 0:
+                    self.state.est_depth_m = reading.pressure_depth_m
+
+                # Detect bottom via pressure plateau (depth stopped increasing)
+                depth_change = reading.pressure_depth_m - prev_depth
+                if prev_depth > 0.5 and depth_change < plateau_threshold:
+                    plateau_count += 1
+                else:
+                    plateau_count = 0
+                prev_depth = reading.pressure_depth_m
+
+                # Bottom confirmed by pressure plateau or mechanical contact
+                if reading.bottom_contact:
+                    bottom_count += 1
+                elif plateau_count >= cfg.bottom_confirm_count:
+                    bottom_count += 1
+                    logger.debug("Pressure plateau detected at %.2fm (change=%.3fm)",
+                                 reading.pressure_depth_m, depth_change)
+                else:
+                    bottom_count = 0
+
                 if bottom_count >= cfg.bottom_confirm_count:
-                    logger.info("Bottom confirmed at %.2fm after %.1fs",
+                    logger.info("Bottom confirmed at %.2fm (pressure) after %.1fs",
                                 self.state.est_depth_m, elapsed)
                     break
-            else:
-                bottom_count = 0
 
             # Safety timeout
             if elapsed > wp.max_time_s:
@@ -369,59 +402,70 @@ class MissionManager:
         except Exception:
             pass
 
-        if self._abort_event.is_set():
-            return
-
-        # Phase 2: Sampling at bottom
-        self.state.phase = MissionPhase.SAMPLING
-        sample_start = time.monotonic()
-        self.state.sample_count = 0
-        bottom_lost_count = 0
-
-        logger.info("Sampling at WP %d, max %ds", self.state.current_wp, wp.max_time_s)
-
-        while not self._abort_event.is_set():
-            await self._pause_event.wait()
-            elapsed = time.monotonic() - sample_start
-            self.state.elapsed_s = elapsed
-
-            # Take a sample
-            reading = await self._pod.poll_once()
-            if reading:
-                self.state.sample_count += 1
-                self._profile_data.append(reading)
-                logger.debug("Sample %d: T=%.1f EC=%.1f L=%d BTM=%s",
-                             self.state.sample_count,
-                             reading.water_temp, reading.salinity_ec,
-                             reading.light_pct, reading.bottom_contact)
-
-                # Check bottom contact
-                if not reading.bottom_contact:
-                    bottom_lost_count += 1
-                    if (bottom_lost_count >= cfg.bottom_lost_confirm
-                            and self.state.sample_count >= cfg.min_bottom_samples):
-                        logger.info("Contact lost after %d samples", self.state.sample_count)
-                        break
-                else:
-                    bottom_lost_count = 0
-
-            # Safety timeout
-            if elapsed >= wp.max_time_s:
-                logger.info("Sample timeout after %d samples, %.0fs",
-                            self.state.sample_count, elapsed)
-                break
-
-            await asyncio.sleep(cfg.sample_interval_s)
+        if self._skip_site_event.is_set():
+            skipped = True
+            logger.info("Site skipped during descent at %.2fm", self.state.est_depth_m)
 
         if self._abort_event.is_set():
             return
 
-        # Phase 3: Winch up
+        # Phase 2: Sampling at bottom (skip if site was skipped)
+        if not skipped:
+            self.state.phase = MissionPhase.SAMPLING
+            sample_start = time.monotonic()
+            self.state.sample_count = 0
+            bottom_lost_count = 0
+
+            logger.info("Sampling at WP %d, max %ds", self.state.current_wp, wp.max_time_s)
+
+            while not self._abort_event.is_set() and not self._skip_site_event.is_set():
+                await self._pause_event.wait()
+                elapsed = time.monotonic() - sample_start
+                self.state.elapsed_s = elapsed
+
+                # Take a sample
+                reading = await self._pod.poll_once()
+                if reading:
+                    self.state.sample_count += 1
+                    self._profile_data.append(reading)
+                    logger.debug("Sample %d: T=%.1f EC=%.1f L=%d BTM=%s",
+                                 self.state.sample_count,
+                                 reading.water_temp, reading.salinity_ec,
+                                 reading.light_pct, reading.bottom_contact)
+
+                    # Check bottom contact
+                    if not reading.bottom_contact:
+                        bottom_lost_count += 1
+                        if (bottom_lost_count >= cfg.bottom_lost_confirm
+                                and self.state.sample_count >= cfg.min_bottom_samples):
+                            logger.info("Contact lost after %d samples", self.state.sample_count)
+                            break
+                    else:
+                        bottom_lost_count = 0
+
+                # Safety timeout
+                if elapsed >= wp.max_time_s:
+                    logger.info("Sample timeout after %d samples, %.0fs",
+                                self.state.sample_count, elapsed)
+                    break
+
+                await asyncio.sleep(cfg.sample_interval_s)
+
+            if self._skip_site_event.is_set():
+                skipped = True
+                logger.info("Site skipped during sampling at WP %d", self.state.current_wp)
+
+        if self._abort_event.is_set():
+            return
+
+        # Phase 3: Winch up — use pressure sensor to confirm surface
         self.state.phase = MissionPhase.WINCH_UP
-        winch_down_elapsed = time.monotonic() - winch_start - (time.monotonic() - sample_start)
-        raise_time = max(winch_down_elapsed, 5.0) * cfg.winch_up_margin
+        actual_depth = self.state.est_depth_m
+        raise_time = max(actual_depth / cfg.descent_rate_m_per_s, 5.0) * cfg.winch_up_margin
 
-        logger.info("Winch up at WP %d, estimated %.1fs", self.state.current_wp, raise_time)
+        logger.info("Winch up at WP %d from %.2fm%s, est %.1fs",
+                     self.state.current_wp, actual_depth,
+                     " (skipped)" if skipped else "", raise_time)
         try:
             await self._pico.set_winch(cfg.winch_up_speed)
         except Exception as e:
@@ -430,17 +474,36 @@ class MissionManager:
 
         up_start = time.monotonic()
         while not self._abort_event.is_set():
-            if time.monotonic() - up_start >= raise_time:
+            elapsed = time.monotonic() - up_start
+            self.state.elapsed_s = elapsed
+
+            # Poll pressure to track ascent
+            reading = await self._pod.poll_once()
+            if reading:
+                self.state.est_depth_m = reading.pressure_depth_m
+                # At or near surface — done
+                if reading.pressure_depth_m < 0.1:
+                    self.state.est_depth_m = 0.0
+                    logger.info("Pod at surface (pressure=%.2fm)", reading.pressure_depth_m)
+                    break
+
+            # Safety timeout
+            if elapsed >= raise_time:
+                self.state.est_depth_m = 0.0
                 break
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(cfg.pod_poll_interval_s)
 
         try:
             await self._pico.set_winch(0)
         except Exception:
             pass
+        self.state.est_depth_m = 0.0
 
-        logger.info("WP %d complete — %d samples, %.2fm depth",
-                     self.state.current_wp, self.state.sample_count, self.state.est_depth_m)
+        self._skip_site_event.clear()
+        logger.info("WP %d %s — %d samples, %.2fm depth",
+                     self.state.current_wp,
+                     "skipped" if skipped else "complete",
+                     self.state.sample_count, self.state.est_depth_m)
 
     def get_profile_data(self) -> list[PodReading]:
         """Return profile data collected at the current/last data waypoint."""

@@ -28,6 +28,10 @@ class NavConfig:
     max_heading_error_deg: float = 90.0
     turn_min_throttle: int = 15
     update_rate_hz: float = 5.0
+    # Distance-based speed ramp: full throttle above this distance
+    full_speed_dist_m: float = 50.0
+    # Minimum throttle fraction when very close (approach_radius → arrive_radius)
+    min_approach_throttle: int = 15
 
 
 @dataclass
@@ -135,7 +139,34 @@ class Navigator:
         if dist < cfg.arrive_radius_m:
             return 0, 0, dist, brg, err, True
 
-        # Proportional steering — same algorithm as Boat_pico.py task_navigate
+        # ---- Speed scaling based on distance ----
+        # Ramp from min_approach_throttle at arrive_radius to cruise_throttle
+        # at full_speed_dist_m
+        if dist >= cfg.full_speed_dist_m:
+            dist_factor = 1.0
+        else:
+            # Linear ramp between arrive_radius and full_speed_dist_m
+            ramp_range = cfg.full_speed_dist_m - cfg.arrive_radius_m
+            dist_factor = (dist - cfg.arrive_radius_m) / ramp_range if ramp_range > 0 else 1.0
+            dist_factor = max(0.0, min(1.0, dist_factor))
+
+        # ---- Speed scaling based on heading accuracy ----
+        # Full speed only when heading is correct; reduce when turning hard
+        if abs(err) < cfg.heading_tolerance_deg:
+            heading_factor = 1.0
+        else:
+            # Scale down as heading error increases
+            heading_factor = max(
+                0.3,
+                1.0 - 0.7 * min(abs(err) / cfg.max_heading_error_deg, 1.0),
+            )
+
+        # Combined speed: scale cruise throttle by both factors
+        spd_range = cfg.cruise_throttle - cfg.min_approach_throttle
+        spd = int(cfg.min_approach_throttle + spd_range * dist_factor * heading_factor)
+        spd = max(cfg.min_approach_throttle, min(cfg.cruise_throttle, spd))
+
+        # ---- Proportional steering ----
         if abs(err) < cfg.heading_tolerance_deg:
             blend = 0.0
         else:
@@ -145,13 +176,14 @@ class Navigator:
                 1.0,
             )
 
-        spd = cfg.cruise_throttle
         if err >= 0:
+            # Turn right: left motor faster → boat pivots right
             left = spd
             right = int(spd * (1.0 - 2.0 * blend))
         else:
-            left = int(spd * (1.0 - 2.0 * blend))
+            # Turn left: right motor faster → boat pivots left
             right = spd
+            left = int(spd * (1.0 - 2.0 * blend))
 
         # Clamp minimum turn speed
         if left < -cfg.turn_min_throttle:
