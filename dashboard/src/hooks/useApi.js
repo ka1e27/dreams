@@ -44,9 +44,12 @@ export function useApi() {
   const getPodHistory = useCallback((limit = 100) =>
     apiFetch(`/api/pod/history?limit=${limit}`), [])
 
+  const getNetworkStatus = useCallback(() => apiFetch('/api/network'), [])
+
   return {
     estop, resumeEstop, returnHome,
     pauseMission, resumeMission, abortMission, startMission,
     uploadMission, uploadAndStart, goto, getPodHistory,
+    getNetworkStatus,
   }
 }

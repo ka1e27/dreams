@@ -1,19 +1,32 @@
-const HEALTH_LABELS = ['GPS', 'CMP', 'BAT', 'AIR', 'MOT', 'POD']
+const HEALTH_LABELS = ['GPS', 'IMU', 'P_BAT', 'E_BAT', 'MOT', 'POD']
 
 function healthClass(flag) {
   return flag === '1' ? 'ok' : 'fault'
 }
 
-function battClass(v) {
-  if (v <= 13.6) return 'danger'
-  if (v <= 14.0) return 'warn'
+function propBattClass(v) {
+  if (v <= 39.6) return 'danger'
+  if (v <= 42.0) return 'warn'
   return 'ok'
 }
 
-export default function TelemetryPanel({ telemetry, environment, navigation, connected }) {
+function elecBattClass(v) {
+  if (v <= 9.6) return 'danger'
+  if (v <= 9.9) return 'warn'
+  return 'ok'
+}
+
+export default function TelemetryPanel({ telemetry, environment, navigation, connected, winchMode }) {
   const t = telemetry || {}
   const e = environment || {}
   const n = navigation || {}
+  const propV = t.prop_batt_v ?? t.batt_v ?? 0
+  const propPct = t.prop_batt_pct ?? t.batt_pct ?? 0
+  const elecV = t.elec_batt_v ?? 0
+  const elecPct = t.elec_batt_pct ?? 0
+  const vescFault = t.vesc_fault_l || t.vesc_fault_r
+    ? `L:${t.vesc_fault_l || 0} R:${t.vesc_fault_r || 0}`
+    : null
 
   return (
     <>
@@ -73,9 +86,15 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
         <div className="card-header">Power & Hull</div>
         <div className="card-body">
           <div className="data-row">
-            <span className="data-label">Battery</span>
-            <span className={`data-value ${battClass(t.batt_v || 0)}`}>
-              {(t.batt_v || 0).toFixed(1)}V ({t.batt_pct || 0}%)
+            <span className="data-label">Propulsion (12S)</span>
+            <span className={`data-value ${propBattClass(propV)}`}>
+              {propV.toFixed(1)}V ({propPct}%)
+            </span>
+          </div>
+          <div className="data-row">
+            <span className="data-label">Electronics (3S)</span>
+            <span className={`data-value ${elecBattClass(elecV)}`}>
+              {elecV.toFixed(1)}V ({elecPct}%)
             </span>
           </div>
           <div className="data-row">
@@ -90,6 +109,26 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
               L:{(t.mt_left || 0).toFixed(0)}° R:{(t.mt_right || 0).toFixed(0)}°
             </span>
           </div>
+          {vescFault && (
+            <div className="data-row">
+              <span className="data-label">VESC fault</span>
+              <span className="data-value warn">{vescFault}</span>
+            </div>
+          )}
+          {(t.pitch !== undefined || t.roll !== undefined) && (
+            <div className="data-row">
+              <span className="data-label">Tilt</span>
+              <span className="data-value">
+                P:{(t.pitch || 0).toFixed(0)}° R:{(t.roll || 0).toFixed(0)}°
+              </span>
+            </div>
+          )}
+          {winchMode && (
+            <div className="data-row">
+              <span className="data-label">Winch mode</span>
+              <span className="data-value accent">{winchMode}</span>
+            </div>
+          )}
         </div>
       </div>
 

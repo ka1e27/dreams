@@ -5,23 +5,25 @@ hardware modules and runs the async task loop using uasyncio.
 
 Architecture:
   - Pi 5 sends commands over USB serial (SET_HDG, SET_THR, HB, etc.)
-  - Boat Pico reads sensors, drives motors, and reports telemetry
-  - Heartbeat watchdog kills motors if Pi 5 goes silent
+  - Boat Pico drives motors via VESC UART (master + CAN-forwarded slave),
+    reads sensors, talks to the underwater pod, and reports telemetry
+  - Heartbeat watchdog kills motors if Pi 5 goes silent (3 s)
+  - VESC has its own ~1 s command-timeout, fed by 10 Hz duty stream
+  - SBUS receiver provides RC override; on link loss → ESTOP
 
 Pin map:
-  GP0/GP1  — DEAD, do not use
-  GP4/GP5  — UART1 (GPS + Pod, 9600 baud)
-  GP6      — Left motor ESC PWM
-  GP7      — Right motor ESC PWM
-  GP8/GP9  — I2C0 (QMC5883P compass at 0x2C)
-  GP12/GP13 — UART0 (HC-12 radio — legacy, unused in new arch)
-  GP14     — Winch motor ESC PWM
-  GP16     — DHT11
-  GP17     — Hull leak left
-  GP18     — Hull leak right
-  GP26     — Battery ADC
-  GP27     — Motor temp left ADC
-  GP28     — Motor temp right ADC
+  GP0/GP1   — DEAD, do not use
+  GP4/GP5   — UART1 (GPS M10Q + Pod, shared bus, 9600 baud)
+  GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
+  GP12/GP13 — UART0 (VESC master, 115200 baud)
+  GP14      — Winch motor ESC PWM (50 Hz)
+  GP15      — SBUS receiver input (PIO software UART)
+  GP16      — DHT11
+  GP17      — Hull leak left
+  GP18      — Hull leak right
+  GP26      — Propulsion battery (12S LiPo) ADC
+  GP27      — Electronics battery (3S Li-ion) ADC
+  GP28      — Spare ADC
 """
 import uasyncio as asyncio
 import time
@@ -33,18 +35,20 @@ import pod_uart
 import sensors
 import serial_handler as serial
 import watchdog
+import vesc
+import sbus
 
 
-# ---- Health flags (6-char binary: GPS,CMP,BAT,DHT,MOT,POD) ----
+# ---- Health flags (6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD) ----
 
 def _health_string():
     """Build sensor health flags string."""
     flags = ""
     flags += "1" if gps.is_healthy() else "0"
     flags += "1" if compass.is_healthy() else "0"
-    flags += "1" if (sensors.batt_v > 3.0) else "0"
-    flags += "1" if (sensors.air_temp > 0 or sensors.air_humidity > 0) else "0"
-    flags += "1" if (not sensors.is_motor_critical()) else "0"
+    flags += "1" if (sensors.prop_batt_v > 5.0) else "0"
+    flags += "1" if (sensors.elec_batt_v > 3.0) else "0"
+    flags += "1" if (vesc.max_motor_temp() < 85.0) else "0"
     flags += "1" if pod_uart.is_healthy() else "0"
     return flags
 
@@ -62,12 +66,7 @@ def _state_string():
 # ---- Command handlers (wired to serial_handler callbacks) ----
 
 def _handle_set_hdg(heading):
-    """Pi 5 sets target heading — Pico doesn't navigate, just ACK.
-
-    In this architecture the Pi 5 calculates bearing and sends SET_THR
-    directly. SET_HDG is reserved for future use or heading-hold mode.
-    For now, just acknowledge it.
-    """
+    """Pi 5 sets target heading — Pico doesn't navigate, just ACK."""
     if not (0 <= heading < 360):
         return False, "RANGE"
     return True, None
@@ -87,15 +86,18 @@ _pending_pod_seq = None
 
 
 def _handle_req_tel(seq):
-    """Pi 5 requests immediate telemetry."""
+    """Pi 5 requests immediate telemetry. Format kept stable; uses propulsion
+    battery and VESC motor temps for the existing batt/mt_l/mt_r fields."""
+    mt_l = vesc.get_motor_temp(vesc.LEFT) or 0.0
+    mt_r = vesc.get_motor_temp(vesc.RIGHT) or 0.0
     serial.send_tel_with_seq(
         seq, gps.lat, gps.lon, compass.heading, gps.speed_knots,
-        sensors.batt_v, sensors.batt_pct, sensors.hull_status(),
-        sensors.mt_left, sensors.mt_right, _health_string())
+        sensors.prop_batt_v, sensors.prop_batt_pct, sensors.hull_status(),
+        mt_l, mt_r, _health_string())
 
 
 def _handle_poll_pod(seq):
-    """Pi 5 requests pod sensor data. Trigger a poll and save seq for response."""
+    """Pi 5 requests pod sensor data."""
     global _pending_pod_seq
     if not pod_uart.is_healthy() and not pod_uart.pod_ok:
         serial.nak(seq, "POLL_POD", "NO_POD")
@@ -105,64 +107,74 @@ def _handle_poll_pod(seq):
 
 
 def _handle_estop():
-    """Emergency stop."""
     motor_control.estop()
     serial.alert("CRIT", "ESTOP_AUTO", "PI5_CMD")
 
 
 def _handle_resume():
-    """Resume after ESTOP."""
     motor_control.resume()
 
 
 def _handle_heartbeat():
-    """Heartbeat received from Pi 5."""
     watchdog.feed()
 
 
 def _handle_set_trim(value):
-    """Set motor trim."""
     return motor_control.set_trim(value)
 
 
 def _handle_cal_compass(bearing):
-    """Calibrate compass north."""
     return compass.calibrate_north(bearing)
 
 
 def _handle_rc_override():
-    """Enter RC passthrough mode."""
     motor_control.rc_override_on()
     serial.alert("INFO", "RC_ON")
 
 
 def _handle_rc_release():
-    """Exit RC passthrough mode."""
     motor_control.rc_override_off()
     serial.alert("INFO", "RC_OFF")
 
 
 def _handle_get_status(seq):
-    """Return full status."""
-    overrides = "NONE"  # Safety overrides not managed by Pico in new arch
+    overrides = "NONE"
     serial.send_status(seq, _state_string(), _health_string(), overrides)
 
 
 # ---- Watchdog timeout callback ----
 
 def _on_heartbeat_lost():
-    """Called when Pi 5 heartbeat times out."""
     motor_control.estop()
     serial.alert("CRIT", "HB_LOST")
 
 
+def _battery_alert(name, is_crit, is_low, was_warned, v, pct):
+    """Emit battery alerts and return the new warned flag.
+
+    Edge-triggered warning (only on the low→low transition); critical fires
+    every cycle while the condition holds so the operator can't miss it.
+    """
+    if is_crit:
+        serial.alert("CRIT", name + "_BATT_CRIT", "%.2f,%d" % (v, pct))
+        return was_warned
+    if is_low:
+        if not was_warned:
+            serial.alert("WARN", name + "_BATT_LOW", "%.2f,%d" % (v, pct))
+        return True
+    return False
+
+
 # ---- Alert tracking state ----
 
-_batt_warned = False
+_prop_batt_warned = False
+_elec_batt_warned = False
 _hull_sent_l = False
 _hull_sent_r = False
 _mt_throttled = False
 _pod_lost_sent = False
+_sbus_warned = False
+_vesc_fault_sent = 0
 
 
 # ---- Async tasks ----
@@ -178,15 +190,14 @@ async def task_serial_rx():
 
 
 async def task_fast_sensors():
-    """Read GPS, compass, battery at ~10Hz. Poll pod periodically."""
+    """Read GPS, IMU, batteries, and pod responses at ~10 Hz."""
     global _pending_pod_seq
     while True:
         try:
             gps.read()
             compass.read()
-            sensors.read_battery()
+            sensors.read_all_fast()
 
-            # Check for pending pod response
             if _pending_pod_seq is not None and pod_uart.is_healthy():
                 d = pod_uart.get_data()
                 serial.send_pod_data(
@@ -199,7 +210,7 @@ async def task_fast_sensors():
 
 
 async def task_slow_sensors():
-    """Read DHT, motor temps, hull leak at ~0.3Hz."""
+    """Read DHT11 + hull leak switches at ~0.3 Hz."""
     while True:
         try:
             sensors.read_all_slow()
@@ -219,26 +230,86 @@ async def task_pod_poll():
 
 
 async def task_motors():
-    """Apply motor commands at ~10Hz."""
+    """Apply motor commands at ~10 Hz. While RC override is active, source
+    the throttle from SBUS channels instead of Pi 5 commands."""
     while True:
         try:
+            if motor_control.is_rc_override():
+                if sbus.is_link_alive():
+                    chans = sbus.read_channels()
+                    # Channel mapping (mode-2 stick layout):
+                    #   ch1 (idx 0): right-stick X — yaw / steering
+                    #   ch3 (idx 2): right-stick Y — throttle (or left-Y, configurable)
+                    #   ch5 (idx 4): winch up/down
+                    throttle = sbus.channel_to_pct(chans[2])
+                    yaw = sbus.channel_to_pct(chans[0])
+                    left = max(-100, min(100, throttle + yaw))
+                    right = max(-100, min(100, throttle - yaw))
+                    motor_control.set_throttle_rc(left, right)
+                    motor_control.set_winch_rc(sbus.channel_to_pct(chans[4]))
+                else:
+                    # Lost link while in RC mode — failsafe.
+                    motor_control.set_throttle_rc(0, 0)
+                    motor_control.set_winch_rc(0)
             motor_control.update()
         except:
             pass
         await asyncio.sleep(0.1)
 
 
+async def task_sbus():
+    """Drain the SBUS PIO FIFO at ~50 Hz."""
+    while True:
+        try:
+            sbus.poll()
+        except:
+            pass
+        await asyncio.sleep(0.02)
+
+
+async def task_vesc_telemetry():
+    """Keep VESC motor temps and fault codes fresh.
+
+    Round-robins GET_VALUES requests between LEFT and RIGHT at ~5 Hz total
+    (~2.5 Hz per motor), and drains response packets continuously.
+    """
+    while True:
+        try:
+            vesc.poll_rx()
+            vesc.request_values_round_robin()
+        except:
+            pass
+        await asyncio.sleep(0.2)
+
+
 async def task_telemetry():
     """Send periodic telemetry to Pi 5."""
     while True:
         try:
+            mt_l = vesc.get_motor_temp(vesc.LEFT) or 0.0
+            mt_r = vesc.get_motor_temp(vesc.RIGHT) or 0.0
             serial.send_tel(
                 gps.lat, gps.lon, compass.heading, gps.speed_knots,
-                sensors.batt_v, sensors.batt_pct, sensors.hull_status(),
-                sensors.mt_left, sensors.mt_right, _health_string())
+                sensors.prop_batt_v, sensors.prop_batt_pct,
+                sensors.hull_status(), mt_l, mt_r, _health_string())
         except:
             pass
         await asyncio.sleep(1)
+
+
+async def task_telemetry_ext():
+    """Send extended telemetry with the new dual-battery + IMU fields."""
+    while True:
+        try:
+            serial.send_tel2_ext(
+                sensors.prop_batt_v, sensors.prop_batt_pct,
+                sensors.elec_batt_v, sensors.elec_batt_pct,
+                compass.pitch, compass.roll, compass.cal_status,
+                vesc.get_v_in(vesc.LEFT) or 0.0,
+                vesc.get_fault(vesc.LEFT), vesc.get_fault(vesc.RIGHT))
+        except:
+            pass
+        await asyncio.sleep(2)
 
 
 async def task_env_telemetry():
@@ -255,24 +326,24 @@ async def task_env_telemetry():
 
 
 async def task_watchdog():
-    """Check heartbeat and safety conditions at ~1Hz."""
-    global _batt_warned, _hull_sent_l, _hull_sent_r
-    global _mt_throttled, _pod_lost_sent
+    """Heartbeat + safety checks at ~1 Hz."""
+    global _prop_batt_warned, _elec_batt_warned
+    global _hull_sent_l, _hull_sent_r
+    global _mt_throttled, _pod_lost_sent, _sbus_warned, _vesc_fault_sent
     while True:
         try:
-            # Heartbeat watchdog
             watchdog.check()
 
-            # Battery alerts
-            if sensors.is_battery_critical():
-                serial.alert("CRIT", "BATT_CRIT",
-                             "%.2f,%d" % (sensors.batt_v, sensors.batt_pct))
-            elif sensors.is_battery_low() and not _batt_warned:
-                _batt_warned = True
-                serial.alert("WARN", "BATT_LOW",
-                             "%.2f,%d" % (sensors.batt_v, sensors.batt_pct))
-            elif not sensors.is_battery_low():
-                _batt_warned = False
+            _prop_batt_warned = _battery_alert(
+                "PROP",
+                sensors.is_prop_critical(), sensors.is_prop_low(),
+                _prop_batt_warned,
+                sensors.prop_batt_v, sensors.prop_batt_pct)
+            _elec_batt_warned = _battery_alert(
+                "ELEC",
+                sensors.is_elec_critical(), sensors.is_elec_low(),
+                _elec_batt_warned,
+                sensors.elec_batt_v, sensors.elec_batt_pct)
 
             # Hull leak alerts
             if sensors.hull_leak_left and not _hull_sent_l:
@@ -289,24 +360,43 @@ async def task_watchdog():
                 motor_control.estop()
                 serial.alert("CRIT", "HULL_LEAK", "BOTH")
 
-            # Motor temperature alerts
-            if sensors.is_motor_critical():
-                mx = max(sensors.mt_left, sensors.mt_right)
-                side = "LEFT" if sensors.mt_left >= sensors.mt_right else "RIGHT"
+            # Motor temperature alerts (from VESC telemetry)
+            mt_max = vesc.max_motor_temp()
+            mt_l = vesc.get_motor_temp(vesc.LEFT) or 0.0
+            mt_r = vesc.get_motor_temp(vesc.RIGHT) or 0.0
+            if mt_max >= 85.0:
+                side = "LEFT" if mt_l >= mt_r else "RIGHT"
                 motor_control.estop()
-                serial.alert("CRIT", "MOTOR_OVERHEAT", "%s,%.0f" % (side, mx))
-            elif sensors.is_motor_hot():
+                serial.alert("CRIT", "MOTOR_OVERHEAT", "%s,%.0f" % (side, mt_max))
+            elif mt_max >= 70.0:
                 if not _mt_throttled:
                     _mt_throttled = True
-                    mx = max(sensors.mt_left, sensors.mt_right)
-                    side = "LEFT" if sensors.mt_left >= sensors.mt_right else "RIGHT"
-                    serial.alert("WARN", "MOTOR_HOT", "%s,%.0f" % (side, mx))
+                    side = "LEFT" if mt_l >= mt_r else "RIGHT"
+                    serial.alert("WARN", "MOTOR_HOT", "%s,%.0f" % (side, mt_max))
                     motor_control.set_throttle_mult(0.5)
             elif _mt_throttled:
                 _mt_throttled = False
                 motor_control.set_throttle_mult(1.0)
-                serial.alert("INFO", "MOTOR_COOL",
-                             "%.0f" % max(sensors.mt_left, sensors.mt_right))
+                serial.alert("INFO", "MOTOR_COOL", "%.0f" % mt_max)
+
+            # VESC fault codes — emit edge-triggered
+            f_l = vesc.get_fault(vesc.LEFT)
+            f_r = vesc.get_fault(vesc.RIGHT)
+            f_combined = (f_l << 8) | f_r
+            if f_combined != _vesc_fault_sent:
+                _vesc_fault_sent = f_combined
+                if f_l or f_r:
+                    serial.alert("WARN", "VESC_FAULT", "L=%d,R=%d" % (f_l, f_r))
+
+            # SBUS link health (only matters while RC override is active)
+            if motor_control.is_rc_override():
+                if not sbus.is_link_alive():
+                    if not _sbus_warned:
+                        _sbus_warned = True
+                        motor_control.estop()
+                        serial.alert("CRIT", "SBUS_LOST")
+                else:
+                    _sbus_warned = False
 
             # Pod health
             if not pod_uart.is_healthy() and pod_uart.pod_ok:
@@ -316,7 +406,6 @@ async def task_watchdog():
             elif pod_uart.is_healthy():
                 _pod_lost_sent = False
 
-            # Pod leak
             if pod_uart.leak_detected:
                 serial.alert("CRIT", "POD_LEAK")
 
@@ -324,7 +413,7 @@ async def task_watchdog():
             if not gps.is_healthy():
                 serial.alert("WARN", "SENSOR_FAULT", "gps")
             if not compass.is_healthy():
-                serial.alert("WARN", "SENSOR_FAULT", "compass")
+                serial.alert("WARN", "SENSOR_FAULT", "imu")
 
         except:
             pass
@@ -352,7 +441,6 @@ async def task_uart1_reader():
                             try:
                                 line = _buf[:_pos].decode('utf-8', 'ignore').strip()
                                 if line:
-                                    # Route to appropriate parser
                                     if line[:4] in ('$GPR', '$GNR'):
                                         gps._parse_rmc(line)
                                     elif line[:4] == '$POD':
@@ -376,18 +464,17 @@ async def task_uart1_reader():
 
 async def main():
     """Initialise hardware and start all async tasks."""
-    print("Boat Pico v5.0 (Pi 5 controlled)")
+    print("Boat Pico v6.0 (VESC + BNO085 + dual battery)")
 
-    # Init hardware
     motor_control.init()
     gps.init()
-    compass_ok = compass.init()
+    imu_ok = compass.init()
     sensors.init()
+    sbus_ok = sbus.init()
 
     # Pod shares UART1 with GPS
     pod_uart.init(gps._uart)
 
-    # Wire serial command handlers
     serial.on_set_hdg = _handle_set_hdg
     serial.on_set_thr = _handle_set_thr
     serial.on_set_winch = _handle_set_winch
@@ -402,25 +489,23 @@ async def main():
     serial.on_rc_release = _handle_rc_release
     serial.on_get_status = _handle_get_status
 
-    # Init watchdog (3s timeout)
     watchdog.init(timeout_ms=3000, on_timeout=_on_heartbeat_lost)
 
-    # Print startup info
-    print("  Motors: GP6(L) GP7(R) GP14(W)")
-    print("  GPS: UART1 GP4/GP5 9600bd")
-    print("  Compass: I2C0 GP8/GP9 addr=0x2C %s" % ("OK" if compass_ok else "FAIL"))
-    if compass_ok:
-        addrs = compass.scan_bus()
-        print("  I2C scan: %s" % [hex(a) for a in addrs])
+    print("  VESC: UART0 GP12/GP13 115200bd, slave CAN id=%d" % vesc.SLAVE_CAN_ID)
+    print("  Winch: GP14 PWM 50Hz")
+    print("  GPS: UART1 GP4/GP5 9600bd (M10Q)")
+    print("  IMU: I2C0 GP8/GP9 addr=0x4A %s" % ("OK" if imu_ok else "FAIL"))
+    if imu_ok:
+        print("  I2C scan: %s" % [hex(a) for a in compass.scan_bus()])
+    print("  SBUS: PIO GP%d %s" % (sbus.SBUS_PIN, "OK" if sbus_ok else "FAIL"))
     print("  DHT11: GP16")
     print("  Hull: GP17(L) GP18(R)")
-    print("  Battery: GP26  Motor temps: GP27(L) GP28(R)")
+    print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)")
     print("  Watchdog: 3000ms heartbeat timeout")
     print("  Pulley L:%.3f R:%.3f" % (
         motor_control.PULLEY_L, motor_control.PULLEY_R))
     print("Ready — waiting for Pi 5")
 
-    # Start all tasks
     await asyncio.gather(
         task_serial_rx(),
         task_uart1_reader(),
@@ -428,7 +513,10 @@ async def main():
         task_slow_sensors(),
         task_pod_poll(),
         task_motors(),
+        task_sbus(),
+        task_vesc_telemetry(),
         task_telemetry(),
+        task_telemetry_ext(),
         task_env_telemetry(),
         task_watchdog(),
     )

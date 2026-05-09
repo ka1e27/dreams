@@ -1,8 +1,13 @@
 """Cloud data uploader — buffer locally, flush when online.
 
 Collects sensor readings with GPS coordinates and uploads them to the
-cloud API on a configurable interval. Buffers to a local JSON file
-when cellular is unavailable and flushes when connectivity returns.
+cloud API on a configurable interval. Buffers to a local JSON file when
+the network is unavailable (whether the active transport is WiFi or
+cellular) and flushes when connectivity returns.
+
+A NetworkManager can be injected to short-circuit upload attempts during
+known dropouts — useful on metered cellular plans where every failed
+TCP handshake still counts.
 """
 from __future__ import annotations
 
@@ -11,8 +16,12 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import aiohttp
+
+if TYPE_CHECKING:
+    from ..comms.network import NetworkManager
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +66,14 @@ class CloudUploader:
         upload_interval_s: float = 30.0,
         buffer_path: Path | str = BUFFER_FILE,
         max_buffer_size: int = 10000,
+        network: "NetworkManager | None" = None,
     ) -> None:
         self._api_url = api_url.rstrip("/")
         self._api_key = api_key
         self._interval = upload_interval_s
         self._buffer_path = Path(buffer_path)
         self._max_buffer = max_buffer_size
+        self._network = network
 
         self._readings: list[dict] = []
         self._track: list[dict] = []
@@ -135,6 +146,11 @@ class CloudUploader:
     async def flush(self) -> None:
         """Attempt to upload all buffered data."""
         if not self._readings and not self._track:
+            return
+        # If a NetworkManager is wired in and reports offline, don't even
+        # try — saves cellular bytes during known dropouts.
+        if self._network is not None and not self._network.is_online():
+            self._save_buffer()
             return
 
         async with aiohttp.ClientSession() as session:

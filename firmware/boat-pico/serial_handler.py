@@ -92,6 +92,18 @@ def send_status(seq, state, health, overrides):
     _send("STATUS,%d,%s,%s,%s" % (seq, state, health, overrides))
 
 
+def send_tel2_ext(prop_v, prop_pct, elec_v, elec_pct,
+                  pitch, roll, cal_status, v_in_l, fault_l, fault_r):
+    """Send extended telemetry (TEL2): dual battery + IMU tilt + VESC faults.
+
+    Separate from TEL so the existing dashboard fields stay stable while the
+    new ones can be adopted incrementally.
+    """
+    _send("TEL2,0,%.2f,%d,%.2f,%d,%.1f,%.1f,%d,%.2f,%d,%d" % (
+        prop_v, prop_pct, elec_v, elec_pct,
+        pitch, roll, cal_status, v_in_l, fault_l, fault_r))
+
+
 def alert(severity, code, detail=""):
     """Send an unsolicited alert. Seq=0."""
     if detail:

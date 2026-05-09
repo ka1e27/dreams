@@ -1,74 +1,73 @@
-"""Onboard sensor reads — battery, DHT11, NTC motor temps, hull leak.
+"""Onboard hull sensors — dual battery, DHT11, hull leak.
 
-Extracted from reference/Boat_pico.py read_batt(), read_dht(),
-read_mtemp(), read_hull().
+Motor temperatures used to live here as NTC thermistors on GP27/GP28; that
+job moved to the VESCs (queried over UART by `vesc.py`). The freed ADCs
+now monitor a second battery.
 
 Pin assignments:
-  - Battery ADC:     GP26 (ADC0)
-  - Motor temp left:  GP27 (ADC1)
-  - Motor temp right: GP28 (ADC2)
+  - Propulsion battery (12S LiPo) ADC: GP26 (ADC0)
+      — voltage divider sized so 50.4 V → ≤ 3.3 V at the Pico pin
+  - Electronics battery (3S Li-ion) ADC: GP27 (ADC1)
+      — uses the legacy 15 / (15+100) divider; 12.6 V → 1.64 V
   - DHT11:           GP16
   - Hull leak left:  GP17
   - Hull leak right: GP18
+  - GP28 (ADC2):     spare
 """
 from machine import Pin, ADC
-import math
-import time
 
 try:
     import dht
 except:
     dht = None
 
-# Battery constants (voltage divider)
-B_RATIO = 15.0 / 115.0
-INV_B_RATIO = 1.0 / B_RATIO
-B_FULL = 16.8
-B_EMPTY = 13.2
-B_WARN = 14.0
-B_CRIT = 13.6
-B_RANGE = B_FULL - B_EMPTY
+# ---- Propulsion battery (12S LiPo) ----
+# Divider: 3.3 kΩ low / 47 kΩ high → ratio ≈ 1/15.24 (50.4 V → 3.31 V)
+P_RATIO = 3.3 / 50.3
+INV_P_RATIO = 1.0 / P_RATIO
+P_FULL = 50.4   # 4.20 V × 12
+P_EMPTY = 39.6  # 3.30 V × 12 LVC
+P_WARN = 42.0   # 3.50 V × 12
+P_CRIT = 39.6
+P_RANGE = P_FULL - P_EMPTY
 
-# NTC thermistor constants
-TH_NOM = 10000
-TH_B = 3950
-TH_R = 10000
-INV_T_NOM = 1.0 / 298.15
-INV_B_COEFF = 1.0 / TH_B
+# ---- Electronics battery (3S Li-ion) ----
+# Reuse legacy 15 / (15+100) divider. 12.6 V → 1.64 V.
+E_RATIO = 15.0 / 115.0
+INV_E_RATIO = 1.0 / E_RATIO
+E_FULL = 12.6   # 4.20 V × 3
+E_EMPTY = 9.0   # 3.00 V × 3
+E_WARN = 9.9    # 3.30 V × 3
+E_CRIT = 9.6    # 3.20 V × 3
+E_RANGE = E_FULL - E_EMPTY
 
-# Motor temperature thresholds
-MT_WARN = 70
-MT_CRIT = 85
-
-# Hardware handles
-_batt_adc = None
-_mt_l_adc = None
-_mt_r_adc = None
+# ---- Hardware handles ----
+_prop_adc = None
+_elec_adc = None
 _dht_sensor = None
 _hull_l = None
 _hull_r = None
 
-# Sensor readings
-batt_v = 0.0
-batt_pct = 0
+# ---- Sensor readings ----
+prop_batt_v = 0.0
+prop_batt_pct = 0
+elec_batt_v = 0.0
+elec_batt_pct = 0
 air_temp = 0
 air_humidity = 0
-mt_left = 0.0
-mt_right = 0.0
 hull_leak_left = False
 hull_leak_right = False
 
 
 def init():
     """Initialise all onboard sensor hardware."""
-    global _batt_adc, _mt_l_adc, _mt_r_adc, _dht_sensor, _hull_l, _hull_r
+    global _prop_adc, _elec_adc, _dht_sensor, _hull_l, _hull_r
     try:
-        _batt_adc = ADC(26)
+        _prop_adc = ADC(26)
     except:
         pass
     try:
-        _mt_l_adc = ADC(27)
-        _mt_r_adc = ADC(28)
+        _elec_adc = ADC(27)
     except:
         pass
     if dht is not None:
@@ -83,38 +82,34 @@ def init():
         pass
 
 
-def _ntc_temp(adc):
-    """Read NTC thermistor temperature from an ADC pin.
-
-    Uses Steinhart-Hart equation with B-parameter model.
-    Returns temperature in °C or None on error.
-    """
+def _read_battery_voltage(adc, inv_ratio):
+    """Return the voltage at the battery side of a divider, averaged 16x."""
+    if adc is None:
+        return 0.0
     total = 0
-    for _ in range(8):
+    for _ in range(16):
         total += adc.read_u16()
-    raw = total >> 3
-    if raw < 100 or raw > 65400:
-        return None
-    resistance = TH_R * raw / (65535.0 - raw)
-    if resistance <= 0:
-        return None
-    steinhart = math.log(resistance / TH_NOM) * INV_B_COEFF + INV_T_NOM
-    if steinhart <= 0:
-        return None
-    return 1.0 / steinhart - 273.15
+    return (total / 16.0 / 65535.0 * 3.3) * inv_ratio
 
 
-def read_battery():
-    """Read battery voltage and percentage."""
-    global batt_v, batt_pct
-    if _batt_adc is None:
-        return
+def read_prop_battery():
+    """Read propulsion (12S LiPo) battery voltage and percentage."""
+    global prop_batt_v, prop_batt_pct
     try:
-        total = 0
-        for _ in range(16):
-            total += _batt_adc.read_u16()
-        batt_v = (total / 16.0 / 65535.0 * 3.3) * INV_B_RATIO
-        batt_pct = max(0, min(100, int((batt_v - B_EMPTY) / B_RANGE * 100)))
+        prop_batt_v = _read_battery_voltage(_prop_adc, INV_P_RATIO)
+        prop_batt_pct = max(0, min(100,
+                                   int((prop_batt_v - P_EMPTY) / P_RANGE * 100)))
+    except:
+        pass
+
+
+def read_elec_battery():
+    """Read electronics (3S Li-ion) battery voltage and percentage."""
+    global elec_batt_v, elec_batt_pct
+    try:
+        elec_batt_v = _read_battery_voltage(_elec_adc, INV_E_RATIO)
+        elec_batt_pct = max(0, min(100,
+                                   int((elec_batt_v - E_EMPTY) / E_RANGE * 100)))
     except:
         pass
 
@@ -132,26 +127,6 @@ def read_dht():
         pass
 
 
-def read_motor_temps():
-    """Read motor NTC thermistors."""
-    global mt_left, mt_right
-    if _mt_l_adc is None:
-        return
-    try:
-        left = _ntc_temp(_mt_l_adc)
-        if left is not None:
-            mt_left = left
-    except:
-        pass
-    if _mt_r_adc is not None:
-        try:
-            right = _ntc_temp(_mt_r_adc)
-            if right is not None:
-                mt_right = right
-        except:
-            pass
-
-
 def read_hull():
     """Read hull leak sensors."""
     global hull_leak_left, hull_leak_right
@@ -162,39 +137,41 @@ def read_hull():
 
 
 def read_all_fast():
-    """Read fast sensors — battery only. Call at ~10Hz."""
-    read_battery()
+    """Read fast sensors — both batteries. Call at ~10 Hz."""
+    read_prop_battery()
+    read_elec_battery()
 
 
 def read_all_slow():
-    """Read slow sensors — DHT, motor temps, hull. Call at ~0.3Hz."""
+    """Read slow sensors — DHT, hull. Call at ~0.3 Hz."""
     read_dht()
-    read_motor_temps()
     read_hull()
 
 
-def is_battery_critical():
-    """Return True if battery is below critical voltage."""
-    return batt_v > 3.0 and batt_v <= B_CRIT
+# ---- Battery state predicates ----
+
+def is_prop_critical():
+    """Propulsion battery below LVC. Guard against ADC = 0 (sensor unplugged)."""
+    return prop_batt_v > 5.0 and prop_batt_v <= P_CRIT
 
 
-def is_battery_low():
-    """Return True if battery is below warning level."""
-    return batt_v > 3.0 and batt_v <= B_WARN
+def is_prop_low():
+    """Propulsion battery below warning level."""
+    return prop_batt_v > 5.0 and prop_batt_v <= P_WARN
 
 
-def is_motor_critical():
-    """Return True if either motor is above critical temperature."""
-    return max(mt_left, mt_right) >= MT_CRIT
+def is_elec_critical():
+    """Electronics battery below LVC — Pi 5 about to brown out."""
+    return elec_batt_v > 3.0 and elec_batt_v <= E_CRIT
 
 
-def is_motor_hot():
-    """Return True if either motor is above warning temperature."""
-    return max(mt_left, mt_right) >= MT_WARN
+def is_elec_low():
+    """Electronics battery below warning level."""
+    return elec_batt_v > 3.0 and elec_batt_v <= E_WARN
 
 
 def hull_status():
-    """Return hull status string: 'DRY', 'L!', 'R!', or 'L!R!'."""
+    """Return 'DRY', 'L!', 'R!', or 'L!R!'."""
     s = ""
     if hull_leak_left:
         s += "L!"
@@ -204,5 +181,4 @@ def hull_status():
 
 
 def both_hulls_leaking():
-    """Return True if both hull sensors detect water."""
     return hull_leak_left and hull_leak_right

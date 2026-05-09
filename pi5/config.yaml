@@ -60,30 +60,74 @@ pod:
   timeout_ms: 10000
 
 battery:
-  # Voltage thresholds (4S LiPo)
-  full_v: 16.8
-  empty_v: 13.2
-  warn_v: 14.0
-  critical_v: 13.6
+  # Propulsion battery — 12S LiPo
+  prop:
+    full_v: 50.4
+    empty_v: 39.6
+    warn_v: 42.0
+    critical_v: 39.6
+  # Electronics battery — 3S Li-ion
+  elec:
+    full_v: 12.6
+    empty_v: 9.0
+    warn_v: 9.9
+    critical_v: 9.6
 
-cellular:
-  # SIM7600 modem configuration
-  device: "/dev/ttyUSB2"
-  baud: 115200
-  apn: "internet"
-  # API endpoint for cloud data upload
+network:
+  # Connection mode for cloud uploads + remote access:
+  #   "wifi"     — use the Pi's built-in WiFi only (best for shore / dev work)
+  #   "cellular" — use the SIM7600 4G modem (default for autonomous missions)
+  #   "auto"     — prefer WiFi if associated, fall back to cellular
+  mode: "auto"
+
+  # WiFi credentials. If both ssid and password are set, the network helper
+  # configures NetworkManager (nmcli) on first run; otherwise it assumes the
+  # OS already has WiFi configured.
+  wifi:
+    ssid: ""
+    password: ""
+
+  cellular:
+    # SIM7600 modem configuration. The OS is expected to bring this up
+    # (NetworkManager / mmcli / wvdial) — we just record the parameters.
+    device: "/dev/ttyUSB2"
+    baud: 115200
+    apn: "internet"
+
+  # API endpoint for cloud data upload — used regardless of which transport
+  # is currently active.
   cloud_api_url: "https://your-cloud-api.example.com/api/v1"
   cloud_api_key: ""  # Set via environment variable BOAT_CLOUD_API_KEY
   # Upload interval (seconds) — buffer locally if offline
   upload_interval_s: 30
+  # Probe URL used to confirm the link is actually usable (HEAD request).
+  # Default is the cloud API root.
+  online_probe_url: ""
 
 camera:
-  # USB camera device
-  device: "/dev/video0"
-  # Resolution for obstacle detection
+  # Stereo USB cameras for distance-aware obstacle avoidance
+  left_device: 0
+  right_device: 1
+  baseline_m: 0.12
+  calibration_path: "pi5/cv/calibration.npz"
   width: 640
   height: 480
   fps: 10
+
+avoidance:
+  # COCO class id for "boat" — used by the YOLO detector to filter
+  boat_class_id: 8
+  # Boats closer than this start a steer-away override (metres)
+  min_distance_m: 5.0
+  # Boats closer than this trigger full-severity evasion (metres)
+  crit_distance_m: 2.0
+  # Avoidance loop rate
+  update_rate_hz: 4
+
+winch:
+  # Survey | Fishing — affects only dashboard labelling. Spool is a manual
+  # mechanical swap; firmware behavior is identical in either mode.
+  mode: "survey"
 
 server:
   # FastAPI web server (dashboard + API)

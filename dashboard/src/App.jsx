@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTelemetry } from './hooks/useTelemetry'
 import { useApi } from './hooks/useApi'
+import { useNetwork } from './hooks/useNetwork'
 import BoatMap from './components/BoatMap'
 import TelemetryPanel from './components/TelemetryPanel'
 import ControlPanel from './components/ControlPanel'
@@ -10,6 +11,7 @@ import CameraFeed from './components/CameraFeed'
 export default function App() {
   const { data, connected } = useTelemetry()
   const api = useApi()
+  const network = useNetwork(api)
   const [waypoints, setWaypoints] = useState([])
 
   const handleMapClick = useCallback((lat, lon) => {
@@ -28,6 +30,7 @@ export default function App() {
   const environment = data?.environment
   const navigation = data?.navigation
   const mission = data?.mission
+  const winchMode = data?.config?.winch_mode || 'survey'
 
   // Build waypoint list for map (planned + active mission)
   const mapWaypoints = mission?.running
@@ -43,6 +46,15 @@ export default function App() {
           {mission?.running && (
             <span style={{ color: 'var(--accent)' }}>
               {mission.name} — WP {mission.current_wp + 1}/{mission.total_wps} {mission.phase}
+            </span>
+          )}
+          {network && (
+            <span title={network.active_interface || ''}>
+              {network.active_kind === 'wifi' && '📶 WiFi'}
+              {network.active_kind === 'cellular' && '📡 4G'}
+              {network.active_kind === 'offline' && '⚠ Offline'}
+              {network.active_kind === 'other' && network.active_kind}
+              {network.online ? '' : ' (no cloud)'}
             </span>
           )}
           <span>
@@ -75,6 +87,7 @@ export default function App() {
           environment={environment}
           navigation={navigation}
           connected={connected}
+          winchMode={winchMode}
         />
       </div>
 

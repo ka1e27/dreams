@@ -51,15 +51,20 @@ _navigator = None  # Navigator
 _mission = None    # MissionManager
 _pod = None        # PodBridge
 _sim = None        # BoatSimulator (only in sim mode)
+_camera = None     # cv.camera.CameraProducer (optional)
+_network = None    # comms.network.NetworkManager (optional)
+_winch_mode = "survey"
 _home_lat = None
 _home_lon = None
 
 
 def configure(pico, navigator, mission_mgr, pod_bridge,
               home_lat=None, home_lon=None, api_key=None,
-              cors_origins=None, simulator=None):
+              cors_origins=None, simulator=None, camera=None,
+              network=None, winch_mode="survey"):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
+    global _camera, _network, _winch_mode
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -67,6 +72,9 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
     _home_lat = home_lat
     _home_lon = home_lon
     _sim = simulator
+    _camera = camera
+    _network = network
+    _winch_mode = winch_mode
     auth.configure(api_key)
 
     if cors_origins:
@@ -156,6 +164,15 @@ async def get_status(_: str = Depends(auth.require_api_key)):
 async def get_telemetry(_: str = Depends(auth.require_api_key)):
     """Latest telemetry."""
     return _tel_out()
+
+
+@app.get("/api/network")
+async def get_network_status(_: str = Depends(auth.require_api_key)):
+    """Active network transport (wifi / cellular / offline) and online state."""
+    if _network is None:
+        return {"mode": "unknown", "active_kind": "unknown",
+                "active_interface": None, "online": False}
+    return _network.status()
 
 
 @app.get("/api/environment", response_model=EnvironmentOut)
@@ -404,10 +421,11 @@ async def ws_telemetry(ws: WebSocket):
 
 @app.websocket("/ws/camera")
 async def ws_camera(ws: WebSocket):
-    """Stream MJPEG frames from USB camera.
+    """Stream MJPEG frames from the shared camera producer.
 
     Authenticate via query param: /ws/camera?key=<api_key>
-    Sends binary JPEG frames. The dashboard renders them as an image.
+    Optional ?cam=left|right|disparity selects the view. Defaults to left.
+    The producer is owned by the app lifespan; this handler just subscribes.
     """
     if not await auth.validate_ws(ws):
         return
@@ -416,6 +434,7 @@ async def ws_camera(ws: WebSocket):
 
     try:
         import cv2
+        import numpy as np
     except ImportError:
         await ws.send_json({"error": "opencv not installed"})
         await ws.close()
@@ -423,30 +442,50 @@ async def ws_camera(ws: WebSocket):
             _cam_clients.remove(ws)
         return
 
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        await ws.send_json({"error": "camera not available"})
+    if _camera is None:
+        await ws.send_json({"error": "camera producer not running"})
         await ws.close()
         if ws in _cam_clients:
             _cam_clients.remove(ws)
         return
 
+    view = ws.query_params.get("cam", "left")
+    queue = _camera.subscribe()
+
+    # Disparity view uses StereoSGBM if calibration is loaded; lazy import.
+    stereo = None
+    if view == "disparity":
+        try:
+            from ..cv.stereo import StereoDepth, load_calibration
+            calib = load_calibration("pi5/cv/calibration.npz")
+            if calib is not None:
+                stereo = StereoDepth(calib)
+        except Exception as e:
+            logger.warning("disparity view fell back to left: %s", e)
+            view = "left"
+
     try:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                await asyncio.sleep(0.1)
+            try:
+                frame = await asyncio.wait_for(queue.get(), timeout=2.0)
+            except asyncio.TimeoutError:
                 continue
-            _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            if view == "right" and frame.right is not None:
+                img = frame.right
+            elif view == "disparity" and stereo is not None and frame.right is not None:
+                disp, _ = stereo.compute(frame.left, frame.right)
+                disp_norm = cv2.normalize(disp, None, 0, 255,
+                                          cv2.NORM_MINMAX).astype(np.uint8)
+                img = cv2.applyColorMap(disp_norm, cv2.COLORMAP_TURBO)
+            else:
+                img = frame.left
+            _, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 60])
             await ws.send_bytes(jpeg.tobytes())
-            await asyncio.sleep(0.1)  # ~10fps
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.debug("WS camera error: %s", e)
     finally:
-        cap.release()
+        _camera.unsubscribe(queue)
         if ws in _cam_clients:
             _cam_clients.remove(ws)
