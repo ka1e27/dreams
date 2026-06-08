@@ -150,6 +150,15 @@ class DetectionOverlay:
                 self._cfg.conf = max(0.05, min(0.95, float(updates["conf"])))
             except (TypeError, ValueError):
                 pass
+        if "imgsz" in updates:
+            # The real lever on inference speed: smaller = faster (detection FPS
+            # is bound by how long _infer takes, NOT by detect_max_fps, which is
+            # only an upper cap). YOLO needs a multiple of the stride (32).
+            try:
+                v = max(160, min(640, int(updates["imgsz"])))
+                self._cfg.imgsz = max(32, int(round(v / 32)) * 32)
+            except (TypeError, ValueError):
+                pass
         return self.controls()
 
     # -- detection loop ----------------------------------------------------- #

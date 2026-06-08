@@ -83,6 +83,9 @@
   .cam-ctl .cs{display:flex;align-items:center;gap:6px}
   .cam-ctl .csv{color:var(--cyan);min-width:30px;font-size:11px;text-align:right}
   .cam-ctl input[type=range]{width:88px;accent-color:var(--amber);cursor:pointer}
+  .cam-ctl .imgsel{background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);border-radius:5px;
+    padding:3px 6px;font-family:var(--mono);font-size:11px;outline:none;cursor:pointer}
+  .cam-ctl .imgsel:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .tg{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;
     letter-spacing:.12em;color:var(--amber)}
   /* ---- health ---- */
@@ -263,6 +266,11 @@
         </span>
         <label class="tg"><input type="checkbox" id="detOn"> DETECT</label>
         <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
+        <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
+          title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
+          <option value="256">256</option><option value="320">320</option>
+          <option value="416" selected>416</option><option value="512">512</option>
+          <option value="640">640</option></select></span>
         <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"><span class="csv" id="confV">0.40</span></span>
         <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60"><span class="csv" id="jqV">60</span></span>
         <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15"><span class="csv" id="sfpsV">15</span></span>
@@ -891,6 +899,7 @@ async function loadCameraControls(){
     if (c.conf != null){ $('conf').value = c.conf; $('confV').textContent = Number(c.conf).toFixed(2); }
     if (c.jpeg_quality != null){ $('jq').value = c.jpeg_quality; $('jqV').textContent = c.jpeg_quality; }
     if (c.stream_fps != null){ $('sfps').value = c.stream_fps; $('sfpsV').textContent = c.stream_fps; }
+    if (c.imgsz != null){ $('imgsz').value = String(c.imgsz); }
     rightPresent = !!c.right_present;
     const rb = $('camRight');
     rb.disabled = !rightPresent;
@@ -902,6 +911,7 @@ async function loadCameraControls(){
 }
 $('detOn').addEventListener('change', () => postCamera({ detection_enabled: $('detOn').checked }));
 $('detFps').addEventListener('input', () => { $('detFpsV').textContent = $('detFps').value; postCamera({ detect_max_fps: parseFloat($('detFps').value) }); });
+$('imgsz').addEventListener('change', () => postCamera({ imgsz: parseInt($('imgsz').value) }));
 $('conf').addEventListener('input', () => { $('confV').textContent = Number($('conf').value).toFixed(2); postCamera({ conf: parseFloat($('conf').value) }); });
 $('jq').addEventListener('input', () => { $('jqV').textContent = $('jq').value; postCamera({ jpeg_quality: parseInt($('jq').value) }); });
 $('sfps').addEventListener('input', () => { $('sfpsV').textContent = $('sfps').value; postCamera({ stream_fps: parseFloat($('sfps').value) }); });

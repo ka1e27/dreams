@@ -26,6 +26,27 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Detect FPS "stuck at ~4": it's inference-bound; added live IMG-size control
+
+**Reported:** detection FPS sits ~4 and doesn't rise when DET FPS is set higher.
+**Diagnosis (not a bug):** `detect_max_fps` is an **upper cap**, not a target. `vision_overlay._loop`
+runs YOLO back-to-back and only `continue`s (drops a frame) when frames arrive faster than the cap —
+there's no path that speeds inference up. ~4 fps = yolov8n @ imgsz 416 on the Pi 5 **CPU**; any cap ≥4
+is a no-op. The real lever is inference size (`imgsz`), which was fixed at startup and not live-tunable.
+**Changed:**
+- `pi5/cv/vision_overlay.py` — `apply_controls()` now accepts `imgsz` (clamp 160–640, snap to a
+  multiple of 32 as YOLO requires). Applies on the next frame, no model reload. `controls()` already
+  surfaced `imgsz`, so `GET/POST /api/camera` carry it with no app.py change.
+- `pi5/server/templates/command_center.html` — added an **IMG** dropdown (256/320/416/512/640) by
+  DET FPS, wired to `/api/camera` (loads from `c.imgsz`, posts on change), default 416; added an ⓘ
+  hint on DET FPS that it's a cap. Compact `.imgsel` style.
+**Guidance given:** lower IMG (416→320 ≈ 1.7× faster) and/or export to **NCNN** (`camera.detection.model`
+already accepts an `_ncnn_model` dir, ~2× on ARM) → ~8–12 fps; 320 + NCNN is the practical sweet spot.
+**Verified (sim/Windows):** imgsz clamp/snap unit-tested (all /32, 160–640, junk ignored), ruff clean,
+py_compile OK; booted `run_sim`, `/command` renders the IMG control + JS hooks, `/api/camera` responds
+(sim has no overlay so keeps the 416 default). Real detect-FPS gain is Pi-only (CPU/model bound).
+**Next steps:** uncommitted at write time (offered to commit/push to main).
+
 ## 2026-06-08 — Move the web server from port 8080 → 8000
 
 **Worked on:** user asked to run the server on 8000 instead of 8080. Changed the port everywhere it
