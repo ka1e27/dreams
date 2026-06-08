@@ -654,12 +654,25 @@ def _parse_eq_float(text: str | None) -> float | None:
 
 
 async def _gather_health() -> dict:
-    """Collect Pi/host health. vcgencmd fields are None off-Pi (shown as N/A)."""
-    import psutil
+    """Collect Pi/host health.
 
-    cpu_percent = psutil.cpu_percent(percpu=True)
-    vm = psutil.virtual_memory()
-    du = psutil.disk_usage(os.path.abspath(os.sep))
+    Optional sources degrade to None (shown as N/A in the UI) instead of
+    raising: psutil if it isn't installed, vcgencmd off a Pi. A missing source
+    must never tear down /ws/health — that would make the dashboard
+    reconnect-loop (open → error → close → retry).
+    """
+    cpu_percent = ram_used = ram_total = disk_used = disk_total = None
+    try:
+        import psutil
+        cpu_percent = psutil.cpu_percent(percpu=True)
+        vm = psutil.virtual_memory()
+        du = psutil.disk_usage(os.path.abspath(os.sep))
+        ram_used = round((vm.total - vm.available) / 1e9, 2)
+        ram_total = round(vm.total / 1e9, 2)
+        disk_used = round(du.used / 1e9, 2)
+        disk_total = round(du.total / 1e9, 2)
+    except Exception as e:  # noqa: BLE001 — psutil missing/unavailable is non-fatal
+        logger.debug("psutil unavailable: %s", e)
 
     temp_c = _parse_eq_float(await _vcgencmd("measure_temp"))
     throttled_raw, throttled = _decode_throttled(await _vcgencmd("get_throttled"))
@@ -674,10 +687,10 @@ async def _gather_health() -> dict:
         "throttled": throttled,
         "throttled_raw": throttled_raw,
         "cpu_percent": cpu_percent,
-        "ram_used_gb": round((vm.total - vm.available) / 1e9, 2),
-        "ram_total_gb": round(vm.total / 1e9, 2),
-        "disk_used_gb": round(du.used / 1e9, 2),
-        "disk_total_gb": round(du.total / 1e9, 2),
+        "ram_used_gb": ram_used,
+        "ram_total_gb": ram_total,
+        "disk_used_gb": disk_used,
+        "disk_total_gb": disk_total,
         "clock_mhz": round(clock_hz / 1e6, 1) if clock_hz else None,
         "volts": volts,
         "camera_fps": round(_cam_fps, 1) if _camera is not None else None,
@@ -693,13 +706,20 @@ async def get_health():
 
 @app.websocket("/ws/health")
 async def ws_health(ws: WebSocket):
-    """Stream Pi 5 health JSON every second. Auth via ?key=<api_key>."""
+    """Stream Pi 5 health JSON every second. Auth via ?key=<api_key>.
+
+    A gather failure surfaces as an {"error": ...} payload and the socket stays
+    open — closing it would make the dashboard reconnect-loop.
+    """
     if not await auth.validate_ws(ws):
         return
     await ws.accept()
     try:
         while True:
-            data = _latest_health if _latest_health is not None else await _gather_health()
+            try:
+                data = _latest_health if _latest_health is not None else await _gather_health()
+            except Exception as e:  # noqa: BLE001
+                data = {"error": str(e), "timestamp": time.time()}
             await ws.send_json(data)
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:

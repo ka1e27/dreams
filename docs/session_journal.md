@@ -26,6 +26,29 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Fixed /ws/health reconnect-loop when psutil is missing
+
+**Worked on:** user reported "only the static dashboard opens" + the Pi showing a connection
+open→close loop after the [[command-center]] commit (25c9234).
+**Diagnosis (reproduced):** two things. (1) The command center is at **`/command`**, not `/` — `/` is
+still the old static dashboard, so that's all they saw. (2) The open/close loop = `psutil` not
+installed in their runtime: `_gather_health()` did a bare `import psutil`, which raised ImportError,
+which `ws_health` caught by *exiting* → socket closed on connect → the page's auto-reconnect retried
+every 2s → loop. (`/health` GET would also 500.) psutil was added to requirements last commit but not
+yet `pip install`ed on their host (this Windows box has it; they're on the Pi / another venv).
+**Changed:** `pi5/server/app.py` —
+- `_gather_health()` now wraps the psutil block in try/except and degrades to None (UI shows N/A),
+  same contract the vcgencmd fields already use off-Pi. A missing optional source must never raise.
+- `/ws/health` loop catches per-tick errors and emits `{"error": ...}` while keeping the socket open,
+  so no health failure can ever cause a reconnect loop.
+**Verified:** monkeypatched psutil to ImportError → `_gather_health()` returns a clean dict (all None);
+restarted sim, `/ws/health` holds open 4s. ruff clean.
+**User action still needed:** `pip install -r pi5/requirements.txt` (psutil) in the venv that serves
+the page for real CPU/RAM/disk numbers; open `/command` not `/`. Monaco/fonts are CDN — editor pane
+needs internet on first load.
+**Next steps:** not committed yet (offered). Still pending from prior entry: hardware test of
+`/pico/push` reconnect.
+
 ## 2026-06-07 — Built the /command "command center" HUD (camera + Pi health + Pico terminal)
 
 **Worked on:** implemented `~/Downloads/DREAMS_dashboard_update.md` — a single-page naval-HUD command
