@@ -150,6 +150,28 @@ avoidance:
   # Avoidance loop rate
   update_rate_hz: 4
 
+stepper:
+  # Radar-bar pan stepper (A4988 + NEMA-17) driven from the Pi 5 GPIO header
+  # directly via gpiozero/lgpio. This is the ONLY Pi 5 GPIO use in the project
+  # (everything else is USB) — see docs/pin_map.md. Pins are BCM numbers.
+  step_pin: 23
+  dir_pin: 24
+  enable_pin: 25         # active-LOW
+  sleep_pin: 8           # active-LOW
+  steps_per_rev: 3200    # 200 × 16 (1/16 microstepping wired on the A4988)
+  max_rpm: 10
+  auto_sleep_seconds: 5
+  has_slip_ring: false   # true → allow full 360°; false → clamp to the sweep below
+  sweep_min_degrees: 0
+  sweep_max_degrees: 180
+  scan_speed_rpm: 3      # sweep speed while hunting for targets
+  track_speed_rpm: 8     # slew speed while following a locked target
+  fov_degrees: 75        # camera horizontal FOV, for bbox→bearing mapping
+  # Detected classes that trigger TRACK mode (must match the YOLO model labels).
+  priority_classes: ["boat", "person"]
+  # Mode at startup: SLEEP (default, motor off) | HOLD | SCAN.
+  initial_mode: "SLEEP"
+
 winch:
   # Survey | Fishing — affects only dashboard labelling. Spool is a manual
   # mechanical swap; firmware behavior is identical in either mode.

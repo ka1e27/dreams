@@ -100,6 +100,11 @@ class DetectionOverlay:
     def detections(self) -> list[dict]:
         return list(self._detections)
 
+    def boxes(self) -> list[tuple]:
+        """Latest raw boxes (x1,y1,x2,y2,label,conf,highlight) for consumers
+        that need geometry — e.g. radar_tracker.RadarTracker."""
+        return list(self._boxes)
+
     def controls(self) -> dict:
         return {
             "detection_enabled": self.enabled,

@@ -58,6 +58,8 @@ _sim = None        # BoatSimulator (only in sim mode)
 _camera = None     # cv.camera.CameraProducer (optional)
 _overlay = None    # cv.vision_overlay.DetectionOverlay (optional)
 _network = None    # comms.network.NetworkManager (optional)
+_stepper = None    # cv.stepper.StepperMotor (optional, radar-bar pan)
+_radar = None      # cv.radar_tracker.RadarTracker (optional)
 _winch_mode = "survey"
 _home_lat = None
 _home_lon = None
@@ -67,10 +69,11 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
               home_lat=None, home_lon=None, api_key=None,
               cors_origins=None, simulator=None, camera=None,
               network=None, winch_mode="survey", overlay=None,
-              jpeg_quality=60, stream_fps=15):
+              jpeg_quality=60, stream_fps=15, stepper=None, radar=None):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
+    global _stepper, _radar
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -84,6 +87,8 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
     _overlay = overlay
     _jpeg_quality = int(jpeg_quality)
     _stream_fps_cap = float(stream_fps)
+    _stepper = stepper
+    _radar = radar
     auth.configure(api_key)
 
     if cors_origins:
@@ -718,6 +723,18 @@ async def _gather_health() -> dict:
             pod_leak = bool(latest.leak_detected)
             pod_age_s = round(max(0.0, time.time() - latest.timestamp), 1)
 
+    # Radar-bar stepper (Pi 5 GPIO; tracked by RadarTracker). None off-Pi/sim.
+    stepper_angle = stepper_state = stepper_locked = None
+    _st = _radar or _stepper
+    if _st is not None:
+        try:
+            ss = _st.status()
+            stepper_angle = ss.get("angle")
+            stepper_state = ss.get("state")
+            stepper_locked = ss.get("target_locked", False)
+        except Exception as e:  # noqa: BLE001 — never let a status read break health
+            logger.debug("stepper status unavailable: %s", e)
+
     return {
         "temp_c": temp_c,
         "throttled": throttled,
@@ -742,6 +759,9 @@ async def _gather_health() -> dict:
         "pod_ok": pod_ok,
         "pod_leak": pod_leak,
         "pod_age_s": pod_age_s,
+        "stepper_angle": stepper_angle,
+        "stepper_state": stepper_state,
+        "stepper_target_locked": stepper_locked,
         "timestamp": time.time(),
     }
 
@@ -886,6 +906,67 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
     if _overlay is not None:
         _overlay.apply_controls(payload)
     return _camera_state()
+
+
+# ---- Radar-bar stepper (Pi 5 GPIO, via RadarTracker) ----
+# Commands only flip flags on the tracker; the tracker's own daemon thread does
+# the (blocking) stepping, so these handlers never stall the event loop. The
+# stepper lives on the Pi 5 40-pin header — the one place this project uses Pi 5
+# GPIO directly (everything else is USB). Absent off-Pi / in sim → available:false.
+
+_STEPPER_COMMANDS = ("SCAN", "STOP", "GOTO", "CENTER", "SLEEP", "WAKE", "TRACK", "HOLD")
+
+
+def _stepper_iface():
+    """The active stepper interface: prefer the tracker, fall back to raw."""
+    return _radar or _stepper
+
+
+@app.get("/stepper/status")
+async def stepper_status(_: str = Depends(auth.require_api_key)):
+    """Current radar-bar angle / mode / lock state."""
+    iface = _stepper_iface()
+    if iface is None:
+        return {"available": False, "angle": None, "state": None,
+                "target_locked": False}
+    try:
+        return iface.status()
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "error": str(e)}
+
+
+@app.post("/stepper/command")
+async def stepper_command(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Drive the radar bar. Body: {"command": <cmd>, "value": <degrees if GOTO>}.
+
+    Commands: SCAN | STOP | GOTO | CENTER | SLEEP | WAKE | TRACK | HOLD.
+    """
+    cmd = str(payload.get("command", "")).upper()
+    if cmd not in _STEPPER_COMMANDS:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400,
+                            detail="command must be one of %s" % (_STEPPER_COMMANDS,))
+    if _radar is None:
+        return {"ok": False, "error": "stepper/radar tracker not running (hardware-only)"}
+    try:
+        if cmd == "GOTO":
+            val = payload.get("value")
+            if val is None:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="GOTO needs 'value' (degrees)")
+            _radar.goto(float(val))
+        elif cmd == "CENTER":
+            _radar.center()
+        elif cmd == "WAKE":
+            _radar.wake()
+        elif cmd == "STOP":
+            _radar.set_mode("HOLD")
+        else:  # SCAN | TRACK | HOLD | SLEEP
+            _radar.set_mode(cmd)
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"ok": True, "command": cmd, "status": _radar.status()}
 
 
 # ---- Pico terminal (parsed-frame monitor + command sender + reflash) ----

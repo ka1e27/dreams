@@ -1,25 +1,40 @@
-"""Onboard hull sensors — dual battery, DHT11, hull leak.
+"""Onboard hull sensors — dual battery, air temp/humidity (SHT41 ×2), hull leak.
 
 Motor temperatures used to live here as NTC thermistors on GP27/GP28; that
 job moved to the VESCs (queried over UART by `vesc.py`). The freed ADCs
 now monitor a second battery.
+
+Air temp/humidity is now two Sensirion **SHT41** I2C modules (was a single
+DHT11 on GP16, which the as-built Boat PCB does not have). Both SHT41s share
+the fixed address 0x44, so each sits on its own bus:
+
+  - SHT41 #A → J11 (GP12 SDA / GP13 SCL)   → `air_temp`  / `air_humidity`
+  - SHT41 #B → J13 (GP14 SDA / GP15 SCL)   → `air_temp2` / `air_humidity2`
+
+These use bit-banged ``SoftI2C``: the hardware I2C0 controller is already
+owned by the BNO085 on GP8/GP9 (compass.py), and I2C1's pins clash with the
+firmware's winch/SBUS assignments (see the warning below).
+
+⚠ As-built pin conflict — GP12/GP13 are VESC UART0, GP14 is the winch PWM and
+  GP15 is the SBUS input in vesc.py / motor_control.py / sbus.py. On the
+  fabricated board the temp connectors J11/J13 occupy those pins, so those
+  three modules are mis-pinned for this board and must be relocated off
+  GP12-15 before the temp sensors can run without a pin clash. See
+  docs/pin_map.md → "As-built board divergence".
 
 Pin assignments:
   - Propulsion battery (12S LiPo) ADC: GP26 (ADC0)
       — voltage divider sized so 50.4 V → ≤ 3.3 V at the Pico pin
   - Electronics battery (3S Li-ion) ADC: GP27 (ADC1)
       — uses the legacy 15 / (15+100) divider; 12.6 V → 1.64 V
-  - DHT11:           GP16
+  - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]
+  - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]
   - Hull leak left:  GP17
   - Hull leak right: GP18
   - GP28 (ADC2):     spare
 """
-from machine import Pin, ADC
-
-try:
-    import dht
-except:
-    dht = None
+from machine import Pin, ADC, SoftI2C
+import sht41
 
 # ---- Propulsion battery (12S LiPo) ----
 # Divider: 3.3 kΩ low / 47 kΩ high → ratio ≈ 1/15.24 (50.4 V → 3.31 V)
@@ -41,10 +56,18 @@ E_WARN = 9.9    # 3.30 V × 3
 E_CRIT = 9.6    # 3.20 V × 3
 E_RANGE = E_FULL - E_EMPTY
 
+# ---- Air temp/humidity (two SHT41 on separate SoftI2C buses) ----
+SHT_A_SDA = 12
+SHT_A_SCL = 13
+SHT_B_SDA = 14
+SHT_B_SCL = 15
+SHT_FREQ = 100_000   # 100 kHz — comfortable for bit-banged I2C + cabling
+
 # ---- Hardware handles ----
 _prop_adc = None
 _elec_adc = None
-_dht_sensor = None
+_sht_a = None
+_sht_b = None
 _hull_l = None
 _hull_r = None
 
@@ -53,15 +76,17 @@ prop_batt_v = 0.0
 prop_batt_pct = 0
 elec_batt_v = 0.0
 elec_batt_pct = 0
-air_temp = 0
-air_humidity = 0
+air_temp = 0.0        # SHT41 #A (J11)
+air_humidity = 0.0
+air_temp2 = 0.0       # SHT41 #B (J13)
+air_humidity2 = 0.0
 hull_leak_left = False
 hull_leak_right = False
 
 
 def init():
     """Initialise all onboard sensor hardware."""
-    global _prop_adc, _elec_adc, _dht_sensor, _hull_l, _hull_r
+    global _prop_adc, _elec_adc, _sht_a, _sht_b, _hull_l, _hull_r
     try:
         _prop_adc = ADC(26)
     except:
@@ -70,11 +95,20 @@ def init():
         _elec_adc = ADC(27)
     except:
         pass
-    if dht is not None:
-        try:
-            _dht_sensor = dht.DHT11(Pin(16))
-        except:
-            pass
+    # SHT41 #A (J11) — bit-banged so it doesn't fight the BNO085 on I2C0.
+    try:
+        bus_a = SoftI2C(scl=Pin(SHT_A_SCL), sda=Pin(SHT_A_SDA), freq=SHT_FREQ)
+        _sht_a = sht41.SHT41(bus_a)
+        _sht_a.reset()
+    except:
+        _sht_a = None
+    # SHT41 #B (J13).
+    try:
+        bus_b = SoftI2C(scl=Pin(SHT_B_SCL), sda=Pin(SHT_B_SDA), freq=SHT_FREQ)
+        _sht_b = sht41.SHT41(bus_b)
+        _sht_b.reset()
+    except:
+        _sht_b = None
     try:
         _hull_l = Pin(17, Pin.IN, Pin.PULL_UP)
         _hull_r = Pin(18, Pin.IN, Pin.PULL_UP)
@@ -114,17 +148,19 @@ def read_elec_battery():
         pass
 
 
-def read_dht():
-    """Read air temperature and humidity from DHT11."""
-    global air_temp, air_humidity
-    if _dht_sensor is None:
-        return
-    try:
-        _dht_sensor.measure()
-        air_temp = _dht_sensor.temperature()
-        air_humidity = _dht_sensor.humidity()
-    except:
-        pass
+def read_temp_humidity():
+    """Read both SHT41 air temp/humidity sensors.
+
+    `air_temp`/`air_humidity` track sensor A (J11); `air_temp2`/`air_humidity2`
+    track sensor B (J13). A failed/CRC-bad read leaves the last value in place.
+    """
+    global air_temp, air_humidity, air_temp2, air_humidity2
+    if _sht_a is not None and _sht_a.measure():
+        air_temp = _sht_a.temp_c
+        air_humidity = _sht_a.humidity
+    if _sht_b is not None and _sht_b.measure():
+        air_temp2 = _sht_b.temp_c
+        air_humidity2 = _sht_b.humidity
 
 
 def read_hull():
@@ -143,8 +179,8 @@ def read_all_fast():
 
 
 def read_all_slow():
-    """Read slow sensors — DHT, hull. Call at ~0.3 Hz."""
-    read_dht()
+    """Read slow sensors — SHT41 air temp/humidity ×2, hull. Call at ~0.3 Hz."""
+    read_temp_humidity()
     read_hull()
 
 

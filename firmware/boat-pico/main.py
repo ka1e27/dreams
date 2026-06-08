@@ -16,15 +16,20 @@ Pin map:
   GP4/GP5   — UART1 (GPS M10Q + Pod, shared bus, 9600 baud)
   GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
   GP10      — Status NeoPixel (WS2812, 1 pixel)
-  GP12/GP13 — UART0 (VESC master, 115200 baud)
-  GP14      — Winch motor ESC PWM (50 Hz)
-  GP15      — SBUS receiver input (PIO software UART)
-  GP16      — DHT11
+  GP12/GP13 — SHT41 #A air temp/humidity (SoftI2C, J11)   [as-built board]
+  GP14/GP15 — SHT41 #B air temp/humidity (SoftI2C, J13)   [as-built board]
+  GP16      — unused (was DHT11; not present on the board)
   GP17      — Hull leak left
   GP18      — Hull leak right
   GP26      — Propulsion battery (12S LiPo) ADC
   GP27      — Electronics battery (3S Li-ion) ADC
   GP28      — Spare ADC
+
+⚠ As-built board divergence: vesc.py (UART0 GP12/13), motor_control.py (winch
+  PWM GP14) and sbus.py (SBUS GP15) still claim GP12-15, but on the fabricated
+  PCB those pins are the temp-sensor connectors J11/J13. VESC/winch/SBUS are
+  mis-pinned for this board and must be relocated off GP12-15. They are NOT yet
+  moved here — see docs/pin_map.md → "As-built board divergence".
 """
 import uasyncio as asyncio
 import time
@@ -212,7 +217,7 @@ async def task_fast_sensors():
 
 
 async def task_slow_sensors():
-    """Read DHT11 + hull leak switches at ~0.3 Hz."""
+    """Read SHT41 air temp/humidity (×2) + hull leak switches at ~0.3 Hz."""
     while True:
         try:
             sensors.read_all_slow()
@@ -542,7 +547,11 @@ async def main():
         print("  I2C scan: %s" % [hex(a) for a in compass.scan_bus()])
     print("  SBUS: PIO GP%d %s" % (sbus.SBUS_PIN, "OK" if sbus_ok else "FAIL"))
     print("  Status LED: NeoPixel GP%d" % status_led.PIN)
-    print("  DHT11: GP16")
+    print("  SHT41 #A: SoftI2C GP%d/GP%d (J11)  #B: GP%d/GP%d (J13)" % (
+        sensors.SHT_A_SDA, sensors.SHT_A_SCL,
+        sensors.SHT_B_SDA, sensors.SHT_B_SCL))
+    print("  !! As-built conflict: SHT41 GP12-15 overlap VESC/winch/SBUS; "
+          "those modules are mis-pinned for this board (see docs/pin_map.md)")
     print("  Hull: GP17(L) GP18(R)")
     print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)")
     print("  Watchdog: 3000ms heartbeat timeout")
