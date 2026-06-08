@@ -26,6 +26,52 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Maritime YOLOv8 fine-tuning pipeline (ml/) + ONNX inference backend on the Pi
+
+**Worked on:** implemented `~/Downloads/DREAMS_maritime_ml_instruction.md` — a laptop/Colab pipeline
+that trains a 6-class maritime YOLOv8n (vessel/kayak/buoy/person/dock/debris), exports ONNX, and an
+onnxruntime inference path on the Pi.
+**Two deliberate divergences (instruction written against a simplified repo model; flagged, not applied
+verbatim):**
+- The instruction says *modify `pi5/cv/camera.py`* to use the model — but `camera.py` is purely the
+  capture producer; detection lives in **`pi5/cv/vision_overlay.py`**. Integrated there; left camera.py
+  alone (also respects the "server untouched" spirit).
+- "*Use onnxruntime instead of ultralytics*" — added a real native onnxruntime backend
+  (`pi5/cv/onnx_detector.py`: letterbox + pure-numpy decode + per-class NMS) used for `.onnx` models,
+  with the existing **ultralytics path kept as the `.pt` fallback**. Honors the lightweight-Pi intent
+  (no torch needed for the maritime model) without rewriting the proven box/track pipeline.
+**New (ml/ — runs on laptop/Colab, NOT the Pi):** `ml/README.md`, `ml/data/download_datasets.py`
+(Roboflow SDK + SMD/SeaShips staging + per-source class remap→6 std ids), `ml/data/prepare_dataset.py`
+(merge/remap/dedup-by-hash/drop-empty/split 70-20-10/oversample/stats+chart/dataset.yaml),
+`ml/data/augment.py` (Albumentations maritime aug: glare/fog/colour/noise/hflip/±15°; never vflip),
+`ml/train.py` (freeze-10 transfer-learn from COCO), `ml/validate.py` (test mAP + CPU-FPS benchmark +
+threshold pass/fail), `ml/export_onnx.py` (best.pt→onnx imgsz320 simplify opset12, writes model card +
+onnxruntime benchmark), `ml/colab_train.ipynb`.
+**New (Pi):** `pi5/cv/onnx_detector.py` (OnnxYolo + standalone `decode()`); `pi5/cv/models/
+maritime_yolov8n_info.json` (tracked placeholder card; .onnx itself gitignored).
+**Changed:**
+- `pi5/cv/vision_overlay.py` — backend selection: auto-prefer `pi5/cv/models/maritime_yolov8n.onnx`
+  when present (else configured `.pt`); `_raw_detect()` is backend-agnostic and `_infer()` does the
+  shared highlight/target/primary logic; `controls()` reports `backend`; logs the model on load;
+  graceful fallback to yolov8n.pt if the .onnx can't load.
+- `pi5/requirements.txt` — `onnxruntime>=1.17`. `.gitignore` — ml data/runs/samples + `*.onnx`/`*.pt`
+  weights (keep `*_info.json`). `pi5/config.yaml` — `highlight_classes`/`priority_classes` now cover
+  both COCO ('boat','person') and maritime ('vessel','kayak') so either model highlights/tracks right;
+  documented the auto-detect.
+**Untouched per instruction:** CLAUDE.md, firmware/, pi5/server/, KiCad, run_sim.py (and camera.py).
+**Verified (sim/Windows):** ruff clean on `pi5 run_hardware.py` + all `ml/*.py` (notebook excluded —
+Colab `!`-magics aren't standard-lintable); py_compile all; model-card + ipynb JSON parse; **95 tests
+pass**; **ONNX `decode()` unit-tested** with a synthetic YOLOv8 tensor → correct class + box mapped back
+through the letterbox (256,176,384,304), and it handles both (1,C,N)/(1,N,C) orientations; model
+resolver falls back to yolov8n.pt when no .onnx present; `run_sim` still serves `/health`+`/command` 200.
+**UNTESTED (needs a GPU/Colab + the Pi):** the whole training run, real ONNX export, and onnxruntime
+inference on hardware (no model trained yet — overlay runs COCO yolov8n until `maritime_yolov8n.onnx` is
+dropped in).
+**Next steps:** uncommitted (offer). Run the pipeline on Colab (set ROBOFLOW_API_KEY; confirm the
+Roboflow workspace/project/version slugs + each source's class names against `remap.json`), export,
+`scp` the .onnx to `pi5/cv/models/`, then verify on the Pi that vision_overlay logs "Using maritime
+ONNX model" and the command-center boxes/tracking show maritime classes.
+
 ## 2026-06-08 — Detect FPS "stuck at ~4": it's inference-bound; added live IMG-size control
 
 **Reported:** detection FPS sits ~4 and doesn't rise when DET FPS is set higher.

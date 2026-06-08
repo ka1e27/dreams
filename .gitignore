@@ -45,3 +45,15 @@ pgdata/
 .history/
 fp-info-cache
 *-backups/
+
+# ML training pipeline — datasets/runs are too large for git
+ml/data/raw/
+ml/data/unified/
+ml/runs/
+ml/validation_samples/
+
+# Model weights are binary — copy to the Pi manually (or use git LFS).
+# Keep the model-card JSON so the class list/metrics are tracked.
+pi5/cv/models/*.onnx
+pi5/cv/models/*.pt
+!pi5/cv/models/*.json

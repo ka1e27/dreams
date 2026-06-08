@@ -19,10 +19,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Auto-preferred maritime model: if this exists and the config still points at
+# the COCO default, the overlay uses it (onnxruntime backend) without any config
+# edit. Trained + exported by the ml/ pipeline (see ml/README.md).
+_MARITIME_ONNX = Path(__file__).parent / "models" / "maritime_yolov8n.onnx"
 
 # BGR colours (OpenCV). Amber for highlighted classes, muted teal for the rest,
 # cyan for the locked/tracked target reticle.
@@ -50,7 +57,8 @@ class DetectionOverlay:
         self._cfg = cfg or DetectionConfig()
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
-        self._model = None
+        self._model = None          # ultralytics YOLO (.pt path)
+        self._onnx = None           # onnx_detector.OnnxYolo (.onnx path)
         self._names: dict | list = {}
         self._boxes: list[tuple] = []          # (x1,y1,x2,y2,label,conf,highlight)
         self._detections: list[dict] = []      # [{label, confidence}] for the UI
@@ -60,27 +68,57 @@ class DetectionOverlay:
         self.track_marker: bool = True         # draw a lock reticle on the primary
 
     # -- model -------------------------------------------------------------- #
-    def _load_model(self):
+    def _resolve_model_path(self) -> str:
+        """Effective model path. Prefer the maritime ONNX when present and the
+        config still has the COCO default; an explicit config value always wins."""
+        cfg = (self._cfg.model or "").strip()
+        if _MARITIME_ONNX.exists() and cfg in ("", "yolov8n.pt"):
+            return str(_MARITIME_ONNX)
+        return cfg or "yolov8n.pt"
+
+    def _load_model(self) -> None:
+        """Pick the inference backend: onnxruntime for an .onnx model (no torch
+        needed), else ultralytics for a .pt. Sets self._onnx / self._model and
+        self._names. Falls back to yolov8n.pt if the .onnx can't be loaded."""
+        path = self._resolve_model_path()
+        self._cfg.model = path
+
+        if path.lower().endswith(".onnx"):
+            try:
+                from .onnx_detector import OnnxYolo
+                onnx = OnnxYolo(path, conf=self._cfg.conf)
+            except Exception as e:  # noqa: BLE001
+                onnx = None
+                logger.warning("ONNX backend import failed: %s", e)
+            if onnx is not None and onnx.available:
+                self._onnx = onnx
+                self._names = dict(enumerate(onnx.names))
+                logger.info("Using maritime ONNX model: %s (%d classes, imgsz=%d)",
+                            os.path.basename(path), len(onnx.names), onnx.imgsz)
+                return
+            logger.warning("Maritime ONNX unavailable — falling back to yolov8n.pt")
+            path = "yolov8n.pt"
+            self._cfg.model = path
+
         try:
             from ultralytics import YOLO  # heavy; deferred so import stays light
         except ImportError as e:
             logger.warning("ultralytics not installed — detection overlay off (%s)", e)
-            return None
+            return
         try:
-            model = YOLO(self._cfg.model)
-            logger.info("Detection overlay model loaded: %s", self._cfg.model)
-            return model
+            self._model = YOLO(path)
+            self._names = getattr(self._model, "names", {}) or {}
+            logger.info("Using ultralytics model: %s", path)
         except Exception as e:  # noqa: BLE001 — degrade, never crash startup
-            logger.warning("YOLO load failed (%s): %s", self._cfg.model, e)
-            return None
+            logger.warning("YOLO load failed (%s): %s", path, e)
+            self._model = None
 
     # -- lifecycle ---------------------------------------------------------- #
     async def start(self) -> None:
         loop = asyncio.get_event_loop()
         # Load (and possibly auto-download) the model off the event loop.
-        self._model = await loop.run_in_executor(None, self._load_model)
-        self._names = getattr(self._model, "names", {}) or {}
-        if self._model is None:
+        await loop.run_in_executor(None, self._load_model)
+        if not self.available:
             self.enabled = False
         self._task = asyncio.create_task(self._loop())
 
@@ -95,7 +133,7 @@ class DetectionOverlay:
     # -- accessors ---------------------------------------------------------- #
     @property
     def available(self) -> bool:
-        return self._model is not None
+        return self._model is not None or self._onnx is not None
 
     @property
     def detect_fps(self) -> float:
@@ -130,16 +168,17 @@ class DetectionOverlay:
             "detection_enabled": self.enabled,
             "detect_max_fps": self._cfg.detect_max_fps,
             "conf": round(self._cfg.conf, 2),
-            "imgsz": self._cfg.imgsz,
+            "imgsz": self._onnx.imgsz if self._onnx is not None else self._cfg.imgsz,
             "model": self._cfg.model,
-            "model_loaded": self._model is not None,
+            "backend": "onnx" if self._onnx is not None else ("ultralytics" if self._model else None),
+            "model_loaded": self.available,
             "detect_fps": self.detect_fps,
         }
 
     def apply_controls(self, updates: dict) -> dict:
         """Apply partial runtime updates (from POST /api/camera)."""
         if "detection_enabled" in updates:
-            self.enabled = bool(updates["detection_enabled"]) and self._model is not None
+            self.enabled = bool(updates["detection_enabled"]) and self.available
         if "detect_max_fps" in updates:
             try:
                 self._cfg.detect_max_fps = max(0.5, min(30.0, float(updates["detect_max_fps"])))
@@ -172,7 +211,7 @@ class DetectionOverlay:
                     frame = await asyncio.wait_for(q.get(), timeout=2.0)
                 except asyncio.TimeoutError:
                     continue
-                if not self.enabled or self._model is None:
+                if not self.enabled or not self.available:
                     self._boxes, self._detections, self._primary, self._fps = [], [], None, 0.0
                     continue
                 interval = 1.0 / max(0.5, self._cfg.detect_max_fps)
@@ -190,20 +229,19 @@ class DetectionOverlay:
         finally:
             self._camera.unsubscribe(q)
 
-    def _infer(self, frame_bgr) -> tuple[list[tuple], list[dict], tuple | None]:
-        try:
-            results = self._model(frame_bgr, imgsz=self._cfg.imgsz,
-                                   conf=self._cfg.conf, verbose=False)
-        except Exception as e:  # noqa: BLE001
-            logger.error("overlay inference error: %s", e)
-            return [], [], None
-        boxes: list[tuple] = []
-        dets: list[dict] = []
-        primary: tuple | None = None
-        primary_conf = -1.0
+    def _raw_detect(self, frame_bgr) -> list[tuple]:
+        """Backend-agnostic detection → [(x1,y1,x2,y2,label,conf), ...].
+
+        ONNX (onnxruntime) when a maritime .onnx is loaded, else ultralytics.
+        Both return the same plain tuples; highlight/target/primary logic lives
+        in _infer so it's identical across backends.
+        """
+        if self._onnx is not None:
+            return self._onnx.infer(frame_bgr, self._cfg.conf)
+        results = self._model(frame_bgr, imgsz=self._cfg.imgsz,
+                              conf=self._cfg.conf, verbose=False)
         names = self._names
-        target = set(self._cfg.target_classes)
-        highlight = set(self._cfg.highlight_classes)
+        out: list[tuple] = []
         for box in getattr(results[0], "boxes", []) or []:
             cid = int(box.cls[0])
             conf = float(box.conf[0])
@@ -211,9 +249,25 @@ class DetectionOverlay:
                 label = names.get(cid, str(cid))
             else:
                 label = names[cid] if cid < len(names) else str(cid)
+            x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
+            out.append((x1, y1, x2, y2, label, conf))
+        return out
+
+    def _infer(self, frame_bgr) -> tuple[list[tuple], list[dict], tuple | None]:
+        try:
+            raw = self._raw_detect(frame_bgr)
+        except Exception as e:  # noqa: BLE001
+            logger.error("overlay inference error: %s", e)
+            return [], [], None
+        boxes: list[tuple] = []
+        dets: list[dict] = []
+        primary: tuple | None = None
+        primary_conf = -1.0
+        target = set(self._cfg.target_classes)
+        highlight = set(self._cfg.highlight_classes)
+        for x1, y1, x2, y2, label, conf in raw:
             if target and label not in target:
                 continue
-            x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
             is_hl = label in highlight
             entry = (x1, y1, x2, y2, label, conf, is_hl)
             boxes.append(entry)

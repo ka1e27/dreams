@@ -11,5 +11,9 @@ opencv-python-headless>=4.9
 ultralytics>=8.2
 numpy>=1.26
 psutil>=5.9
+# onnxruntime runs the maritime YOLOv8 .onnx model (pi5/cv/onnx_detector.py) on
+# the Pi 5 CPU without torch. The overlay falls back to ultralytics/yolov8n.pt
+# if no .onnx model is present, so this is only required for the maritime model.
+onnxruntime>=1.17
 # mpremote is a CLI tool used by /pico/push (firmware reflash); install with
 # `pip install mpremote` on the Pi. Not importable, so not pinned here.

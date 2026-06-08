@@ -129,16 +129,21 @@ camera:
   # Live YOLO detection overlay drawn on the /video feed.
   detection:
     enabled: true
-    # Model weights. Default COCO yolov8n (has 'boat','person',…). Drop in a
-    # maritime-trained .pt here to specialise — e.g. SeaShips / MASTR1325 /
-    # Singapore Maritime Dataset weights, or a Roboflow maritime export. An
-    # NCNN export dir (yolov8n_ncnn_model) also works and is ~2x faster on ARM.
+    # Model weights. Default COCO yolov8n (has 'boat','person',…). Two ways to
+    # specialise for the water:
+    #   1. The ml/ pipeline trains a maritime model and exports it to
+    #      pi5/cv/models/maritime_yolov8n.onnx — if that file exists it is used
+    #      automatically (onnxruntime backend, no torch), no config edit needed.
+    #   2. Otherwise drop a maritime .pt here, or an NCNN export dir
+    #      (yolov8n_ncnn_model, ~2x faster on ARM). Ultralytics infers the format.
     model: "yolov8n.pt"
     imgsz: 416            # inference size (mult of 32): 320 lighter, 640 better at distance
     conf: 0.40            # min confidence to keep a detection
     detect_max_fps: 8     # cap inference rate (decoupled from the video stream)
     target_classes: []    # keep only these class names; [] = keep all
-    highlight_classes: ["boat", "person"]   # drawn in amber; others muted
+    # Highlighted (amber) classes — covers both the COCO fallback ('boat','person')
+    # and the maritime model ('vessel','kayak'). Others are drawn muted.
+    highlight_classes: ["vessel", "person", "kayak", "boat"]
 
 avoidance:
   # COCO class id for "boat" — used by the YOLO detector to filter
@@ -179,7 +184,8 @@ stepper:
   track_speed_rpm: 8     # slew speed while following a locked target
   fov_degrees: 75        # camera horizontal FOV, for bbox→bearing mapping
   # Detected classes that trigger TRACK mode (must match the YOLO model labels).
-  priority_classes: ["boat", "person"]
+  # Covers the COCO fallback ('boat','person') + the maritime model ('vessel','kayak').
+  priority_classes: ["vessel", "person", "kayak", "boat"]
   # Mode at startup: SLEEP (default, motor off) | HOLD | SCAN.
   initial_mode: "SLEEP"
 
