@@ -100,8 +100,11 @@ def main() -> None:
         steps_per_rev=step_cfg.get("steps_per_rev", 3200),
         max_speed_rpm=step_cfg.get("max_rpm", 10),
         auto_sleep_s=step_cfg.get("auto_sleep_seconds", 5),
-        min_deg=step_cfg.get("sweep_min_degrees", 0),
-        max_deg=step_cfg.get("sweep_max_degrees", 180),
+        # Travel limits = the MANUAL pan range (full 0–360 by default); the
+        # auto-scan SCAN sweep is the narrower sweep_* range passed to the
+        # RadarTracker below. has_slip_ring only governs 0°/360° wrapping.
+        min_deg=step_cfg.get("manual_min_degrees", 0),
+        max_deg=step_cfg.get("manual_max_degrees", 360),
         has_slip_ring=step_cfg.get("has_slip_ring", False),
     )
     radar = RadarTracker(

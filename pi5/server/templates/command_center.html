@@ -30,7 +30,7 @@
                      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
     background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
   .app{position:relative;z-index:1;display:grid;gap:12px;padding:12px;min-height:100vh;
-    grid-template-rows:auto 1fr 1fr auto auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
+    grid-template-rows:auto 1fr auto 1fr auto auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
   /* ---- header ---- */
   header{display:flex;align-items:center;justify-content:space-between;
     padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
@@ -180,7 +180,30 @@
     color:var(--cyan);text-shadow:0 0 16px currentColor}
   .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}
   .cbtn.ghost2:hover{color:var(--cyan);border-color:var(--cyan);background:transparent;box-shadow:none}
+  .radar-track{font-size:11px;letter-spacing:.06em;color:var(--cyan);min-height:15px}
+  .radar-track .muted{color:var(--muted)}
   @media(max-width:1000px){.radar-inner{grid-template-columns:1fr}}
+  /* ---- camera source toggle + tracking badge ---- */
+  .srcbtn{cursor:pointer;background:transparent;color:var(--muted);border:1px solid var(--muted);
+    border-radius:4px;padding:3px 9px;font-size:11px;letter-spacing:.1em;transition:.15s}
+  .srcbtn:hover{color:var(--cyan);border-color:var(--cyan)}
+  .srcbtn.active{color:#0a0d0f;background:var(--amber);border-color:var(--amber)}
+  .srcbtn[disabled]{opacity:.4;cursor:not-allowed}
+  .srcbtn[disabled]:hover{color:var(--muted);border-color:var(--muted)}
+  .cam-track{position:absolute;left:8px;top:30px;font-size:11px;color:var(--cyan);display:none;
+    background:rgba(0,0,0,.6);padding:2px 8px;border-radius:4px;letter-spacing:.08em;
+    border:1px solid rgba(0,212,255,.4)}
+  /* ---- boat health ---- */
+  .boat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+    gap:1px;background:var(--amber-dim)}
+  .boat-grid .stat{background:var(--panel);padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
+  .boat-grid .stat .sv{font-family:var(--display);font-weight:700;font-size:17px;color:#eaf6fb;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .boat-grid .stat .bar{margin-top:2px}
+  .boat-flags{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--amber-dim)}
+  .flagchip{font-size:10px;letter-spacing:.1em;padding:3px 9px;border-radius:10px;border:1px solid currentColor}
+  .flagchip.ok{color:var(--ok)} .flagchip.bad{color:var(--crit);animation:pulse 1.4s infinite}
+  .boat-alert{padding:0 12px 10px;font-size:11px;letter-spacing:.05em;min-height:14px}
   /* ---- modal ---- */
   .modal-bg{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
@@ -227,12 +250,17 @@
       <div class="cam-wrap">
         <img id="cam" alt="camera">
         <div class="cam-frame"></div>
-        <div class="cam-tag">CAM-0 / LEFT</div>
+        <div class="cam-tag" id="cam-tag">CAM-0 / LEFT</div>
+        <div class="cam-track" id="cam-track"></div>
         <div class="cam-det" id="cam-det">DET --</div>
         <div class="cam-fps" id="cam-fps">-- FPS</div>
         <div class="nosignal" id="nosignal">◬ NO SIGNAL<span style="font-size:11px;letter-spacing:.1em;color:var(--muted)">camera producer offline</span></div>
       </div>
       <div class="cam-ctl">
+        <span class="cs"><span class="lbl">SOURCE</span>
+          <button class="srcbtn active" id="camLeft" onclick="setCam('left')">◀ LEFT</button>
+          <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
+        </span>
         <label class="tg"><input type="checkbox" id="detOn"> DETECT</label>
         <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
         <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"><span class="csv" id="confV">0.40</span></span>
@@ -281,6 +309,25 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- BOAT / PICO HEALTH -->
+  <div class="panel">
+    <div class="ttl"><span>⛵ BOAT HEALTH</span><span class="lbl" id="boat-link">PICO —</span></div>
+    <div class="boat-grid">
+      <div class="stat"><span class="lbl">BATTERY</span><span class="sv" id="b-batt">-- V</span>
+        <div class="bar"><i id="b-batt-bar" style="width:0"></i></div></div>
+      <div class="stat"><span class="lbl">HULL</span><span class="sv" id="b-hull">--</span></div>
+      <div class="stat"><span class="lbl">HEADING</span><span class="sv" id="b-hdg">--</span></div>
+      <div class="stat"><span class="lbl">SPEED</span><span class="sv" id="b-spd">--</span></div>
+      <div class="stat"><span class="lbl">MOTOR L / R</span><span class="sv" id="b-mot">--</span></div>
+      <div class="stat"><span class="lbl">GPS FIX</span><span class="sv" id="b-gps">--</span></div>
+      <div class="stat"><span class="lbl">WATER TEMP</span><span class="sv" id="b-wtemp">--</span></div>
+      <div class="stat"><span class="lbl">WATER EC</span><span class="sv" id="b-wec">--</span></div>
+      <div class="stat"><span class="lbl">AIR T / RH</span><span class="sv" id="b-air">--</span></div>
+    </div>
+    <div class="boat-flags" id="boat-flags"></div>
+    <div class="boat-alert" id="boat-alert"></div>
   </div>
 
   <!-- PICO TERMINAL -->
@@ -342,6 +389,7 @@
           <span class="chip" id="rdr-mode" style="color:var(--muted)">--</span>
           <span class="chip" id="rdr-lock" style="color:var(--muted)">UNLOCKED</span>
         </div>
+        <div class="radar-track" id="rdr-track"><span class="muted">no target</span></div>
         <div class="cmd-bar" style="padding:0;gap:10px 16px">
           <div class="cmd-group">
             <span class="cmd-glabel">SWEEP</span>
@@ -352,14 +400,26 @@
           </div>
           <span class="cmd-div"></span>
           <div class="cmd-group">
+            <span class="cmd-glabel">MANUAL</span>
+            <button class="cbtn" onclick="stepperJog(-1)" title="pan left (CCW)">◄ LEFT</button>
+            <select id="rdrStep" class="cmd-in" style="width:62px" title="pan step">
+              <option value="1">1°</option>
+              <option value="5">5°</option>
+              <option value="15" selected>15°</option>
+              <option value="45">45°</option>
+            </select>
+            <button class="cbtn" onclick="stepperJog(1)" title="pan right (CW)">RIGHT ►</button>
+          </div>
+          <span class="cmd-div"></span>
+          <div class="cmd-group">
             <span class="cmd-glabel">POWER</span>
             <button class="cbtn" onclick="stepperCmd('WAKE','Motor awake')">WAKE</button>
             <button class="cbtn ghost2" onclick="stepperCmd('SLEEP','Motor asleep')">SLEEP</button>
           </div>
           <span class="cmd-div"></span>
           <div class="cmd-group">
-            <span class="cmd-glabel">GO TO</span>
-            <input id="rdrDeg" class="cmd-in" type="number" step="any" placeholder="deg">
+            <span class="cmd-glabel">LOCK TO</span>
+            <input id="rdrDeg" class="cmd-in" type="number" step="any" min="0" max="360" placeholder="0–360°">
             <button class="cbtn" onclick="stepperGoto()">GO</button>
           </div>
         </div>
@@ -452,7 +512,21 @@ function autoWS(path, handlers){
 
 // ---- camera ---------------------------------------------------------------
 const cam = $('cam');
-cam.src = '/video' + (KEY ? '?key=' + encodeURIComponent(KEY) : '');
+let camView = 'left';        // 'left' | 'right'
+let rightPresent = false;    // set from /api/camera
+function camSrc(view){ return '/video?cam=' + view + (KEY ? '&key=' + encodeURIComponent(KEY) : ''); }
+function setCam(view){
+  if (view === 'right' && !rightPresent){ toast('No right camera connected', false); return; }
+  camView = view;
+  cam.src = camSrc(view);
+  $('camLeft').classList.toggle('active', view === 'left');
+  $('camRight').classList.toggle('active', view === 'right');
+  $('cam-meta').textContent = (view === 'right' ? 'RIGHT' : 'LEFT') + ' · MJPEG';
+  $('cam-tag').textContent = view === 'right' ? 'CAM-1 / RIGHT' : 'CAM-0 / LEFT';
+  // detection overlay (boxes + tracking reticle) is only drawn on the left view
+  $('cam-det').style.display = view === 'right' ? 'none' : 'block';
+}
+setCam('left');
 cam.onerror = () => { setDot('dot-cam', false); $('nosignal').classList.add('show'); };
 
 // ---- system health --------------------------------------------------------
@@ -528,6 +602,13 @@ function renderHealth(h){
     $('cam-det').textContent = 'DET ' + h.detect_fps.toFixed(1) + ' fps · '
       + (uniq.length ? uniq.slice(0,4).join(', ') : 'clear');
   }
+  // object tracking — the overlay marks one primary target (lock reticle on the
+  // left view); show a matching badge here. Only meaningful on the left view.
+  const ct = $('cam-track');
+  if (h.track && camView === 'left'){
+    ct.textContent = '◎ TRACKING ' + h.track.label + ' ' + Math.round(h.track.confidence*100) + '%';
+    ct.style.display = 'block';
+  } else { ct.style.display = 'none'; }
   // radar bar / stepper
   const ra = h.stepper_angle;
   if (ra === null || ra === undefined){
@@ -543,19 +624,80 @@ function renderHealth(h){
   const rl = $('rdr-lock');
   if (h.stepper_target_locked){ rl.textContent = 'LOCKED'; rl.style.color = 'var(--cyan)'; }
   else { rl.textContent = 'UNLOCKED'; rl.style.color = 'var(--muted)'; }
+  // tracked-target readout (what the bar is following)
+  const rt = $('rdr-track'); const tgt = h.stepper_target || h.track;
+  if (h.stepper_target_locked && tgt){
+    rt.innerHTML = '◎ tracking <b style="color:var(--cyan)">' + tgt.label + '</b> · '
+      + Math.round((tgt.conf!=null?tgt.conf:tgt.confidence)*100) + '%';
+  } else if (rs === 'SCANNING'){
+    rt.innerHTML = '<span class="muted">scanning for targets…</span>';
+  } else {
+    rt.innerHTML = '<span class="muted">no target</span>';
+  }
+  // boat / pico health panel
+  renderBoat(h.boat);
   // pod link light
   if (h.pod_ok === null || h.pod_ok === undefined) setDot('dot-pod', false);   // no pod bridge
   else if (h.pod_leak) setDot('dot-pod', 'warn');                              // responding but leaking
   else if (h.pod_ok) setDot('dot-pod', true);                                  // healthy
   else setDot('dot-pod', false);                                               // not responding
-  // warning banner (prioritised — leak is most urgent)
+  // warning banner (prioritised — leaks are most urgent)
+  const hullLeak = h.boat && h.boat.hull && h.boat.hull !== 'DRY';
   let warn = null;
   if (h.pod_leak) warn = '⚠ POD LEAK DETECTED — retrieve the pod';
+  else if (hullLeak) warn = '⚠ HULL LEAK — ' + h.boat.hull;
   else if (h.temp_c !== null && h.temp_c !== undefined && h.temp_c >= 75)
     warn = '⚠ THERMAL WARNING — ' + h.temp_c.toFixed(1) + '°C';
   else if (ts && ts !== 'OK' && ts !== 'N/A' && ts.indexOf('current') >= 0)
     warn = '⚠ POWER / THROTTLE — ' + h.throttled;
   showBanner(warn);
+}
+// ---- boat / pico health panel --------------------------------------------
+const FLAG_LABELS = { GPS:'GPS', CMP:'COMPASS', BAT:'BATT', DHT:'TEMP', MOT:'MOTOR', POD:'POD' };
+function renderBoat(b){
+  const link = $('boat-link');
+  if (!b){ link.textContent = 'PICO N/A'; link.style.color = 'var(--muted)';
+    $('boat-flags').innerHTML = ''; $('boat-alert').textContent = ''; return; }
+  link.textContent = b.connected ? 'PICO LINK UP' : 'PICO LINK DOWN';
+  link.style.color = b.connected ? 'var(--ok)' : 'var(--crit)';
+  // battery — voltage + % + bar
+  $('b-batt').textContent = fmt(b.batt_v, ' V', 1) + (b.batt_pct!=null ? ' · '+b.batt_pct+'%' : '');
+  $('b-batt-bar').style.width = Math.max(0, Math.min(100, b.batt_pct||0)) + '%';
+  // hull
+  const hu = $('b-hull'); hu.textContent = b.hull || '--';
+  hu.style.color = (b.hull && b.hull !== 'DRY') ? 'var(--crit)' : 'var(--ok)';
+  $('b-hdg').textContent = fmt(b.heading, '°', 0);
+  $('b-spd').textContent = fmt(b.speed_knots, ' kn', 1);
+  // motor temps
+  const mEl = $('b-mot');
+  mEl.textContent = fmt(b.mt_left, '', 0) + ' / ' + fmt(b.mt_right, '', 0) + ' °C';
+  const hot = Math.max(b.mt_left||0, b.mt_right||0);
+  mEl.style.color = hot >= 70 ? 'var(--crit)' : hot >= 60 ? 'var(--warn)' : '#eaf6fb';
+  // gps
+  const noFix = !b.lat && !b.lon;
+  const g = $('b-gps');
+  g.textContent = noFix ? 'NO FIX' : b.lat.toFixed(5) + ', ' + b.lon.toFixed(5);
+  g.style.color = noFix ? 'var(--warn)' : '#eaf6fb';
+  g.style.fontSize = noFix ? '17px' : '12px';
+  // water + air
+  $('b-wtemp').textContent = (b.water_temp <= -900) ? 'N/A' : fmt(b.water_temp, ' °C', 1);
+  $('b-wec').textContent = fmt(b.water_ec, ' µS', 0);
+  $('b-air').textContent = (b.air_temp!=null ? b.air_temp+'°C' : '--') + ' / '
+    + (b.air_humidity!=null ? b.air_humidity+'%' : '--');
+  // sensor health flags
+  const f = b.health_flags || {};
+  $('boat-flags').innerHTML = Object.keys(FLAG_LABELS).map(k => {
+    const ok = !!f[k];
+    return `<span class="flagchip ${ok?'ok':'bad'}">${FLAG_LABELS[k]} ${ok?'OK':'FLT'}</span>`;
+  }).join('');
+  // last alert
+  const al = $('boat-alert');
+  if (b.alert){
+    const sev = (b.alert.severity||'').toUpperCase();
+    al.textContent = '⚠ ' + b.alert.severity + ' · ' + b.alert.code
+      + (b.alert.detail ? ' · ' + b.alert.detail : '');
+    al.style.color = sev.startsWith('CRIT') ? 'var(--crit)' : (sev==='WARN' ? 'var(--warn)' : 'var(--muted)');
+  } else { al.textContent = ''; }
 }
 function showBanner(msg){ const b=$('banner'); if(msg){ b.textContent=msg; b.classList.add('show'); } else b.classList.remove('show'); }
 autoWS('/ws/health', {
@@ -721,6 +863,11 @@ async function loadCameraControls(){
     if (c.conf != null){ $('conf').value = c.conf; $('confV').textContent = Number(c.conf).toFixed(2); }
     if (c.jpeg_quality != null){ $('jq').value = c.jpeg_quality; $('jqV').textContent = c.jpeg_quality; }
     if (c.stream_fps != null){ $('sfps').value = c.stream_fps; $('sfpsV').textContent = c.stream_fps; }
+    rightPresent = !!c.right_present;
+    const rb = $('camRight');
+    rb.disabled = !rightPresent;
+    rb.title = rightPresent ? 'right camera' : 'no right camera connected';
+    if (!rightPresent && camView === 'right') setCam('left');
     if (!c.camera_present) $('cam-det').textContent = 'NO CAM';
     else if (!c.model_loaded) $('cam-det').textContent = 'DET off (no model)';
   }catch(e){}
@@ -748,9 +895,16 @@ function stepperCmd(cmd, msg){
 }
 function stepperGoto(){
   const d = parseFloat($('rdrDeg').value);
-  if (isNaN(d)){ toast('enter an angle in degrees', false); return; }
-  postStepper('GOTO', d).then(()=> toast('✓ Going to ' + d + '°', true))
+  if (isNaN(d)){ toast('enter an angle in degrees (0–360)', false); return; }
+  postStepper('GOTO', d).then(()=> toast('✓ Locking to ' + d + '°', true))
                         .catch(e=> toast('✗ ' + e.message, false));
+}
+function stepperJog(dir){
+  const step = parseFloat($('rdrStep').value) || 15;
+  const delta = dir * step;   // +ve = right/CW, -ve = left/CCW
+  postStepper('JOG', delta)
+    .then(()=> toast('✓ Pan ' + (dir < 0 ? 'left ' : 'right ') + step + '°', true))
+    .catch(e=> toast('✗ ' + e.message, false));
 }
 // compass rose: ticks every 30°, plus a sweep sector from the configured limits
 function roseXY(deg, r){ const a = deg * Math.PI / 180; return [100 + r*Math.sin(a), 100 - r*Math.cos(a)]; }
@@ -762,10 +916,11 @@ function roseXY(deg, r){ const a = deg * Math.PI / 180; return [100 + r*Math.sin
   }
   $('rose-ticks').innerHTML = s;
   fetch('/stepper/status', { headers: apiHeaders() }).then(r=>r.json()).then(j=>{
-    const lim = j.limits;
-    if (!lim || j.has_slip_ring || j.available === false) return;   // full circle / no info
-    const r = 92, [x0,y0] = roseXY(lim[0], r), [x1,y1] = roseXY(lim[1], r);
-    const large = (lim[1] - lim[0]) > 180 ? 1 : 0;
+    // Shade the auto-scan sweep sector (SCAN range), not the full manual range.
+    const sw = j.sweep || j.limits;
+    if (!sw || j.available === false) return;
+    const r = 92, [x0,y0] = roseXY(sw[0], r), [x1,y1] = roseXY(sw[1], r);
+    const large = (sw[1] - sw[0]) > 180 ? 1 : 0;
     $('rose-sweep').setAttribute('d', `M100 100 L${x0} ${y0} A${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`);
   }).catch(()=>{});
 })();

@@ -48,6 +48,7 @@ class RadarTracker:
         self._mode = initial_mode
         self._goto: float | None = None
         self._target_locked = False
+        self._target_info: dict | None = None   # {label, conf} of the locked target
         self._last_seen = 0.0
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -62,6 +63,7 @@ class RadarTracker:
             self._mode = mode
             if mode != TRACK:
                 self._target_locked = False
+                self._target_info = None
 
     def goto(self, degrees: float) -> None:
         """Queue an absolute move; switches to HOLD so the loop executes it."""
@@ -69,6 +71,16 @@ class RadarTracker:
             self._goto = float(degrees)
             self._mode = HOLD
             self._target_locked = False
+
+    def jog(self, delta_degrees: float) -> None:
+        """Pan a relative amount (manual control). +ve = right/CW, -ve = left/CCW.
+
+        Resolves the relative move against the bar's current angle here (a cheap,
+        thread-safe read) and queues it as an absolute goto; the stepper clamps
+        it to the travel limits, so jogging into an end stop simply parks there.
+        """
+        cur = self.stepper.get_position_degrees() if self.stepper is not None else 0.0
+        self.goto(cur + float(delta_degrees))
 
     def center(self) -> None:
         self.goto(0.0)
@@ -82,6 +94,7 @@ class RadarTracker:
         with self._lock:
             mode = self._mode
             locked = self._target_locked
+            info = dict(self._target_info) if self._target_info else None
         # While scanning the stepper reports SCANNING; otherwise mirror our mode.
         state = "SCANNING" if mode == SCAN else mode
         return {
@@ -91,7 +104,9 @@ class RadarTracker:
             "state": state,
             "mode": mode,
             "target_locked": locked,
-            "limits": s.get("limits"),
+            "target": info,                       # {label, conf} when locked
+            "limits": s.get("limits"),            # manual travel range
+            "sweep": [self.sweep_min, self.sweep_max],   # auto-scan range
             "has_slip_ring": s.get("has_slip_ring"),
         }
 
@@ -153,6 +168,7 @@ class RadarTracker:
             with self._lock:
                 self._mode = TRACK
                 self._target_locked = True
+                self._target_info = self._target_dict(target)
                 self._last_seen = time.monotonic()
         time.sleep(0.1)
 
@@ -162,12 +178,14 @@ class RadarTracker:
         if target is not None:
             with self._lock:
                 self._target_locked = True
+                self._target_info = self._target_dict(target)
                 self._last_seen = time.monotonic()
             angle = self._bearing_for(target)
             self.stepper.rotate_to(angle, self.track_speed)
         elif (time.monotonic() - self._last_seen) > self.lost_timeout_s:
             with self._lock:
                 self._target_locked = False
+                self._target_info = None
                 self._mode = SCAN
         time.sleep(0.1)
 
@@ -199,6 +217,14 @@ class RadarTracker:
             if label in self.priority and conf > best_conf:
                 best, best_conf = box, conf
         return best
+
+    @staticmethod
+    def _target_dict(box) -> dict:
+        """Compact {label, conf} for the status surface (UI tracking readout)."""
+        try:
+            return {"label": box[4], "conf": round(float(box[5]), 3)}
+        except (IndexError, TypeError, ValueError):
+            return {"label": "?", "conf": 0.0}
 
     def _bearing_for(self, box) -> float:
         """Map a box's horizontal frame position to an absolute bar angle."""

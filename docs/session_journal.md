@@ -26,6 +26,56 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Command-center: camera L/R switch, object-track viz, boat health, manual stepper pan 0–360
+
+**Worked on:** four user-requested command-center features — (1) switch between left/right
+cameras, (2) show tracking of a YOLO-detected object, (3) surface the boat/Pico health, (4) manual
+stepper pan left/right locking anywhere 0–360°.
+**Key engineering call (stepper):** decoupled *wrapping* from *travel range* in `StepperMotor`.
+`has_slip_ring` now only gates taking the short way across the 0°/360° seam (the one thing a cable
+can't survive); travel limits are independent. With no slip ring the bar is a **linear axis with
+hard stops** — so it reaches a full 0–360° manually but never winds >1 turn. This also fixes a
+latent mod-360 bug: position is now tracked **unwrapped** when not wrapping, so jogging left off the
+360° end no longer strands the count at 0. Auto-scan SCAN keeps its own narrower sweep range.
+**Changed:**
+- `pi5/cv/stepper.py` — `_wrap` (= has_slip_ring) separate from `min_deg`/`max_deg`; `step()` wraps
+  mod-rev only when `_wrap`, else clamps the count to `[min,max]` steps; `get_position_degrees()`
+  unwrapped when linear. Manual range now 0–360 by default.
+- `pi5/cv/radar_tracker.py` — `jog(delta)` (relative pan → HOLD goto); `status()` adds `target`
+  ({label,conf} when locked) and `sweep` (auto-scan range, distinct from the manual `limits`);
+  records the locked target in SCAN/TRACK.
+- `pi5/cv/vision_overlay.py` — tracks a **primary target** (highest-conf highlight class); `draw()`
+  paints a cyan lock reticle (corner brackets + crosshair + "TRACK label") on it; `primary_target()`
+  accessor for the UI/health.
+- `pi5/cv/camera.py` — `has_right` property (is a 2nd camera open?).
+- `pi5/server/app.py` — `/video?cam=left|right` (overlay drawn on left only; right falls back to
+  left); `_camera_state()` adds `right_present`; `_gather_health()` adds `track`, `stepper_target`,
+  and a `boat` block (`_boat_health()`: link, battery, hull, motor temps, GPS/hdg/spd, decoded
+  6-flag health string, ENV sensors, last alert); `JOG` added to `/stepper/command`.
+- `pi5/server/templates/command_center.html` — SOURCE ◄LEFT/RIGHT► toggle + on-feed ◎TRACKING badge;
+  new **BOAT HEALTH** panel (battery bar, hull, heading/speed, motor temps, GPS, water/air, 6 sensor
+  flag chips, last-alert line; hull-leak now also raises the red banner); radar panel gains a MANUAL
+  ◄LEFT / step / RIGHT► jog group + tracked-target readout; LOCK-TO accepts 0–360. Rose sweep sector
+  now shades `sweep` not `limits`. Added a 6th grid row.
+- `pi5/config.yaml` — `stepper.manual_min_degrees`/`manual_max_degrees` (0/360) split from `sweep_*`;
+  clarified `has_slip_ring` = wrap-only.
+- `run_hardware.py` — stepper built with the manual range (0–360); RadarTracker keeps the sweep range.
+- `docs/pin_map.md` — documented the two travel ranges + the wrap/no-wrap distinction and cable caveat.
+**Deliberate divergence (flagged):** the prior session said full 360° needs a slip ring. The user
+explicitly asked for 0–360 manual control; implemented it **safely** (linear, hard-stopped, no wrap)
+and flagged the ≤1-turn cable wind in `config.yaml` + `pin_map.md` rather than silently capping it.
+**Verified (sim/Windows):** `ruff check pi5 run_hardware.py` clean; `py_compile` OK; **95 tests pass**;
+stepper bench **9/9** (mock); a 0–360 mock run reached 270/350/360 and jogged −20 off the 360° end to
+339.97 (old bug would strand at 0), clamps at 0/360. Booted `run_sim`: `/health` carries `boat`
+(batt 16.8 V/100 %, hull DRY, all 6 flags OK, water temp/EC) with `track`/`stepper_*` = null (no
+overlay/radar in sim); `/api/camera` → `right_present:false`; `/stepper/command JOG` →
+hardware-only; bad command → 400; `/video?cam=right` streams the placeholder; `/command` serves all
+new panels/JS. **All GPIO/motor/camera/YOLO behaviour is Pi-only and UNTESTED on hardware.**
+**Next steps:** uncommitted (offer). On the Pi: with two cameras, verify the RIGHT button; with a
+maritime/COCO model + a target in frame, confirm the lock reticle + ◎TRACKING badge and that the bar
+slews under TRACK; bench the manual jog across the full 0–360 with the bar free. If a slip ring is
+fitted, set `has_slip_ring: true` (re-enables short-way wrap).
+
 ## 2026-06-08 — Radar-bar stepper control (A4988 on Pi 5 GPIO, not the Pico)
 
 **Worked on:** implemented `~/Downloads/DREAMS_stepper_instruction (1).md` — A4988-driven

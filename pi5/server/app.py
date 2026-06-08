@@ -666,6 +666,43 @@ def _parse_eq_float(text: str | None) -> float | None:
         return None
 
 
+# Order of the 6-char health-flags string in TEL / GET_STATUS (serial-protocol.md).
+_HEALTH_FLAG_NAMES = ("GPS", "CMP", "BAT", "DHT", "MOT", "POD")
+
+
+def _boat_health() -> dict:
+    """Snapshot the Boat Pico's key health from the live PicoSerial state.
+
+    Surfaces the operationally important boat status on the command center:
+    link, battery, hull leak, motor temps, GPS/heading/speed, the decoded
+    per-sensor health flags, the slow ENV sensors, and the latest alert.
+    """
+    t = _pico.telemetry
+    e = _pico.environment
+    flags = (t.health or "").ljust(6, "0")
+    health_flags = {
+        name: (flags[i] == "1") for i, name in enumerate(_HEALTH_FLAG_NAMES)
+    }
+    alert = getattr(_pico, "last_alert", None)
+    alert_d = None
+    if alert is not None:
+        alert_d = {"severity": alert.severity, "code": alert.code, "detail": alert.detail}
+    return {
+        "connected": bool(getattr(_pico, "connected", False)),
+        "lat": t.lat, "lon": t.lon,
+        "heading": t.heading, "speed_knots": t.speed_knots,
+        "batt_v": t.batt_v, "batt_pct": t.batt_pct,
+        "hull": t.hull,
+        "mt_left": t.mt_left, "mt_right": t.mt_right,
+        "health": t.health,
+        "health_flags": health_flags,
+        "air_temp": e.air_temp, "air_humidity": e.air_humidity,
+        "water_temp": e.water_temp, "water_ec": e.water_ec,
+        "water_light": e.water_light, "bottom_contact": e.bottom_contact,
+        "alert": alert_d,
+    }
+
+
 async def _gather_health() -> dict:
     """Collect Pi/host health.
 
@@ -724,7 +761,7 @@ async def _gather_health() -> dict:
             pod_age_s = round(max(0.0, time.time() - latest.timestamp), 1)
 
     # Radar-bar stepper (Pi 5 GPIO; tracked by RadarTracker). None off-Pi/sim.
-    stepper_angle = stepper_state = stepper_locked = None
+    stepper_angle = stepper_state = stepper_locked = stepper_target = None
     _st = _radar or _stepper
     if _st is not None:
         try:
@@ -732,8 +769,27 @@ async def _gather_health() -> dict:
             stepper_angle = ss.get("angle")
             stepper_state = ss.get("state")
             stepper_locked = ss.get("target_locked", False)
+            stepper_target = ss.get("target")   # {label, conf} of the locked target
         except Exception as e:  # noqa: BLE001 — never let a status read break health
             logger.debug("stepper status unavailable: %s", e)
+
+    # Object being tracked by the detection overlay (highest-conf priority box).
+    track = None
+    if _overlay is not None:
+        try:
+            track = _overlay.primary_target()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("overlay primary_target unavailable: %s", e)
+
+    # Boat / Pico health — battery, hull, motors, GPS, decoded sensor flags, and
+    # the latest alert. Pulled from the live PicoSerial state (works with the
+    # simulator's MockPicoSerial too). Degrades to None if no Pico is wired.
+    boat = None
+    if _pico is not None:
+        try:
+            boat = _boat_health()
+        except Exception as e:  # noqa: BLE001 — telemetry read must not break health
+            logger.debug("boat health unavailable: %s", e)
 
     return {
         "temp_c": temp_c,
@@ -762,6 +818,9 @@ async def _gather_health() -> dict:
         "stepper_angle": stepper_angle,
         "stepper_state": stepper_state,
         "stepper_target_locked": stepper_locked,
+        "stepper_target": stepper_target,
+        "track": track,
+        "boat": boat,
         "timestamp": time.time(),
     }
 
@@ -803,12 +862,15 @@ def _mjpeg_part(jpeg: bytes) -> bytes:
             + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n")
 
 
-async def _mjpeg_stream():
-    """Yield an MJPEG stream. Placeholder frames when no producer is running.
+async def _mjpeg_stream(view: str = "left"):
+    """Yield an MJPEG stream for the selected camera ("left" or "right").
 
-    Publishes at most _stream_fps_cap frames/s and draws the detection
-    overlay's latest boxes on each frame. Detection runs on its own task, so
-    it never throttles the stream (stream FPS and detect FPS are independent).
+    Placeholder frames when no producer is running. Publishes at most
+    _stream_fps_cap frames/s and draws the detection overlay's latest boxes on
+    each frame. Detection runs on its own task against the LEFT frame, so the
+    overlay (boxes + tracking reticle) is only drawn on the left view; the right
+    view is shown raw. If "right" is requested but no right camera is present we
+    fall back to the left frame. Stream FPS and detect FPS stay independent.
     """
     global _cam_fps
     if _camera is None:
@@ -831,9 +893,12 @@ async def _mjpeg_stream():
             cap = _stream_fps_cap
             if cap and last_pub and (now - last_pub) < (1.0 / cap) * 0.9:
                 continue
-            # Draw detection boxes on a copy — never mutate the shared frame.
-            img = frame.left
-            if _overlay is not None and _overlay.enabled:
+            # Pick the requested view; right falls back to left if absent.
+            show_right = view == "right" and frame.right is not None
+            img = frame.right if show_right else frame.left
+            # Draw the detection overlay only on the left view (it's computed
+            # from the left frame). Always on a copy — never mutate the shared one.
+            if not show_right and _overlay is not None and _overlay.enabled:
                 img = frame.left.copy()
                 _overlay.draw(img)
             ok, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, _jpeg_quality])
@@ -852,11 +917,19 @@ async def _mjpeg_stream():
 
 @app.get("/video")
 async def video(request: Request):
-    """MJPEG camera stream (left camera). Auth via ?key=<api_key>."""
+    """MJPEG camera stream. Auth via ?key=<api_key>.
+
+    Select the view with ?cam=left|right (default left). The detection overlay
+    is drawn only on the left view; right is raw and falls back to left if no
+    right camera is present.
+    """
     if not _http_key_ok(request):
         return Response(status_code=403, content="Invalid or missing API key")
+    view = request.query_params.get("cam", "left")
+    if view not in ("left", "right"):
+        view = "left"
     return StreamingResponse(
-        _mjpeg_stream(),
+        _mjpeg_stream(view),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
@@ -865,6 +938,7 @@ def _camera_state() -> dict:
     """Current camera/detection control state for /api/camera and the UI."""
     state = {
         "camera_present": _camera is not None,
+        "right_present": bool(getattr(_camera, "has_right", False)) if _camera is not None else False,
         "jpeg_quality": _jpeg_quality,
         "stream_fps": _stream_fps_cap,
         "stream_fps_actual": round(_cam_fps, 1) if _camera is not None else None,
@@ -914,7 +988,7 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
 # stepper lives on the Pi 5 40-pin header — the one place this project uses Pi 5
 # GPIO directly (everything else is USB). Absent off-Pi / in sim → available:false.
 
-_STEPPER_COMMANDS = ("SCAN", "STOP", "GOTO", "CENTER", "SLEEP", "WAKE", "TRACK", "HOLD")
+_STEPPER_COMMANDS = ("SCAN", "STOP", "GOTO", "JOG", "CENTER", "SLEEP", "WAKE", "TRACK", "HOLD")
 
 
 def _stepper_iface():
@@ -937,9 +1011,11 @@ async def stepper_status(_: str = Depends(auth.require_api_key)):
 
 @app.post("/stepper/command")
 async def stepper_command(payload: dict, _: str = Depends(auth.require_api_key)):
-    """Drive the radar bar. Body: {"command": <cmd>, "value": <degrees if GOTO>}.
+    """Drive the radar bar. Body: {"command": <cmd>, "value": <degrees>}.
 
-    Commands: SCAN | STOP | GOTO | CENTER | SLEEP | WAKE | TRACK | HOLD.
+    Commands: SCAN | STOP | GOTO | JOG | CENTER | SLEEP | WAKE | TRACK | HOLD.
+    GOTO takes an absolute angle; JOG a signed relative pan (+ = right/CW,
+    - = left/CCW). Both are clamped to the bar's travel limits.
     """
     cmd = str(payload.get("command", "")).upper()
     if cmd not in _STEPPER_COMMANDS:
@@ -955,6 +1031,12 @@ async def stepper_command(payload: dict, _: str = Depends(auth.require_api_key))
                 from fastapi import HTTPException
                 raise HTTPException(status_code=400, detail="GOTO needs 'value' (degrees)")
             _radar.goto(float(val))
+        elif cmd == "JOG":
+            val = payload.get("value")
+            if val is None:
+                from fastapi import HTTPException
+                raise HTTPException(status_code=400, detail="JOG needs 'value' (signed degrees)")
+            _radar.jog(float(val))
         elif cmd == "CENTER":
             _radar.center()
         elif cmd == "WAKE":
