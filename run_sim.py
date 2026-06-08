@@ -1,7 +1,7 @@
 """Run the boat simulation locally — no hardware required.
 
 Starts the BoatSimulator, wires up Navigator/MissionManager/PodBridge
-with a MockPicoSerial, and launches the FastAPI server on port 8080.
+with a MockPicoSerial, and launches the FastAPI server on port 8000.
 
 Usage:
     python run_sim.py
@@ -60,10 +60,10 @@ def main():
         await nav.stop()
         await pod.stop()
 
-    print("\n  Boat simulator running on http://localhost:8080")
-    print("  API docs at          http://localhost:8080/docs\n")
+    print("\n  Boat simulator running on http://localhost:8000")
+    print("  API docs at          http://localhost:8000/docs\n")
 
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":

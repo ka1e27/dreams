@@ -191,7 +191,7 @@ winch:
 server:
   # FastAPI web server (dashboard + API)
   host: "0.0.0.0"
-  port: 8080
+  port: 8000
   # API key for authenticating shore commands
   api_key: ""  # Set via environment variable BOAT_API_KEY
   # CORS allowed origins (dashboard URL)

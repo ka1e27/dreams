@@ -14,13 +14,13 @@
 #   }
 
 boat.yourdomain.com {
-    # API and WebSocket endpoints — proxy to FastAPI on localhost:8080
+    # API and WebSocket endpoints — proxy to FastAPI on localhost:8000
     handle /api/* {
-        reverse_proxy localhost:8080
+        reverse_proxy localhost:8000
     }
 
     handle /ws/* {
-        reverse_proxy localhost:8080
+        reverse_proxy localhost:8000
     }
 
     # Dashboard static files — serve the built React app

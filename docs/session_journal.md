@@ -26,6 +26,21 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Move the web server from port 8080 → 8000
+
+**Worked on:** user asked to run the server on 8000 instead of 8080. Changed the port everywhere it
+appears so it stays consistent (server + reverse proxy + dashboard dev proxy).
+**Changed:**
+- `pi5/config.yaml` — `server.port: 8000` (read by `run_hardware.py`).
+- `run_sim.py` — hardcoded `uvicorn.run(port=8000)` + startup banner/docstring.
+- `run_hardware.py` — fallback default `server_cfg.get("port", 8000)`.
+- `deploy/Caddyfile` — `/api/*` and `/ws/*` reverse_proxy → `localhost:8000`.
+- `dashboard/vite.config.js` — dev-proxy `/api` + `/ws` targets → `localhost:8000`.
+**Verified (sim/Windows):** booted `run_sim`, `/health` 200 on `http://localhost:8000`, nothing on
+8080. Command center is now at `http://<host>:8000/command`. (KiCad files contain `8080` only as
+coincidental UUID hex — left alone.)
+**Next steps:** uncommitted at write time (offered to commit/push to main).
+
 ## 2026-06-08 — Boat health panel: 3 battery rails (12S/4S/3S), dual air/enclosure T+RH, L/R hull
 
 **Worked on:** follow-up to the BOAT HEALTH panel — user wants three battery statuses (12S/4S/3S),

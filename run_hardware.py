@@ -208,7 +208,7 @@ def main() -> None:
             logger.error("Radar tracker shutdown error: %s", e)
 
     host = server_cfg.get("host", "0.0.0.0")
-    sport = server_cfg.get("port", 8080)
+    sport = server_cfg.get("port", 8000)
     print(f"\n  Boat (HARDWARE) serving on http://{host}:{sport}")
     print(f"  Command center at         http://<pi-ip>:{sport}/command\n")
     uvicorn.run(app, host=host, port=sport)
