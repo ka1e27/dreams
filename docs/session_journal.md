@@ -26,6 +26,47 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Added a buttons-only COMMANDS panel to /command
+
+**Worked on:** user found `/docs` (Swagger) too verbose ("I just want them to send commands"). Added a
+clean command panel to the Command Center instead of touching Swagger.
+**Changed:** `pi5/server/templates/command_center.html` — new bottom **COMMANDS** panel (grid row added:
+`auto 1fr 1fr auto`) with grouped buttons that POST to `/api/*` and toast the result:
+- SAFETY: E-STOP, CLEAR E-STOP · MISSION: START/PAUSE/RESUME/SKIP/ABORT + UPLOAD… (modal w/ name +
+  waypoints JSON + start-now checkbox) · NAV: lat/lon inputs + GO TO, RTH.
+- JS: `postApi()` → `cmd()`, `sendGoto()`, `sendMission()`, `openModal/closeModal`; reuses existing
+  `apiHeaders()` (X-API-Key/?key=) and `toast()`. Added `.cbtn`/`.cmd-bar`/`.modal` CSS.
+**Note:** these hit the same endpoints `/docs` exposes — they move the boat for real (E-STOP/ABORT act
+immediately). The static dashboard `/` already had equivalent buttons; this brings them to the HUD.
+**Verified (sim):** panel + JS present in page; POST /api/{estop,resume,goto,mission,mission/start}
+all respond correctly (mission upload loaded the waypoint).
+**Next steps:** uncommitted along with the nav buttons + scroll fix below — offered to commit all
+together. Still open: hardware `/pico/push` test; a real hardware entry point (live camera + Pico).
+
+## 2026-06-07 — Command-center nav buttons + Pico-monitor scroll fix
+
+**Worked on:** cross-page nav buttons, fixed the Pico terminal growing the layout, explained the API page.
+**Changed:**
+- `pi5/server/static/index.html` (`/`) — added a top-right `.topnav` with **Command Center** (amber)
+  + **API** (`/docs`) buttons.
+- `pi5/server/templates/command_center.html` (`/command`) — header links restyled as buttons
+  (**Dashboard** `/`, **API** `/docs`); **fixed the Pico monitor scroll**: the `.pico-inner` grid row
+  was `auto`-sized so the terminal's content drove layout and pushed the SEND/CLEAR bar down. Pinned
+  `grid-template-rows:minmax(0,1fr)`, added `min-height:0` to `.editor-col`/`.mon-col`, made `.term`
+  `flex:1 1 0;min-height:0;overflow-y:auto`, and `flex-shrink:0` on both bars. Now lines scroll inside
+  the monitor and the bars stay pinned.
+**Left alone:** `dashboard/` and `cloud/map-viewer/` are Vite SPA shells (`<div id=root>`) on separate
+dev servers — relative links would resolve to the dev server, not the Pi. Cross-links there belong in
+the React components with the Pi's absolute URL (offered, not done).
+**API page note (for the user's follow-up):** `/docs` is FastAPI's auto-generated Swagger UI (also
+`/redoc`, `/openapi.json`); content derives from route decorators + docstrings in `app.py` and the
+Pydantic models in `models.py`. WebSockets don't appear (OpenAPI limitation); `/` and `/command` are
+`include_in_schema=False`. Extend by adding a model → route with `response_model=` + docstring + auth.
+**Verified:** sim served, `/` and `/command` both 200 with nav markup present. (Scroll fix is a
+CSS-only layout change — not browser-screenshotted.)
+**Next steps:** not committed yet (offered). Still open: hardware test of `/pico/push` reconnect;
+a real hardware entry point (live camera + real PicoSerial) — `run_sim.py` is the only runner.
+
 ## 2026-06-07 — Fixed /ws/health reconnect-loop when psutil is missing
 
 **Worked on:** user reported "only the static dashboard opens" + the Pi showing a connection

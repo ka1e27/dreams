@@ -29,8 +29,8 @@
     background-image:linear-gradient(var(--grid) 1px,transparent 1px),
                      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
     background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
-  .app{position:relative;z-index:1;display:grid;gap:12px;padding:12px;height:100vh;
-    grid-template-rows:auto 1fr 1fr;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
+  .app{position:relative;z-index:1;display:grid;gap:12px;padding:12px;min-height:100vh;
+    grid-template-rows:auto 1fr 1fr auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
   /* ---- header ---- */
   header{display:flex;align-items:center;justify-content:space-between;
     padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
@@ -40,8 +40,9 @@
     margin:0;font-size:20px;color:#fff;text-shadow:0 0 18px var(--amber-dim)}
   header h1 b{color:var(--amber)}
   header .sub{color:var(--muted);letter-spacing:.3em;font-size:10px;margin-left:14px}
-  .links a{color:var(--muted);text-decoration:none;margin-left:14px;font-size:11px;letter-spacing:.1em}
-  .links a:hover{color:var(--cyan)}
+  .links a{color:var(--muted);text-decoration:none;margin-left:8px;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;padding:5px 11px;border:1px solid var(--amber-dim);border-radius:5px;transition:.15s}
+  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.06)}
   /* ---- panels ---- */
   .panel{border:1px solid var(--amber-dim);border-radius:8px;background:var(--panel);
     box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(255,140,0,.05) inset;
@@ -98,16 +99,18 @@
   .vgrid .kv .lbl{font-size:9px}
   .sec-ttl{color:var(--muted);font-size:10px;letter-spacing:.2em;margin-bottom:4px}
   /* ---- pico ---- */
-  .pico-inner{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
-  .editor-col{display:flex;flex-direction:column;border-right:1px solid var(--amber-dim);min-width:0}
+  /* grid row pinned to minmax(0,1fr) + min-height:0 on children so the terminal
+     scrolls INSIDE .term instead of growing the column and shoving the bars down */
+  .pico-inner{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr);min-height:0}
+  .editor-col{display:flex;flex-direction:column;border-right:1px solid var(--amber-dim);min-width:0;min-height:0}
   #editor{flex:1;min-height:0}
-  .editor-bar{display:flex;gap:8px;align-items:center;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2)}
-  .mon-col{display:flex;flex-direction:column;min-width:0}
-  .term{flex:1;overflow:auto;padding:8px 10px;font-size:12px;line-height:1.5;background:#06090b}
+  .editor-bar{display:flex;gap:8px;align-items:center;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2);flex-shrink:0}
+  .mon-col{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .term{flex:1 1 0;min-height:0;overflow-y:auto;padding:8px 10px;font-size:12px;line-height:1.5;background:#06090b}
   .term .ln{white-space:pre-wrap;word-break:break-word}
   .term .ts{color:var(--muted)}
   .term .pico{color:var(--cyan)} .term .err{color:var(--crit)} .term .echo{color:var(--amber)}
-  .term-bar{display:flex;gap:8px;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2)}
+  .term-bar{display:flex;gap:8px;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2);flex-shrink:0}
   input,select,button{font-family:var(--mono);font-size:12px}
   input[type=text],select{background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
     border-radius:5px;padding:7px 9px;outline:none}
@@ -133,6 +136,34 @@
     animation:tin .25s ease;max-width:360px}
   .toast.ok{border-color:var(--ok);color:var(--ok)} .toast.bad{border-color:var(--crit);color:var(--crit)}
   @keyframes tin{from{transform:translateY(8px);opacity:0}}
+  /* ---- commands panel ---- */
+  .cmd-bar{display:flex;flex-wrap:wrap;gap:12px 22px;padding:12px 14px;align-items:center}
+  .cmd-group{display:flex;align-items:center;gap:6px}
+  .cmd-glabel{font-size:9px;letter-spacing:.2em;color:var(--muted);margin-right:2px}
+  .cmd-div{width:1px;align-self:stretch;background:var(--amber-dim);margin:0 2px}
+  .cbtn{cursor:pointer;background:rgba(255,140,0,.1);color:var(--amber);border:1px solid var(--amber);
+    border-radius:5px;padding:7px 12px;letter-spacing:.1em;font-size:11px;transition:.15s;white-space:nowrap}
+  .cbtn:hover{background:var(--amber);color:#0a0d0f;box-shadow:0 0 14px var(--amber-dim)}
+  .cbtn.danger{color:var(--crit);border-color:var(--crit);background:rgba(255,59,59,.08)}
+  .cbtn.danger:hover{background:var(--crit);color:#fff;box-shadow:0 0 14px rgba(255,59,59,.45)}
+  .cbtn.warn{color:var(--warn);border-color:var(--warn);background:rgba(255,176,46,.08)}
+  .cbtn.warn:hover{background:var(--warn);color:#0a0d0f}
+  .cmd-in{width:96px;background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
+    border-radius:5px;padding:7px 9px;font-family:var(--mono);font-size:12px;outline:none}
+  .cmd-in:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  /* ---- modal ---- */
+  .modal-bg{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--amber);border-radius:8px;padding:18px;
+    width:90%;max-width:480px;box-shadow:0 0 40px rgba(255,140,0,.15)}
+  .modal h3{font-family:var(--display);letter-spacing:.2em;color:var(--amber);margin:0 0 14px;font-size:14px}
+  .modal input[type=text],.modal textarea{width:100%;margin-bottom:10px}
+  .modal textarea{min-height:130px;resize:vertical;background:#06090b;color:#dbeef5;
+    border:1px solid var(--amber-dim);border-radius:5px;padding:8px;font-family:var(--mono);font-size:12px;outline:none}
+  .modal textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+  .modal label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:10px}
   @media(max-width:1000px){.row-mid,.row-bot,.pico-inner{grid-template-columns:1fr}}
 </style>
 </head>
@@ -150,7 +181,7 @@
     </div>
     <div style="display:flex;align-items:center;gap:18px">
       <span class="links">
-        <a href="/">◂ dashboard</a><a href="/docs">api</a>
+        <a href="/">Dashboard</a><a href="/docs">API</a>
       </span>
       <span class="lbl">PI5</span><span id="dot-health" class="dot"></span>
       <span class="lbl">CAM</span><span id="dot-cam" class="dot"></span>
@@ -231,6 +262,53 @@
           <button class="ghost" onclick="clearTerm()">CLEAR</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- COMMANDS -->
+  <div class="panel">
+    <div class="ttl"><span>⌘ COMMANDS</span><span class="lbl">one-click → /api</span></div>
+    <div class="cmd-bar">
+      <div class="cmd-group">
+        <span class="cmd-glabel">SAFETY</span>
+        <button class="cbtn danger" onclick="cmd('estop','E-STOP engaged')">E-STOP</button>
+        <button class="cbtn" onclick="cmd('resume','E-stop cleared')">CLEAR E-STOP</button>
+      </div>
+      <span class="cmd-div"></span>
+      <div class="cmd-group">
+        <span class="cmd-glabel">MISSION</span>
+        <button class="cbtn" onclick="cmd('mission/start','Mission started')">START</button>
+        <button class="cbtn" onclick="cmd('mission/pause','Mission paused')">PAUSE</button>
+        <button class="cbtn" onclick="cmd('mission/resume','Mission resumed')">RESUME</button>
+        <button class="cbtn warn" onclick="cmd('mission/skip','Skipping site')">SKIP SITE</button>
+        <button class="cbtn danger" onclick="cmd('mission/abort','Mission aborted')">ABORT</button>
+        <button class="cbtn" onclick="openModal('mUpload')">UPLOAD…</button>
+      </div>
+      <span class="cmd-div"></span>
+      <div class="cmd-group">
+        <span class="cmd-glabel">NAV</span>
+        <input id="gotoLat" class="cmd-in" type="number" step="any" placeholder="lat">
+        <input id="gotoLon" class="cmd-in" type="number" step="any" placeholder="lon">
+        <button class="cbtn" onclick="sendGoto()">GO TO</button>
+        <button class="cbtn" onclick="cmd('rth','Returning home')">RTH</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Mission modal -->
+<div class="modal-bg" id="mUpload">
+  <div class="modal">
+    <h3>UPLOAD MISSION</h3>
+    <input id="mName" type="text" placeholder="mission name (e.g. Survey Run 1)">
+    <textarea id="mWps" spellcheck="false" placeholder='[
+  {"lat": 51.5069, "lon": -0.0712, "type": "data", "label": "Site A"},
+  {"lat": 51.5072, "lon": -0.0708, "type": "path", "label": "Turn"}
+]'></textarea>
+    <label class="chk"><input type="checkbox" id="mStart" checked> start immediately</label>
+    <div class="modal-actions">
+      <button class="cbtn" onclick="closeModal('mUpload')">CANCEL</button>
+      <button class="cbtn" onclick="sendMission()">UPLOAD</button>
     </div>
   </div>
 </div>
@@ -413,6 +491,46 @@ async function loadFiles(){
   }catch(e){ $('push-note').textContent='files: error'; }
 }
 loadFiles();
+
+// ---- command buttons (POST to /api/*) -------------------------------------
+async function postApi(path, body){
+  const r = await fetch('/api/' + path, {
+    method: 'POST',
+    headers: apiHeaders({'Content-Type': 'application/json'}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok){
+    const j = await r.json().catch(()=>({}));
+    throw new Error(j.detail || ('HTTP ' + r.status));
+  }
+  return r.json().catch(()=>({}));
+}
+async function cmd(path, okMsg){
+  try{ await postApi(path); toast('✓ ' + (okMsg || 'OK'), true); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+async function sendGoto(){
+  const lat = parseFloat($('gotoLat').value), lon = parseFloat($('gotoLon').value);
+  if (isNaN(lat) || isNaN(lon)){ toast('enter lat & lon', false); return; }
+  try{ await postApi('goto', {lat, lon}); toast(`✓ Going to ${lat.toFixed(4)}, ${lon.toFixed(4)}`, true); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+function openModal(id){ $(id).classList.add('show'); }
+function closeModal(id){ $(id).classList.remove('show'); }
+async function sendMission(){
+  const name = $('mName').value.trim();
+  if (!name){ toast('enter a mission name', false); return; }
+  let wps; try{ wps = JSON.parse($('mWps').value); }catch(e){ toast('waypoints: invalid JSON', false); return; }
+  const start = $('mStart').checked;
+  try{
+    await postApi('mission?start=' + start, {name, waypoints: wps});
+    toast(start ? '✓ Mission uploaded & started' : '✓ Mission uploaded', true);
+    closeModal('mUpload');
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+// close modal on backdrop click
+document.querySelectorAll('.modal-bg').forEach(bg =>
+  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('show'); }));
 </script>
 </body>
 </html>

@@ -38,6 +38,15 @@ body::after{
 }
 .topbar h1 span{color:var(--text-dim);font-weight:400;letter-spacing:.05em;font-size:.75rem;margin-left:.75rem}
 .top-right{display:flex;align-items:center;gap:1.5rem}
+.topnav{display:flex;gap:.5rem;align-items:center}
+.topnav a{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-dim);text-decoration:none;padding:.35rem .75rem;
+  border:1px solid var(--border);border-radius:2px;transition:all .15s;
+}
+.topnav a:hover{color:var(--cyan);border-color:var(--cyan);background:#00e5cc10}
+.topnav a.cmd{color:var(--amber);border-color:#ffb02055}
+.topnav a.cmd:hover{color:var(--amber);border-color:var(--amber);background:#ffb02012}
 .conn{display:flex;align-items:center;gap:.5rem;font-family:var(--mono);font-size:.75rem}
 .conn-dot{
   width:7px;height:7px;border-radius:50%;background:var(--red);
@@ -338,6 +347,10 @@ body::after{
 <div class="topbar">
   <h1>D.R.E.A.M.S<span>Autonomous Survey Boat</span></h1>
   <div class="top-right">
+    <nav class="topnav">
+      <a class="cmd" href="/command">Command Center</a>
+      <a href="/docs">API</a>
+    </nav>
     <div class="conn"><div class="conn-dot" id="connDot"></div><span id="connLabel">Connecting...</span></div>
   </div>
 </div>
