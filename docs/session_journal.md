@@ -26,6 +26,43 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Built the /command "command center" HUD (camera + Pi health + Pico terminal)
+
+**Worked on:** implemented `~/Downloads/DREAMS_dashboard_update.md` — a single-page naval-HUD command
+center served from the Pi 5 FastAPI app, combining MJPEG camera, Pi 5 health, and a Pico terminal.
+**Key deviation from the instruction (it was written against a simpler mental model of the repo):**
+applying it verbatim would have broken the running stack three ways, so I reused existing owners
+instead of opening hardware twice —
+- **Camera:** `/video` MJPEG **subscribes to the existing `CameraProducer` (`_camera`)** and
+  re-encodes `frame.left` at JPEG q60; it does NOT open a second `VideoCapture(0)` (that would contend
+  with the CV pipeline). No camera → streams a near-black placeholder JPEG; UI shows "NO SIGNAL".
+- **Pico:** `/ws/pico` streams *parsed* frames (TEL/ENV/ALERT) off the existing `PicoSerial` (`_pico`)
+  and dispatches real protocol commands (SET_THR/SET_WINCH/ESTOP/…); it does NOT open a second serial
+  reader. Per the user's call, kept the **"Push to Pico" button**: `POST /pico/push` releases the port
+  (heartbeats stop → Pico watchdog ESTOPs = safe), runs `mpremote fs cp :main.py` + reset, then
+  reconnects. Hardware-only; refuses while a mission runs unless `?force=true`.
+- **Route:** served at **`/command`** (per user) — left `/` (static/index.html) untouched.
+- **Auth:** new endpoints reuse `auth.require_api_key`; `/video` + WS auth via `?key=` (an `<img>`
+  can't send headers). `/health` left open as a liveness probe. Added tiny `auth.key_valid()` helper.
+**Changed:**
+- `pi5/server/app.py` — new: `/command`, `/health`, `/ws/health`, `/video`, `/ws/pico`,
+  `/pico/files`, `/pico/push`, an asyncio health-gather loop (vcgencmd via async subprocess, psutil),
+  MJPEG helpers, Pico command dispatch. All degrade cleanly off-Pi / in sim.
+- `pi5/server/templates/command_center.html` (new) — self-contained HUD (Orbitron + IBM Plex Mono,
+  Monaco editor from CDN, amber/cyan theme, scanline camera overlay, WS auto-reconnect w/ backoff).
+- `pi5/server/auth.py` — added `key_valid()` (public wrapper for query-param routes).
+- `pi5/requirements.txt` — added `psutil>=5.9`; noted `mpremote` as a Pi-side CLI dep.
+**Verified (simulator, Windows):** `python run_sim.py`, then exercised every endpoint — `/health`
+returns psutil data + N/A for Pi-only vcgencmd fields; `/command` serves 22 KB; `/video` streams valid
+MJPEG placeholder frames; `/ws/health` + `/ws/pico` stream; `SET_THR 20 20`→ACK, unknown/badarg
+commands error cleanly; `/pico/{files,push}` refuse gracefully in sim. `ruff check pi5` clean,
+`pytest pi5/tests` 95 passed.
+**Decisions / open questions:** the firmware-push handoff (`disconnect → mpremote → connect +
+start_heartbeat`) is **untested on real hardware** — assumes the standard PicoSerial lifecycle; verify
+on the Pi. Monaco loads from CDN (needs internet on first load). Not committed yet.
+**Next steps:** hardware test of `/pico/push` reconnect; consider wiring `_camera`/health into the
+hardware startup path; decide if `/command` should eventually replace `/`.
+
 ## 2026-06-07 — Committed and pushed the V2 working tree
 
 **Worked on:** "is everything pushed?" → it wasn't (local main was even with origin, but a large

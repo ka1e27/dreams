@@ -38,6 +38,14 @@ def _verify_key(key: str | None) -> bool:
     return hmac.compare_digest(key.encode(), _api_key.encode())
 
 
+def key_valid(key: str | None) -> bool:
+    """Public key check for query-param-authenticated routes (e.g. MJPEG <img>).
+
+    Returns True in dev mode (no key configured), matching require_api_key.
+    """
+    return _verify_key(key)
+
+
 async def require_api_key(
     key: str | None = Security(_api_key_header),
 ) -> str:

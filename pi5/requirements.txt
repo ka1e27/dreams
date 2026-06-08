@@ -10,3 +10,6 @@ websockets>=12.0
 opencv-python-headless>=4.9
 ultralytics>=8.2
 numpy>=1.26
+psutil>=5.9
+# mpremote is a CLI tool used by /pico/push (firmware reflash); install with
+# `pip install mpremote` on the Pi. Not importable, so not pinned here.
