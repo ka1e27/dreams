@@ -56,6 +56,7 @@ _mission = None    # MissionManager
 _pod = None        # PodBridge
 _sim = None        # BoatSimulator (only in sim mode)
 _camera = None     # cv.camera.CameraProducer (optional)
+_overlay = None    # cv.vision_overlay.DetectionOverlay (optional)
 _network = None    # comms.network.NetworkManager (optional)
 _winch_mode = "survey"
 _home_lat = None
@@ -65,10 +66,11 @@ _home_lon = None
 def configure(pico, navigator, mission_mgr, pod_bridge,
               home_lat=None, home_lon=None, api_key=None,
               cors_origins=None, simulator=None, camera=None,
-              network=None, winch_mode="survey"):
+              network=None, winch_mode="survey", overlay=None,
+              jpeg_quality=60, stream_fps=15):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
-    global _camera, _network, _winch_mode
+    global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -79,6 +81,9 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
     _camera = camera
     _network = network
     _winch_mode = winch_mode
+    _overlay = overlay
+    _jpeg_quality = int(jpeg_quality)
+    _stream_fps_cap = float(stream_fps)
     auth.configure(api_key)
 
     if cors_origins:
@@ -593,6 +598,8 @@ _latest_health: dict | None = None
 _health_task: asyncio.Task[None] | None = None
 _cam_fps: float = 0.0  # rolling estimate updated by the /video streamer
 _net_prev: tuple[int, int, float] | None = None  # (bytes_sent, bytes_recv, monotonic)
+_jpeg_quality: int = 60      # /video MJPEG quality (runtime-adjustable via /api/camera)
+_stream_fps_cap: float = 15.0  # /video publish-rate cap (runtime-adjustable)
 
 
 def _http_key_ok(request: Request) -> bool:
@@ -730,6 +737,8 @@ async def _gather_health() -> dict:
         "clock_mhz": round(clock_hz / 1e6, 1) if clock_hz else None,
         "volts": volts,
         "camera_fps": round(_cam_fps, 1) if _camera is not None else None,
+        "detect_fps": _overlay.detect_fps if _overlay is not None else None,
+        "detections": _overlay.detections() if _overlay is not None else None,
         "pod_ok": pod_ok,
         "pod_leak": pod_leak,
         "pod_age_s": pod_age_s,
@@ -775,7 +784,12 @@ def _mjpeg_part(jpeg: bytes) -> bytes:
 
 
 async def _mjpeg_stream():
-    """Yield an MJPEG stream. Placeholder frames when no producer is running."""
+    """Yield an MJPEG stream. Placeholder frames when no producer is running.
+
+    Publishes at most _stream_fps_cap frames/s and draws the detection
+    overlay's latest boxes on each frame. Detection runs on its own task, so
+    it never throttles the stream (stream FPS and detect FPS are independent).
+    """
     global _cam_fps
     if _camera is None:
         while True:
@@ -784,7 +798,7 @@ async def _mjpeg_stream():
 
     import cv2  # producer is running, so opencv is installed
     queue = _camera.subscribe()
-    last_ts = time.monotonic()
+    last_pub = 0.0
     try:
         while True:
             try:
@@ -792,14 +806,25 @@ async def _mjpeg_stream():
             except asyncio.TimeoutError:
                 yield _mjpeg_part(_NO_CAM_JPEG)
                 continue
-            ok, jpeg = cv2.imencode(".jpg", frame.left, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            # Publish-rate cap (0.9 tolerance so equal rates still publish every frame).
+            now = time.monotonic()
+            cap = _stream_fps_cap
+            if cap and last_pub and (now - last_pub) < (1.0 / cap) * 0.9:
+                continue
+            # Draw detection boxes on a copy — never mutate the shared frame.
+            img = frame.left
+            if _overlay is not None and _overlay.enabled:
+                img = frame.left.copy()
+                _overlay.draw(img)
+            ok, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, _jpeg_quality])
             if not ok:
                 continue
-            now = time.monotonic()
-            dt = now - last_ts
-            last_ts = now
-            if dt > 0:
-                _cam_fps = 0.8 * _cam_fps + 0.2 * (1.0 / dt)
+            if last_pub:
+                dt = now - last_pub
+                if dt > 0:
+                    inst = 1.0 / dt
+                    _cam_fps = inst if _cam_fps == 0 else 0.8 * _cam_fps + 0.2 * inst
+            last_pub = now
             yield _mjpeg_part(jpeg.tobytes())
     finally:
         _camera.unsubscribe(queue)
@@ -814,6 +839,53 @@ async def video(request: Request):
         _mjpeg_stream(),
         media_type="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+def _camera_state() -> dict:
+    """Current camera/detection control state for /api/camera and the UI."""
+    state = {
+        "camera_present": _camera is not None,
+        "jpeg_quality": _jpeg_quality,
+        "stream_fps": _stream_fps_cap,
+        "stream_fps_actual": round(_cam_fps, 1) if _camera is not None else None,
+    }
+    if _overlay is not None:
+        state.update(_overlay.controls())
+        state["detections"] = _overlay.detections()
+    else:
+        state.update({"detection_enabled": False, "model_loaded": False,
+                      "detect_fps": None, "detections": None})
+    return state
+
+
+@app.get("/api/camera")
+async def get_camera(_: str = Depends(auth.require_api_key)):
+    """Camera + detection control state (FPS caps, JPEG quality, detection)."""
+    return _camera_state()
+
+
+@app.post("/api/camera")
+async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Adjust the camera feed / detection at runtime.
+
+    Accepts any subset of: jpeg_quality (20-95), stream_fps (1-60),
+    detection_enabled (bool), detect_max_fps (0.5-30), conf (0.05-0.95).
+    Capture resolution / device / camera FPS are set in config.yaml (restart).
+    """
+    global _jpeg_quality, _stream_fps_cap
+    if "jpeg_quality" in payload:
+        try:
+            _jpeg_quality = max(20, min(95, int(payload["jpeg_quality"])))
+        except (TypeError, ValueError):
+            pass
+    if "stream_fps" in payload:
+        try:
+            _stream_fps_cap = max(1.0, min(60.0, float(payload["stream_fps"])))
+        except (TypeError, ValueError):
+            pass
+    if _overlay is not None:
+        _overlay.apply_controls(payload)
+    return _camera_state()
 
 
 # ---- Pico terminal (parsed-frame monitor + command sender + reflash) ----

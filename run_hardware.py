@@ -27,6 +27,7 @@ import pi5.server.app as server_app
 from pi5.comms.pico_serial import PicoSerial
 from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.camera import CameraConfig, CameraProducer
+from pi5.cv.vision_overlay import DetectionConfig, DetectionOverlay
 from pi5.navigation.mission_manager import MissionManager
 from pi5.navigation.navigator import Navigator
 from pi5.server.app import app, configure
@@ -72,6 +73,18 @@ def main() -> None:
         fps=cam_cfg.get("fps", 10),
     ))
 
+    # Live YOLO detection overlay on the /video feed (configurable model).
+    det_cfg = cam_cfg.get("detection", {})
+    overlay = DetectionOverlay(camera, DetectionConfig(
+        enabled=det_cfg.get("enabled", True),
+        model=det_cfg.get("model", "yolov8n.pt"),
+        imgsz=det_cfg.get("imgsz", 416),
+        conf=det_cfg.get("conf", 0.40),
+        detect_max_fps=det_cfg.get("detect_max_fps", 8),
+        target_classes=det_cfg.get("target_classes") or [],
+        highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
+    ))
+
     configure(
         pico=pico,
         navigator=nav,
@@ -83,6 +96,9 @@ def main() -> None:
         cors_origins=server_cfg.get("cors_origins"),
         simulator=None,           # hardware mode → /pico/push enabled, real serial
         camera=camera,            # real USB camera(s) → /video + /ws/camera
+        overlay=overlay,          # live detection boxes on /video
+        jpeg_quality=cam_cfg.get("jpeg_quality", 60),
+        stream_fps=cam_cfg.get("stream_fps", 15),
         winch_mode=cfg.get("winch", {}).get("mode", "survey"),
     )
 
@@ -96,6 +112,17 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001 — no camera shouldn't kill the server
             logger.error("Camera failed to start (%s) — serving without video", e)
             server_app._camera = None  # so /video shows the NO-SIGNAL placeholder
+
+        # Detection overlay (only worth running if the camera came up).
+        if server_app._camera is not None:
+            try:
+                await overlay.start()
+                logger.info("Detection overlay started (model=%s)", overlay._cfg.model)
+            except Exception as e:  # noqa: BLE001
+                logger.error("Detection overlay failed to start: %s", e)
+                server_app._overlay = None
+        else:
+            server_app._overlay = None
 
         # Firmware: push the latest Boat Pico code over USB and let it reboot,
         # so the Pico is running current firmware before we open the link. The
@@ -129,6 +156,7 @@ def main() -> None:
         await nav.stop()
         await pod.stop()
         await pico.disconnect()
+        await overlay.stop()
         await camera.stop()
 
     host = server_cfg.get("host", "0.0.0.0")

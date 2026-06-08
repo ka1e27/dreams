@@ -26,6 +26,38 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Incorporated vision (detection overlay) + adjustable FPS/camera + configurable model
+
+**Worked on:** pulled vision from the external `ka1e27/D.R.E.A.M.S-Vision-Test` repo into the command
+center, researched a marine detection library, made FPS/camera settings adjustable.
+**Findings:** the vision-test repo is a dual-thread FastAPI dashboard (capture thread at camera rate +
+separate rate-capped YOLO thread → decoupled stream/detect FPS, boxes drawn on the feed, live /control
+knobs). No turnkey "marine" pip library exists — practical path is Ultralytics YOLO (already our dep)
+with maritime-trained weights (SeaShips / MASTR1325 / Singapore Maritime Dataset / Roboflow Marine
+Surveillance / TPH-YOLOv5). User chose: configurable weights, default COCO, drop-in maritime .pt.
+**Changed / new:**
+- `pi5/cv/vision_overlay.py` (new) — `DetectionOverlay`: subscribes to the shared CameraProducer (NOT
+  a 2nd VideoCapture), runs YOLO on a rate-capped asyncio task with inference in a thread executor,
+  keeps latest boxes + inference-FPS, `draw()` overlays them, runtime `apply_controls()`. Model path +
+  target/highlight classes configurable; degrades to None if ultralytics/model missing.
+- `pi5/server/app.py` — inject `_overlay` + `_jpeg_quality`/`_stream_fps_cap` via configure(); `/video`
+  now draws boxes on a copy, caps publish rate, uses runtime JPEG quality (stream FPS decoupled from
+  detect FPS); `/health` adds `detect_fps`/`detections`; new `GET/POST /api/camera` (detection on/off,
+  detect_max_fps, conf, jpeg_quality, stream_fps).
+- `run_hardware.py` — build DetectionOverlay from `camera.detection` config, start after camera /
+  stop on shutdown; pass overlay + jpeg_quality + stream_fps to configure.
+- `pi5/config.yaml` — `camera.detection` block (model/imgsz/conf/detect_max_fps/classes) +
+  `stream_fps`/`jpeg_quality`, with maritime-model + NCNN docs.
+- `pi5/server/templates/command_center.html` — vision control bar under the feed (DETECT toggle,
+  DET-FPS / CONF / QUALITY / STREAM-FPS sliders) + `cam-det` readout (detect fps · detected classes)
+  fed from /ws/health; wired to /api/camera (debounced POST).
+**Verified (sim/Windows):** ruff clean; imports resolve; `/api/camera` GET/POST apply quality+fps;
+`/health` carries detect fields (null in sim — no overlay); `draw()` renders boxes; 6 controls present;
+95 tests pass. Real YOLO only runs on the Pi (camera + ultralytics; auto-downloads yolov8n.pt once).
+**Next steps:** uncommitted (offered). On the Pi: run_hardware → boxes on /command; swap to a maritime
+.pt in config to specialise. Possible follow-up: reuse the overlay detector for AvoidanceLoop (avoid a
+2nd model load) if/when avoidance is wired into run_hardware.
+
 ## 2026-06-07 — Auto-deploy Boat Pico firmware on Pi boot
 
 **Worked on:** user wants the Pico's Python firmware uploaded on Pi boot (Pico is on USB). This also

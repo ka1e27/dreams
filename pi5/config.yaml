@@ -114,9 +114,28 @@ camera:
   right_device: 1
   baseline_m: 0.12
   calibration_path: "pi5/cv/calibration.npz"
+  # Capture settings (CameraProducer). Changing these needs a restart.
   width: 640
   height: 480
   fps: 10
+  # ---- Command-center video feed (runtime-adjustable from /command) ----
+  # Stream publish-rate cap (JPEG encode/send). Lower = lighter CPU.
+  stream_fps: 15
+  # MJPEG encode quality 0-100.
+  jpeg_quality: 60
+  # Live YOLO detection overlay drawn on the /video feed.
+  detection:
+    enabled: true
+    # Model weights. Default COCO yolov8n (has 'boat','person',…). Drop in a
+    # maritime-trained .pt here to specialise — e.g. SeaShips / MASTR1325 /
+    # Singapore Maritime Dataset weights, or a Roboflow maritime export. An
+    # NCNN export dir (yolov8n_ncnn_model) also works and is ~2x faster on ARM.
+    model: "yolov8n.pt"
+    imgsz: 416            # inference size (mult of 32): 320 lighter, 640 better at distance
+    conf: 0.40            # min confidence to keep a detection
+    detect_max_fps: 8     # cap inference rate (decoupled from the video stream)
+    target_classes: []    # keep only these class names; [] = keep all
+    highlight_classes: ["boat", "person"]   # drawn in amber; others muted
 
 avoidance:
   # COCO class id for "boat" — used by the YOLO detector to filter
