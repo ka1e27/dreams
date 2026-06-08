@@ -142,7 +142,7 @@ All sense taps: after fuse, before bulk cap. Divider grounds meet at a star poin
 
 ## What Is NOT on Boat_PCB
 
-- No MCP2515 CAN chip or HAT
+
 - No HC-12 radio module or connector (HC-12 is only an optional Pi 5 USB dongle)
 - No Raspberry Pi 5 (connects via USB cable only)
 - No CSI camera connectors
