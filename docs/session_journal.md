@@ -26,6 +26,30 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Non-blocking Pico serial read (likely fixes HB timeout AND REFLASH)
+
+**On-Pi test results:** standalone `deploy_pico.py` worked from a clean REPL (all 11 files copied, Pico
+reset). Camera confirmed **640x480 @ 30 fps mjpg=True** (fps fix works); right cam absent as expected
+(single camera). BUT `run_hardware.py` startup deploy still failed `could not enter raw repl` — so
+REFLASH-while-running was NOT dropping the firmware to the REPL.
+**Diagnosis:** `serial_handler.read_usb()` did `sys.stdin.buffer.read(64)` — a BLOCKING read that waits
+for 64 bytes. Heartbeats (~10 B) and the REFLASH frame (~12 B) never fill 64 B promptly, so they sit
+unprocessed → HB ACKs arrive too late (watchdog ESTOPs = the original HB-timeout symptom) and REFLASH
+never registers. This one bug likely explains BOTH the HB timeouts and the REFLASH no-op.
+**Fixed (firmware):**
+- `serial_handler.py` — `read_usb()` now non-blocking: `select.poll(sys.stdin)` + read 1 byte at a
+  time while data is available. Added `import select` + a module `_stdin_poll`.
+- `main.py` — replaced `asyncio.gather(...)` with `create_task(...)` + a monitor loop that waits on
+  `serial.reflash_requested`, then `motor_control.estop()`, cancels all tasks, and returns → drops to
+  the REPL (more reliable than raising SystemExit inside a gathered task). Reverted the SystemExit in
+  task_serial_rx.
+**Verified (Windows):** py_compile OK for both; deploy_pico ruff clean. Runtime is Pi-only.
+**CRITICAL next step for user:** the firmware currently ON the Pico still has the blocking read + the
+old (non-working) REFLASH, so REFLASH can't install the fix — they must deploy this updated firmware
+once more from a clean REPL (BOOTSEL+uf2 wipe, or Thonny stop + remove main.py, then
+`python pi5/scripts/deploy_pico.py`). After that: HB should stay alive (boat functional) and boot
+auto-deploy via REFLASH should work.
+
 ## 2026-06-07 — Cooperative REFLASH so auto-deploy actually works
 
 **Worked on:** the boot auto-deploy was failing — `mpremote.transport.TransportError: could not enter

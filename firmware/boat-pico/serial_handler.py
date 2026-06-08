@@ -7,6 +7,7 @@ sends responses and unsolicited telemetry/alerts.
 Transport: USB CDC (/dev/ttyACM0 on Pi 5 side), 115200 baud.
 Frame format: $<payload>*<checksum>\n
 """
+import select
 import sys
 import time
 
@@ -32,6 +33,11 @@ _rx_pos = 0
 # Set True when the Pi sends REFLASH. The main loop polls this and exits the
 # async loop to the bare REPL so the USB CDC is free for mpremote to reflash.
 reflash_requested = False
+
+# Non-blocking poll on stdin (USB CDC). A blocking read(N) stalls until N bytes
+# arrive, which delays heartbeats/commands and can starve the 3 s watchdog.
+_stdin_poll = select.poll()
+_stdin_poll.register(sys.stdin, select.POLLIN)
 
 
 def _checksum(payload):
@@ -284,12 +290,16 @@ def process_byte(b):
 def read_usb():
     """Read available bytes from USB serial (stdin) and process them.
 
-    Call this frequently from the main loop.
+    Non-blocking: poll stdin and read only what's actually there, one byte at a
+    time. A blocking ``read(64)`` would wait for 64 bytes before returning,
+    delaying heartbeats and commands (e.g. starving the watchdog and never
+    seeing a short REFLASH frame). Call this frequently from the main loop.
     """
     try:
-        data = sys.stdin.buffer.read(64)
-        if data:
-            for b in data:
-                process_byte(b)
+        while _stdin_poll.poll(0):
+            ch = sys.stdin.buffer.read(1)
+            if not ch:
+                break
+            process_byte(ch[0])
     except:
         pass

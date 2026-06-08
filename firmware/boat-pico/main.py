@@ -188,14 +188,6 @@ async def task_serial_rx():
             serial.read_usb()
         except:
             pass
-        if serial.reflash_requested:
-            # Pi asked to reflash us. Stop motors and exit the async loop so the
-            # USB CDC drops to the bare REPL — mpremote can then take the port.
-            try:
-                motor_control.estop()
-            except:
-                pass
-            raise SystemExit
         await asyncio.sleep(0.02)
 
 
@@ -558,20 +550,35 @@ async def main():
         motor_control.PULLEY_L, motor_control.PULLEY_R))
     print("Ready — waiting for Pi 5")
 
-    await asyncio.gather(
-        task_serial_rx(),
-        task_uart1_reader(),
-        task_fast_sensors(),
-        task_slow_sensors(),
-        task_pod_poll(),
-        task_motors(),
-        task_sbus(),
-        task_vesc_telemetry(),
-        task_telemetry(),
-        task_telemetry_ext(),
-        task_env_telemetry(),
-        task_watchdog(),
-        task_status_led(),
-    )
+    tasks = [
+        asyncio.create_task(task_serial_rx()),
+        asyncio.create_task(task_uart1_reader()),
+        asyncio.create_task(task_fast_sensors()),
+        asyncio.create_task(task_slow_sensors()),
+        asyncio.create_task(task_pod_poll()),
+        asyncio.create_task(task_motors()),
+        asyncio.create_task(task_sbus()),
+        asyncio.create_task(task_vesc_telemetry()),
+        asyncio.create_task(task_telemetry()),
+        asyncio.create_task(task_telemetry_ext()),
+        asyncio.create_task(task_env_telemetry()),
+        asyncio.create_task(task_watchdog()),
+        asyncio.create_task(task_status_led()),
+    ]
+
+    # Run until the Pi requests a reflash (REFLASH command), then stop the
+    # motors, cancel all tasks and return — this drops us to the bare REPL so
+    # the Pi's mpremote can take the USB-CDC port.
+    while not serial.reflash_requested:
+        await asyncio.sleep(0.1)
+
+    try:
+        motor_control.estop()
+    except:
+        pass
+    for t in tasks:
+        t.cancel()
+    print("REFLASH requested — dropping to REPL")
+
 
 asyncio.run(main())
