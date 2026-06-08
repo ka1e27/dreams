@@ -30,7 +30,7 @@
                      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
     background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
   .app{position:relative;z-index:1;display:grid;gap:12px;padding:12px;min-height:100vh;
-    grid-template-rows:auto 1fr 1fr auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
+    grid-template-rows:auto 1fr 1fr auto auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
   /* ---- header ---- */
   header{display:flex;align-items:center;justify-content:space-between;
     padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
@@ -162,6 +162,25 @@
   .cmd-in{width:96px;background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
     border-radius:5px;padding:7px 9px;font-family:var(--mono);font-size:12px;outline:none}
   .cmd-in:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  /* ---- radar bar / stepper ---- */
+  .radar-inner{display:grid;grid-template-columns:170px 1fr;gap:16px;padding:12px 14px;align-items:center}
+  .rose-wrap{display:flex;align-items:center;justify-content:center}
+  .rose{width:150px;height:150px}
+  .rose-ring{fill:none;stroke:var(--amber-dim);stroke-width:1.5}
+  .rose-ring2{fill:none;stroke:rgba(255,140,0,.15);stroke-width:1}
+  .rose-sweep{fill:rgba(0,212,255,.10);stroke:rgba(0,212,255,.30);stroke-width:1}
+  .rose .tick{stroke:var(--amber-dim);stroke-width:1}
+  .rose-card{fill:var(--muted);font-size:11px;font-family:var(--mono);text-anchor:middle;dominant-baseline:middle}
+  #rose-needle{transform-box:view-box;transform-origin:100px 100px;transition:transform .35s ease-out}
+  .needle{stroke:var(--cyan);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--cyan))}
+  .needle-hub{fill:var(--cyan)}
+  .radar-info{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .radar-readout{display:flex;align-items:baseline;gap:10px}
+  .radar-readout .big{font-family:var(--display);font-weight:900;font-size:40px;line-height:1;
+    color:var(--cyan);text-shadow:0 0 16px currentColor}
+  .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}
+  .cbtn.ghost2:hover{color:var(--cyan);border-color:var(--cyan);background:transparent;box-shadow:none}
+  @media(max-width:1000px){.radar-inner{grid-template-columns:1fr}}
   /* ---- modal ---- */
   .modal-bg{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
@@ -291,6 +310,58 @@
                  placeholder="command (e.g. SET_THR 20 20 · ESTOP · REQ_TEL)">
           <button onclick="sendCmd()">SEND</button>
           <button class="ghost" onclick="clearTerm()">CLEAR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RADAR BAR / STEPPER -->
+  <div class="panel">
+    <div class="ttl"><span>⊙ RADAR BAR · STEPPER</span><span class="lbl" id="rdr-meta">PI5 GPIO · A4988</span></div>
+    <div class="radar-inner">
+      <div class="rose-wrap">
+        <svg viewBox="0 0 200 200" class="rose" aria-label="radar bar bearing">
+          <circle cx="100" cy="100" r="92" class="rose-ring"></circle>
+          <circle cx="100" cy="100" r="66" class="rose-ring2"></circle>
+          <path id="rose-sweep" class="rose-sweep"></path>
+          <g id="rose-ticks"></g>
+          <g id="rose-needle">
+            <line x1="100" y1="100" x2="100" y2="18" class="needle"></line>
+            <circle cx="100" cy="100" r="6" class="needle-hub"></circle>
+          </g>
+          <text x="100" y="13" class="rose-card">0</text>
+          <text x="187" y="101" class="rose-card">90</text>
+          <text x="100" y="190" class="rose-card">180</text>
+          <text x="13" y="101" class="rose-card">270</text>
+        </svg>
+      </div>
+      <div class="radar-info">
+        <div class="radar-readout">
+          <span class="big" id="rdr-angle">--</span><span class="lbl">DEG</span>
+          <span style="flex:1"></span>
+          <span class="chip" id="rdr-mode" style="color:var(--muted)">--</span>
+          <span class="chip" id="rdr-lock" style="color:var(--muted)">UNLOCKED</span>
+        </div>
+        <div class="cmd-bar" style="padding:0;gap:10px 16px">
+          <div class="cmd-group">
+            <span class="cmd-glabel">SWEEP</span>
+            <button class="cbtn" onclick="stepperCmd('SCAN','Scanning')">SCAN</button>
+            <button class="cbtn" onclick="stepperCmd('TRACK','Tracking targets')">TRACK</button>
+            <button class="cbtn warn" onclick="stepperCmd('STOP','Holding position')">STOP</button>
+            <button class="cbtn" onclick="stepperCmd('CENTER','Centering')">CENTER</button>
+          </div>
+          <span class="cmd-div"></span>
+          <div class="cmd-group">
+            <span class="cmd-glabel">POWER</span>
+            <button class="cbtn" onclick="stepperCmd('WAKE','Motor awake')">WAKE</button>
+            <button class="cbtn ghost2" onclick="stepperCmd('SLEEP','Motor asleep')">SLEEP</button>
+          </div>
+          <span class="cmd-div"></span>
+          <div class="cmd-group">
+            <span class="cmd-glabel">GO TO</span>
+            <input id="rdrDeg" class="cmd-in" type="number" step="any" placeholder="deg">
+            <button class="cbtn" onclick="stepperGoto()">GO</button>
+          </div>
         </div>
       </div>
     </div>
@@ -457,6 +528,21 @@ function renderHealth(h){
     $('cam-det').textContent = 'DET ' + h.detect_fps.toFixed(1) + ' fps · '
       + (uniq.length ? uniq.slice(0,4).join(', ') : 'clear');
   }
+  // radar bar / stepper
+  const ra = h.stepper_angle;
+  if (ra === null || ra === undefined){
+    $('rdr-angle').textContent = 'N/A'; $('rose-needle').style.opacity = .22;
+  } else {
+    $('rdr-angle').textContent = ra.toFixed(1); $('rose-needle').style.opacity = 1;
+    $('rose-needle').style.transform = 'rotate(' + ra + 'deg)';
+  }
+  const rm = $('rdr-mode'); const rs = (h.stepper_state || '').toUpperCase();
+  rm.textContent = h.stepper_state || 'N/A';
+  rm.style.color = (rs === 'SCANNING' || rs === 'TRACK') ? 'var(--cyan)'
+                 : (rs === 'HOLD') ? 'var(--ok)' : 'var(--muted)';
+  const rl = $('rdr-lock');
+  if (h.stepper_target_locked){ rl.textContent = 'LOCKED'; rl.style.color = 'var(--cyan)'; }
+  else { rl.textContent = 'UNLOCKED'; rl.style.color = 'var(--muted)'; }
   // pod link light
   if (h.pod_ok === null || h.pod_ok === undefined) setDot('dot-pod', false);   // no pod bridge
   else if (h.pod_leak) setDot('dot-pod', 'warn');                              // responding but leaking
@@ -645,6 +731,44 @@ $('conf').addEventListener('input', () => { $('confV').textContent = Number($('c
 $('jq').addEventListener('input', () => { $('jqV').textContent = $('jq').value; postCamera({ jpeg_quality: parseInt($('jq').value) }); });
 $('sfps').addEventListener('input', () => { $('sfpsV').textContent = $('sfps').value; postCamera({ stream_fps: parseFloat($('sfps').value) }); });
 loadCameraControls();
+
+// ---- radar bar / stepper (POST to /stepper/command) -----------------------
+async function postStepper(command, value){
+  const body = (value === undefined) ? { command } : { command, value };
+  const r = await fetch('/stepper/command', { method:'POST',
+    headers: apiHeaders({'Content-Type':'application/json'}), body: JSON.stringify(body) });
+  const j = await r.json().catch(()=>({ ok:false, error:'bad response ('+r.status+')' }));
+  if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+  if (j.ok === false) throw new Error(j.error || 'command failed');
+  return j;
+}
+function stepperCmd(cmd, msg){
+  postStepper(cmd).then(()=> toast('✓ ' + (msg || cmd), true))
+                  .catch(e=> toast('✗ ' + e.message, false));
+}
+function stepperGoto(){
+  const d = parseFloat($('rdrDeg').value);
+  if (isNaN(d)){ toast('enter an angle in degrees', false); return; }
+  postStepper('GOTO', d).then(()=> toast('✓ Going to ' + d + '°', true))
+                        .catch(e=> toast('✗ ' + e.message, false));
+}
+// compass rose: ticks every 30°, plus a sweep sector from the configured limits
+function roseXY(deg, r){ const a = deg * Math.PI / 180; return [100 + r*Math.sin(a), 100 - r*Math.cos(a)]; }
+(function initRose(){
+  let s = '';
+  for (let d = 0; d < 360; d += 30){
+    const [x1,y1] = roseXY(d, 92), [x2,y2] = roseXY(d, d % 90 === 0 ? 76 : 84);
+    s += `<line class="tick" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"></line>`;
+  }
+  $('rose-ticks').innerHTML = s;
+  fetch('/stepper/status', { headers: apiHeaders() }).then(r=>r.json()).then(j=>{
+    const lim = j.limits;
+    if (!lim || j.has_slip_ring || j.available === false) return;   // full circle / no info
+    const r = 92, [x0,y0] = roseXY(lim[0], r), [x1,y1] = roseXY(lim[1], r);
+    const large = (lim[1] - lim[0]) > 180 ? 1 : 0;
+    $('rose-sweep').setAttribute('d', `M100 100 L${x0} ${y0} A${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`);
+  }).catch(()=>{});
+})();
 </script>
 </body>
 </html>

@@ -27,6 +27,8 @@ import pi5.server.app as server_app
 from pi5.comms.pico_serial import PicoSerial
 from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.camera import CameraConfig, CameraProducer
+from pi5.cv.radar_tracker import RadarTracker
+from pi5.cv.stepper import StepperMotor
 from pi5.cv.vision_overlay import DetectionConfig, DetectionOverlay
 from pi5.navigation.mission_manager import MissionManager
 from pi5.navigation.navigator import Navigator
@@ -56,6 +58,7 @@ def main() -> None:
     cam_cfg = cfg.get("camera", {})
     server_cfg = cfg.get("server", {})
     hb_cfg = cfg.get("heartbeat", {})
+    step_cfg = cfg.get("stepper", {})
 
     port = serial_cfg.get("port", "/dev/ttyACM0")
     baud = serial_cfg.get("baud", 115200)
@@ -86,6 +89,33 @@ def main() -> None:
         highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
     ))
 
+    # Radar-bar pan stepper on the Pi 5 GPIO header (the only Pi 5 GPIO use in
+    # the project). Runs in mock mode if gpiozero/lgpio is missing or the pins
+    # can't be claimed — so this stays harmless on a Pi without the bar wired.
+    stepper = StepperMotor(
+        step_pin=step_cfg.get("step_pin", 23),
+        dir_pin=step_cfg.get("dir_pin", 24),
+        enable_pin=step_cfg.get("enable_pin", 25),
+        sleep_pin=step_cfg.get("sleep_pin", 8),
+        steps_per_rev=step_cfg.get("steps_per_rev", 3200),
+        max_speed_rpm=step_cfg.get("max_rpm", 10),
+        auto_sleep_s=step_cfg.get("auto_sleep_seconds", 5),
+        min_deg=step_cfg.get("sweep_min_degrees", 0),
+        max_deg=step_cfg.get("sweep_max_degrees", 180),
+        has_slip_ring=step_cfg.get("has_slip_ring", False),
+    )
+    radar = RadarTracker(
+        stepper, overlay,
+        sweep_min_deg=step_cfg.get("sweep_min_degrees", 0),
+        sweep_max_deg=step_cfg.get("sweep_max_degrees", 180),
+        scan_speed_rpm=step_cfg.get("scan_speed_rpm", 3),
+        track_speed_rpm=step_cfg.get("track_speed_rpm", 8),
+        fov_deg=step_cfg.get("fov_degrees", 75),
+        frame_width=cam_cfg.get("width", 640),
+        priority_classes=step_cfg.get("priority_classes") or ["boat", "person"],
+        initial_mode=step_cfg.get("initial_mode", "SLEEP"),
+    )
+
     configure(
         pico=pico,
         navigator=nav,
@@ -101,6 +131,8 @@ def main() -> None:
         jpeg_quality=cam_cfg.get("jpeg_quality", 60),
         stream_fps=cam_cfg.get("stream_fps", 15),
         winch_mode=cfg.get("winch", {}).get("mode", "survey"),
+        stepper=stepper,          # radar-bar pan (Pi 5 GPIO)
+        radar=radar,              # tracker thread = the motor's motion authority
     )
 
     @app.on_event("startup")
@@ -152,6 +184,14 @@ def main() -> None:
         await nav.start()
         await pod.start()
 
+        # Radar-bar tracker owns its own daemon thread (blocking stepper pulses
+        # must stay off the event loop). Never let it block startup.
+        try:
+            radar.start()
+            logger.info("Radar tracker started (stepper mock=%s)", stepper.mock)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Radar tracker failed to start: %s", e)
+
     @app.on_event("shutdown")
     async def _shutdown() -> None:
         await nav.stop()
@@ -159,6 +199,10 @@ def main() -> None:
         await pico.disconnect()
         await overlay.stop()
         await camera.stop()
+        try:
+            radar.stop()   # joins the tracker thread + cleans up GPIO
+        except Exception as e:  # noqa: BLE001
+            logger.error("Radar tracker shutdown error: %s", e)
 
     host = server_cfg.get("host", "0.0.0.0")
     sport = server_cfg.get("port", 8080)

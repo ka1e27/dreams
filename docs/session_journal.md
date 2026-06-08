@@ -26,6 +26,124 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Radar-bar stepper control (A4988 on Pi 5 GPIO, not the Pico)
+
+**Worked on:** implemented `~/Downloads/DREAMS_stepper_instruction (1).md` — A4988-driven
+NEMA-17 radar-bar pan, coordinated with the YOLO vision overlay. The user's **revised** instruction
+moved the stepper from the Boat Pico to the **Pi 5 GPIO header** (the first Pico draft, `(1).md`'s
+predecessor, collided GP18-21 with the hull-leak sensors / SHT41 re-pin mess — the Pi-5 approach
+sidesteps all of that).
+**Deliberate divergence (flagged, not silently resolved):** driving Pi 5 GPIO breaks the
+"**Pi 5 uses only USB — no GPIO**" locked decision in `CLAUDE.md`. The user chose this explicitly;
+I implemented it and documented it in `docs/pin_map.md` rather than editing the locked-decisions doc.
+**Key engineering call:** stepper stepping is **blocking** (`time.sleep` per pulse). Running it from
+an asyncio task would freeze the whole FastAPI server, so the **RadarTracker owns a single daemon
+thread** that is the sole motion authority; HTTP endpoints only flip thread-safe flags. Mirrors the
+repo's existing graceful-degradation pattern (camera/overlay/psutil): no `gpiozero`/`lgpio` →
+StepperMotor runs in **mock mode** (position tracking + real timing, no pin toggles), so `run_sim.py`
+and the test suite still work on Windows.
+**New:**
+- `pi5/cv/stepper.py` — `StepperMotor` (A4988): enable/disable/sleep/wake, trapezoidal-ramped `step`,
+  `rotate_degrees`/`rotate_to` (travel-clamped, 0-180° w/o slip ring), `scan`/`scan_async`/`stop_scan`
+  (daemon-thread sweep w/ `threading.Event`), absolute position tracking, auto-sleep, `cleanup()`.
+- `pi5/cv/radar_tracker.py` — `RadarTracker`: SCAN/TRACK/HOLD/SLEEP on one daemon thread; reads
+  detection boxes from the overlay (`boxes()`) and slews to centre a priority target (boat/person)
+  via bbox→bearing; reverts to SCAN after `lost_timeout_s`. Defensive: no overlay → just SCANs.
+- `pi5/cv/stepper_test.py` — standalone bench test (`python3 pi5/cv/stepper_test.py`), 9 checks, ASCII
+  output (Windows console safe). All 9 pass in mock mode.
+**Changed:**
+- `pi5/cv/vision_overlay.py` — added public `boxes()` accessor (raw xyxy boxes) for the tracker.
+- `pi5/server/app.py` — `configure(stepper=, radar=)`; `GET /stepper/status` + `POST /stepper/command`
+  (SCAN/STOP/GOTO/CENTER/SLEEP/WAKE/TRACK/HOLD — non-blocking, route to the tracker; available:false
+  off-Pi); `_gather_health()` now carries `stepper_angle`/`stepper_state`/`stepper_target_locked`.
+- `run_hardware.py` — build StepperMotor + RadarTracker from `stepper:` config, inject, start the
+  tracker thread on startup / `radar.stop()` (joins thread + GPIO cleanup) on shutdown. Never blocks startup.
+- `pi5/config.yaml` — new `stepper:` block (pins 23/24/25/8, 3200 steps/rev, sweep 0-180, FOV 75,
+  priority_classes, initial_mode=SLEEP).
+- `pi5/server/templates/command_center.html` — new RADAR BAR panel: SVG compass rose w/ animated
+  needle + sweep sector, live angle / mode / lock readouts (from `/ws/health`), SCAN/TRACK/STOP/CENTER
+  /WAKE/SLEEP/GOTO buttons (→ `/stepper/command`). Added a 5th grid row.
+- `docs/pin_map.md` — new "Radar-bar stepper — Pi 5 GPIO (A4988)" subsection (pin table + boot-state
+  caveat); softened the "no GPIO" claim to "no GPIO **for sensors**".
+**Verified (sim/Windows):** `py_compile` OK; `ruff check pi5 run_hardware.py` clean; **95 tests pass**;
+bench test **9/9** (mock); StepperMotor + RadarTracker smoke-tested (rotate/clamp/scan/stop); endpoint
+handlers exercised directly (status, SCAN/GOTO ok, bad-cmd→400, GOTO-no-value→400); booted `run_sim`
+and confirmed `/health` carries stepper_* = null, `/stepper/status` → available:false, and `/command`
+serves the radar panel + JS hooks. **All GPIO/motor behaviour is Pi-only and UNTESTED on hardware.**
+**Boot-state caveat for the user:** GPIO25 (ENABLE) is LOW at boot → coils briefly energised before
+software runs; consider an external pull-up if boot quiescent current matters (noted in pin_map.md).
+Set `stepper.has_slip_ring: true` only once the slip ring is installed (unlocks full 360°).
+**Next steps:** uncommitted (offer). On the Pi: `pip install lgpio gpiozero`, set A4988 VREF≈0.67 V, run
+`python3 pi5/cv/stepper_test.py` with the bar free, then drive it from `/command`. Possible follow-up:
+let RadarTracker reuse the avoidance detector if avoidance is later wired into run_hardware.
+
+## 2026-06-08 — Implemented dual-SHT41 firmware (re-pin to as-built board)
+
+**Worked on:** user confirmed part = Teyleten **GY-SHT41-D** breakout (×3) and chose **"re-pin
+firmware to board"** (PCB is fabricated; firmware adapts). Implemented the temp-sensor firmware to
+match the as-built board and documented the conflicts.
+**Changed / new:**
+- `firmware/boat-pico/sht41.py` (new) — bus-agnostic `SHT41` class (Sensirion SHT4x): 0x44, cmd 0xFD
+  high-precision, 6-byte read, CRC8 (poly 0x31), tick→°C/%RH conversion, degrade-safe.
+- `firmware/boat-pico/sensors.py` — dropped DHT11 (GP16, not on board). Added two SHT41s on
+  **SoftI2C**: #A GP12/13 (J11), #B GP14/15 (J13). SoftI2C because HW I²C0 is held by the BNO085
+  (GP8/9). Exposes `air_temp/air_humidity` (A) + `air_temp2/air_humidity2` (B). `read_all_slow()` now
+  reads both SHT41s + hull. (`send_env` keeps `%d` → truncates the float to int; bumping ENV to
+  `%.1f` to keep SHT41 precision is an optional protocol change, not done.)
+- `firmware/boat-pico/main.py` — updated pin-map docstring, `task_slow_sensors` doc, boot prints; added
+  a loud as-built-conflict warning print. **Did NOT touch vesc/motor_control/sbus** (safety-critical).
+- `docs/pin_map.md` — GP12-15 rows now show SHT41 (board); GP16 = unused; added an "⚠ As-built board
+  divergence (GP12–GP16)" callout + two SoftI2C rows in the bus summary with conflict notes.
+**⚠ Unresolved blockers (flagged, not fixed):** GP12/13=VESC UART0, GP14=winch PWM, GP15=SBUS still
+claim those pins in firmware; on the board they're the temp connectors. VESC/winch/SBUS are mis-pinned
+for this board and must be relocated off GP12-15 before the boat can drive AND read temps together —
+but the board's winch connector (J8/J9 both pins on GND) and SBUS input have no valid pins (known board
+errors). So a full re-pin is blocked on hardware decisions / likely a board respin.
+**Board/cabling (part b) — for the fabbed board:** connector pin order is reversed vs the module
+(board J11/J13 = [SDA,SCL,GND,V+]; GY-SHT41-D = [VDD,GND,SDA,SCL]) → needs a **crossover cable**
+(module VDD→board pin4, GND→pin3, SDA→pin1, SCL→pin2). And **don't use board pin4 (VSYS≈5 V)** for VDD
+unless the module is confirmed regulated+level-shifted — feed VDD from 3.3 V (Pico pin36, currently
+unconnected) since RP2040 GPIO isn't 5 V-tolerant.
+**Verified (Windows):** py_compile OK (sht41/sensors/main); `ruff check pi5` clean; 95 tests pass.
+Firmware runtime is Pi/Pico-only (SoftI2C + SHT41 reads untested on hardware).
+**Next steps:** user to decide VESC/winch/SBUS relocation (or board respin); bench-test SHT41 reads
+once GP12-15 are freed; optionally extend ENV telemetry to carry sensor #2.
+
+## 2026-06-08 — Reviewed temp-sensor wiring (J11/J13) against schematic; flagged SHT41 issues
+
+**Worked on:** user said the two "Temp + Humidity Sensor" connectors will be **SHT41** (I²C, 4-pin),
+asked to check the wiring. Re-exported the netlist (`kicad-cli sch export netlist --format kicadsexpr`,
+no net labels in sch) and traced J11/J13.
+**Findings (verified from netlist):**
+- **J11** (0.1″ hdr): pin1→GP12 (I2C0 SDA), pin2→GP13 (I2C0 SCL), pin3→GND, pin4→**VSYS ≈5 V**.
+- **J13** (JST-XH): pin1→GP14 (I2C1 SDA, shared w/ J10 IMU + J7 GPS hdr), pin2→GP15 (I2C1 SCL, shared),
+  pin3→GND, pin4→**VSYS ≈5 V**.
+- GOOD: pin pairs are HW-I²C-legal and SDA/SCL not swappable (RP2040 muxing); two 0x44 SHT41 on
+  separate buses (I2C0 + I2C1) is the correct topology for the fixed address.
+- ⚠ **5 V V+**: SHT41 abs-max 3.6 V; Pico 3V3-OUT (pin36) is unconnected. Bare SHT41 would be damaged.
+  Only OK if using a breakout with onboard 3.3 V LDO + level shift.
+- ⚠ **No I²C pull-ups** on any of GP12/13/14/15 (only Pico+connector on each net).
+- ✗ **Firmware/docs mismatch**: `sensors.py` + `pin_map.md` describe one **DHT11 (1-wire) on GP16**,
+  but GP16 is unconnected in the sch and there's no DHT11 — same sch-vs-firmware divergence flagged
+  2026-06-01. To use as wired, firmware needs `I2C(0,sda=12,scl=13)` + `I2C(1,sda=14,scl=15)`, SHT4x
+  cmd 0xFD @ 0x44.
+**Part confirmed by user:** Teyleten Robot **GY-SHT41-D** breakout (×3), I²C, "3.3–5 V".
+**NEW critical finding — connector pinout is reversed vs the module:** GY-SHT41-D pin order is
+`VDD·GND·SDA·SCL` (power on pins 1–2), but the PCB connectors put **signals on pins 1–2, power on
+pins 3–4**. A straight 1:1 cable would feed module VDD (≤5 V) onto GP12/GP14 → fries the Pico. Fix by
+re-assigning the connector footprint to `VDD·GND·SDA·SCL` (target: pin1=3V3, pin2=GND, pin3=SDA GP12/14,
+pin4=SCL GP13/15) OR a crossover cable (riskier).
+**Power:** still route V+ to **3V3 (Pico pin 36, currently unconnected)**, NOT VSYS(5 V) — RP2040 GPIO
+not 5 V-tolerant; couldn't confirm an onboard regulator/level-shifter on the cheap GY board (the
+"level-shifted 3–5 V" claim is Adafruit's, blended in by search). 3.3 V is safe either way.
+**Pull-ups:** GY modules usually carry onboard 10 k pull-ups → board's lack of them likely moot (verify
+2 resistors on module). J13 bus shared w/ J10/J7 → parallel pull-ups ≈3.3 k, still OK.
+**Decisions / open questions:** did NOT edit firmware/docs/sch yet — offered to (a) rewrite pin_map.md +
+sensors.py to dual-I²C SHT4x (I2C0=GP12/13, I2C1=GP14/15, addr 0x44, cmd 0xFD), (b) spec the schematic
+footprint reorder + 3V3 rail. PCB-rework approach (footprint vs crossover cable) is the user's call.
+**Next steps:** await user go-ahead on (a)/(b); the footprint reorder + 3V3 reroute are the gating
+hardware fixes before any SHT41 can be plugged in safely.
+
 ## 2026-06-08 — Self-healing serial read loop + hide Sim Speed on hardware
 
 **Worked on:** user hit a tight error loop on push: `Read loop error: device reports readiness to
