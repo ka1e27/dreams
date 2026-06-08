@@ -55,12 +55,20 @@ class StepperMotor:
         self.max_speed_rpm = float(max_speed_rpm)
         self.auto_sleep_s = float(auto_sleep_s)
         self.has_slip_ring = bool(has_slip_ring)
-        # Without a slip ring the cable can't take full rotation — clamp travel.
-        self.min_deg = 0.0 if has_slip_ring else float(min_deg)
-        self.max_deg = 360.0 if has_slip_ring else float(max_deg)
+        # Travel limits and "may the position wrap past 360°?" are SEPARATE
+        # concerns. Only a slip ring permits a free, wrapping full rotation; the
+        # caller can still ask for a 0–360° linear axis (min_deg/max_deg) without
+        # one — the bar then has hard stops at each end and never winds the cable
+        # more than one turn. So we keep the requested limits as-is and gate
+        # *wrapping* on the slip ring alone.
+        self.min_deg = float(min_deg)
+        self.max_deg = float(max_deg)
+        self._wrap = self.has_slip_ring   # short-way wrap only with a slip ring
 
         self._deg_per_step = 360.0 / self.steps_per_rev
-        self._position_steps = 0          # absolute, wrapped to one rev
+        self._min_steps = round(self.min_deg / self._deg_per_step)
+        self._max_steps = round(self.max_deg / self._deg_per_step)
+        self._position_steps = 0          # absolute steps (unwrapped unless _wrap)
         self._enabled = False
         self._asleep = True               # assume off until first wake
         self._last_move = time.monotonic()
@@ -170,7 +178,15 @@ class StepperMotor:
                 time.sleep(2e-6)
                 self._w(self._step, 0)
                 time.sleep(cruise * factor)
-                self._position_steps = (self._position_steps + direction) % self.steps_per_rev
+                self._position_steps += direction
+                if self._wrap:
+                    self._position_steps %= self.steps_per_rev
+            # Linear (no slip ring): the position is a bounded axis — clamp to the
+            # travel limits so a direct over-long step() call can't run the count
+            # (and the reported angle) past the mechanical end stops.
+            if not self._wrap:
+                self._position_steps = max(self._min_steps,
+                                           min(self._max_steps, self._position_steps))
             self._last_move = time.monotonic()
 
     def _rpm_to_delay_us(self, rpm: float) -> int:
@@ -203,7 +219,12 @@ class StepperMotor:
 
     # -- position ---------------------------------------------------------- #
     def get_position_degrees(self) -> float:
-        return round((self._position_steps * self._deg_per_step) % 360.0, 3)
+        deg = self._position_steps * self._deg_per_step
+        # Wrap to one turn only when a slip ring is fitted; otherwise the axis is
+        # linear (0…max_deg) so 0° and 360° stay distinct end stops.
+        if self._wrap:
+            deg %= 360.0
+        return round(deg, 3)
 
     def reset_position(self) -> None:
         with self._lock:

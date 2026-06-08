@@ -24,9 +24,11 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-# BGR colours (OpenCV). Amber for highlighted classes, muted teal for the rest.
+# BGR colours (OpenCV). Amber for highlighted classes, muted teal for the rest,
+# cyan for the locked/tracked target reticle.
 _COLOR_HIGHLIGHT = (0, 165, 255)
 _COLOR_NORMAL = (200, 200, 120)
+_COLOR_TRACK = (255, 208, 0)
 
 
 @dataclass
@@ -52,8 +54,10 @@ class DetectionOverlay:
         self._names: dict | list = {}
         self._boxes: list[tuple] = []          # (x1,y1,x2,y2,label,conf,highlight)
         self._detections: list[dict] = []      # [{label, confidence}] for the UI
+        self._primary: tuple | None = None     # the box we mark as "tracked"
         self._fps: float = 0.0
         self.enabled: bool = self._cfg.enabled
+        self.track_marker: bool = True         # draw a lock reticle on the primary
 
     # -- model -------------------------------------------------------------- #
     def _load_model(self):
@@ -105,6 +109,22 @@ class DetectionOverlay:
         that need geometry — e.g. radar_tracker.RadarTracker."""
         return list(self._boxes)
 
+    def primary_target(self) -> dict | None:
+        """The single object being tracked (highest-confidence highlight class),
+        or None. Used for the command-center tracking readout. The same box gets
+        a lock reticle in draw(); the radar tracker independently slews to it."""
+        p = self._primary
+        if not p:
+            return None
+        x1, y1, x2, y2, label, conf = p[0], p[1], p[2], p[3], p[4], p[5]
+        return {
+            "label": label,
+            "confidence": round(float(conf), 3),
+            "cx": (x1 + x2) // 2,
+            "cy": (y1 + y2) // 2,
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+        }
+
     def controls(self) -> dict:
         return {
             "detection_enabled": self.enabled,
@@ -144,14 +164,14 @@ class DetectionOverlay:
                 except asyncio.TimeoutError:
                     continue
                 if not self.enabled or self._model is None:
-                    self._boxes, self._detections, self._fps = [], [], 0.0
+                    self._boxes, self._detections, self._primary, self._fps = [], [], None, 0.0
                     continue
                 interval = 1.0 / max(0.5, self._cfg.detect_max_fps)
                 now = time.monotonic()
                 if last_run and now - last_run < interval:
                     continue  # rate-capped — drop this frame, keep the queue drained
-                boxes, dets = await loop.run_in_executor(None, self._infer, frame.left)
-                self._boxes, self._detections = boxes, dets
+                boxes, dets, primary = await loop.run_in_executor(None, self._infer, frame.left)
+                self._boxes, self._detections, self._primary = boxes, dets, primary
                 if last_run:
                     dt = time.monotonic() - last_run
                     if dt > 0:
@@ -161,15 +181,17 @@ class DetectionOverlay:
         finally:
             self._camera.unsubscribe(q)
 
-    def _infer(self, frame_bgr) -> tuple[list[tuple], list[dict]]:
+    def _infer(self, frame_bgr) -> tuple[list[tuple], list[dict], tuple | None]:
         try:
             results = self._model(frame_bgr, imgsz=self._cfg.imgsz,
                                    conf=self._cfg.conf, verbose=False)
         except Exception as e:  # noqa: BLE001
             logger.error("overlay inference error: %s", e)
-            return [], []
+            return [], [], None
         boxes: list[tuple] = []
         dets: list[dict] = []
+        primary: tuple | None = None
+        primary_conf = -1.0
         names = self._names
         target = set(self._cfg.target_classes)
         highlight = set(self._cfg.highlight_classes)
@@ -183,9 +205,15 @@ class DetectionOverlay:
             if target and label not in target:
                 continue
             x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
-            boxes.append((x1, y1, x2, y2, label, conf, label in highlight))
+            is_hl = label in highlight
+            entry = (x1, y1, x2, y2, label, conf, is_hl)
+            boxes.append(entry)
             dets.append({"label": label, "confidence": round(conf, 3)})
-        return boxes, dets
+            # The tracked object = highest-confidence highlight-class box. This
+            # matches what radar_tracker treats as its priority target.
+            if is_hl and conf > primary_conf:
+                primary, primary_conf = entry, conf
+        return boxes, dets, primary
 
     # -- drawing ------------------------------------------------------------ #
     def draw(self, frame):
@@ -205,4 +233,28 @@ class DetectionOverlay:
             cv2.rectangle(frame, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
             cv2.putText(frame, text, (x1 + 2, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 0, 0), 1, cv2.LINE_AA)
+        if self.track_marker and self._primary is not None:
+            self._draw_reticle(frame, self._primary, base, fs, cv2)
         return frame
+
+    @staticmethod
+    def _draw_reticle(frame, box, base, fs, cv2) -> None:
+        """Draw a cyan lock reticle (corner brackets + centre cross) on the
+        tracked target so the operator can see what the tracker is following."""
+        x1, y1, x2, y2 = box[0], box[1], box[2], box[3]
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        col = _COLOR_TRACK
+        th = base + 1
+        # corner brackets — a fraction of the shorter side, clamped to a sane span
+        leg = max(8, min((x2 - x1), (y2 - y1)) // 4)
+        for (ox, sx) in ((x1, 1), (x2, -1)):
+            for (oy, sy) in ((y1, 1), (y2, -1)):
+                cv2.line(frame, (ox, oy), (ox + sx * leg, oy), col, th)
+                cv2.line(frame, (ox, oy), (ox, oy + sy * leg), col, th)
+        # centre crosshair
+        g = max(4, leg // 2)
+        cv2.line(frame, (cx - g, cy), (cx + g, cy), col, th)
+        cv2.line(frame, (cx, cy - g), (cx, cy + g), col, th)
+        tag = "TRACK %s" % box[4]
+        cv2.putText(frame, tag, (x1, y2 + int(18 * max(0.6, fs))),
+                    cv2.FONT_HERSHEY_SIMPLEX, fs, col, 1, cv2.LINE_AA)

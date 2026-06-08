@@ -117,6 +117,11 @@ class CameraProducer:
     def latest(self) -> StereoFrame | None:
         return self._latest
 
+    @property
+    def has_right(self) -> bool:
+        """True if a second (right) camera opened — gates the stereo / right view."""
+        return self._cap_r is not None
+
     async def _loop(self) -> None:
         interval = 1.0 / max(1, self._cfg.fps)
         while not self._stop.is_set():

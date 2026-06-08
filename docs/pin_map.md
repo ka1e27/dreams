@@ -137,6 +137,22 @@ gpiozero/lgpio is absent (laptop / simulator), so this never affects the sim.
 > boot pull-up = awake. Harmless for an unloaded radar bar, but consider an
 > external pull-up on ENABLE if quiescent current at boot matters.
 
+**Travel ranges (two, kept separate).** `config.yaml → stepper:` distinguishes the
+*manual* pan range from the *auto-scan* sweep:
+
+- `manual_min_degrees`/`manual_max_degrees` (default **0–360**) — the range the
+  operator can lock the bar to from the command center (◄ LEFT / RIGHT ► jog +
+  LOCK-TO angle, `POST /stepper/command` `JOG`/`GOTO`).
+- `sweep_min_degrees`/`sweep_max_degrees` (default **0–180**) — the back-and-forth
+  range SCAN mode hunts over.
+
+`has_slip_ring` only governs **wrapping** (taking the short way across the 0°/360°
+seam), which is the one thing a cable can't survive. With no slip ring (default)
+the bar is a **linear axis with hard stops** at `manual_min`/`manual_max` and never
+winds more than one turn. ⚠ Even so, the default 0–360 manual range will wind the
+radar cable up to a full turn at the far end — drop `manual_max_degrees` to 180 (or
+fit a slip ring and set `has_slip_ring: true`) if that's a problem for your cable run.
+
 ## Raspberry Pi 5 — USB topology
 
 The Pi 5 in this project uses **no GPIO, UART, I²C, or SPI for sensors** at the

@@ -161,9 +161,20 @@ stepper:
   steps_per_rev: 3200    # 200 × 16 (1/16 microstepping wired on the A4988)
   max_rpm: 10
   auto_sleep_seconds: 5
-  has_slip_ring: false   # true → allow full 360°; false → clamp to the sweep below
+  # has_slip_ring gates *wrapping* (taking the short way across 0°/360°), which
+  # only a slip ring can survive. It does NOT cap manual travel — that's
+  # manual_*_degrees below. With no slip ring the bar is a linear axis with hard
+  # stops at each end, so it never winds the cable more than one turn.
+  has_slip_ring: false
+  # Auto-scan sweep range (SCAN mode hunts back and forth between these).
   sweep_min_degrees: 0
   sweep_max_degrees: 180
+  # Manual pan / GOTO travel range — the operator can lock the bar anywhere in
+  # here from the command center. Full 0–360° by default. ⚠ Without a slip ring
+  # reaching the far end winds the radar cable up to one full turn; keep this at
+  # 180 (or fit a slip ring) if that's a problem for your cable run.
+  manual_min_degrees: 0
+  manual_max_degrees: 360
   scan_speed_rpm: 3      # sweep speed while hunting for targets
   track_speed_rpm: 8     # slew speed while following a locked target
   fov_degrees: 75        # camera horizontal FOV, for bbox→bearing mapping
