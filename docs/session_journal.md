@@ -26,6 +26,48 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Boat health panel: 3 battery rails (12S/4S/3S), dual air/enclosure T+RH, L/R hull
+
+**Worked on:** follow-up to the BOAT HEALTH panel — user wants three battery statuses (12S/4S/3S),
+two temp+humidity sensors (one in the electronics enclosure, one open air), and separate left/right
+hull-dry indicators.
+**Data-flow finding:** TEL's `batt_v` was already the **12S propulsion** rail; the **3S** was read in
+firmware but only sent on `TEL2` (which the Pi never parses); the **4S winch** was **never read**
+(GP28 = "spare"); SHT41 **#B** was read into `air_temp2/air_humidity2` but never sent; the TEL `hull`
+string already encodes L/R. So: extend the already-parsed **ENV** message (not TEL2), add the 4S read,
+and decode hull in the UI.
+**Key call:** extended **ENV → v1.1** by **appending** six fields (enclosure SHT41 temp/humidity, 3S
+v/%, 4S v/%) so it stays **backward compatible** — v1.0 firmware omits them, the parser reads them only
+when `len(fields) >= 12` (verified both ways). 12S stays in TEL.
+**Changed:**
+- `firmware/boat-pico/sensors.py` — added a **4S winch** read on **GP28** (PCB BT4 100k/18k divider →
+  `winch_batt_v/pct`); `read_all_fast()` now reads all three rails. Flagged the divider as provisional
+  (prop/elec use different dividers in firmware — the known discrepancy).
+- `firmware/boat-pico/serial_handler.py` — `send_env()` appends `enc_t,enc_h,elec_v,elec_pct,winch_v,
+  winch_pct` (defaults keep v1.0 callers working).
+- `firmware/boat-pico/main.py` — `task_env_telemetry` passes SHT41 #B + elec + winch; pin-map docstring
+  + boot prints updated (GP28 = 4S, #A air / #B enclosure).
+- `pi5/comms/pico_serial.py` — `Environment` gains `enc_temp/enc_humidity/elec_batt_v/elec_batt_pct/
+  winch_batt_v/winch_batt_pct` (sentinels -999/-1/0); `_handle_env` parses fields 6–11 when present.
+- `pi5/navigation/simulator.py` — sim now has 3 rails (12S 50.4 drains as it drives, 3S 12.4, 4S 16.2)
+  + an enclosure SHT41 (warmer/drier than air); MockPico `telemetry` batt% fixed to the **12S** range,
+  `environment` emits the v1.1 fields.
+- `pi5/server/app.py` — `_boat_health()` adds `elec_v/pct`, `winch_v/pct`, `enc_temp/humidity`, and
+  `hull_left`/`hull_right` (decoded from the TEL hull code).
+- `pi5/server/templates/command_center.html` — BOAT HEALTH retiled: **12S DRIVE / 4S WINCH / 3S ELEC**
+  (each V·% + bar, colour by %), **HULL·LEFT / HULL·RIGHT** (DRY/WET), **AIR** + **ENCLOSURE** T/RH,
+  plus heading/speed/motors/GPS/water. New `setBatt()`/`setHull()` helpers; N/A on ≤0.5 V / -999.
+- `docs/serial-protocol.md` — documented the ENV v1.1 appendix (+ a v1.0/v1.1 example pair).
+**Verified (sim/Windows):** `ruff check pi5 run_hardware.py` clean (firmware is MicroPython — bare
+`except`/`machine` imports, not in the lint target); `py_compile` OK on firmware + pi5; **95 tests pass**;
+ENV round-trip unit-checked (v1.1 parses all 12 fields, v1.0 6-field keeps defaults). Booted `run_sim`:
+`/health.boat` shows 12S 50.4 V/100 %, 4S 16.2 V/87 %, 3S 12.4 V/94 %, hull L/R DRY/DRY, air 19 °C/47 %,
+enclosure 24.4 °C/28 %; `/command` renders all new tiles. **Firmware 4S read + dual-SHT41 send are
+Pi/Pico-only and UNTESTED on hardware** (and the SHT41 GP12-15 pin conflict from the prior entry still
+gates real temp reads).
+**Next steps:** uncommitted (offer). On hardware: bench-calibrate the GP28 4S divider; confirm ENV v1.1
+arrives and the three rails read sane; resolve the SHT41 re-pin before the enclosure/air temps are real.
+
 ## 2026-06-08 — Command-center: camera L/R switch, object-track viz, boat health, manual stepper pan 0–360
 
 **Worked on:** four user-requested command-center features — (1) switch between left/right

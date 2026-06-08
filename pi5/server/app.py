@@ -691,12 +691,21 @@ def _boat_health() -> dict:
         "connected": bool(getattr(_pico, "connected", False)),
         "lat": t.lat, "lon": t.lon,
         "heading": t.heading, "speed_knots": t.speed_knots,
-        "batt_v": t.batt_v, "batt_pct": t.batt_pct,
+        # Three battery rails: 12S propulsion (from TEL), 3S electronics + 4S
+        # winch (from ENV v1.1). hull_left/right decoded from the TEL hull code.
+        "batt_v": t.batt_v, "batt_pct": t.batt_pct,            # 12S propulsion
+        "elec_v": getattr(e, "elec_batt_v", 0.0), "elec_pct": getattr(e, "elec_batt_pct", 0),
+        "winch_v": getattr(e, "winch_batt_v", 0.0), "winch_pct": getattr(e, "winch_batt_pct", 0),
         "hull": t.hull,
+        "hull_left": "L!" in (t.hull or ""),
+        "hull_right": "R!" in (t.hull or ""),
         "mt_left": t.mt_left, "mt_right": t.mt_right,
         "health": t.health,
         "health_flags": health_flags,
+        # Two SHT41s: open air (#A) and electronics enclosure (#B).
         "air_temp": e.air_temp, "air_humidity": e.air_humidity,
+        "enc_temp": getattr(e, "enc_temp", -999.0),
+        "enc_humidity": getattr(e, "enc_humidity", -1.0),
         "water_temp": e.water_temp, "water_ec": e.water_ec,
         "water_light": e.water_light, "bottom_contact": e.bottom_contact,
         "alert": alert_d,

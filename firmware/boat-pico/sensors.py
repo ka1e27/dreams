@@ -27,11 +27,12 @@ Pin assignments:
       — voltage divider sized so 50.4 V → ≤ 3.3 V at the Pico pin
   - Electronics battery (3S Li-ion) ADC: GP27 (ADC1)
       — uses the legacy 15 / (15+100) divider; 12.6 V → 1.64 V
-  - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]
-  - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]
+  - Winch battery (4S LiPo) ADC: GP28 (ADC2)
+      — PCB BT4 divider 100k/18k (≈0.1525); 16.8 V → 2.56 V (provisional)
+  - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]  — open air
+  - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]  — electronics enclosure
   - Hull leak left:  GP17
   - Hull leak right: GP18
-  - GP28 (ADC2):     spare
 """
 from machine import Pin, ADC, SoftI2C
 import sht41
@@ -56,6 +57,20 @@ E_WARN = 9.9    # 3.30 V × 3
 E_CRIT = 9.6    # 3.20 V × 3
 E_RANGE = E_FULL - E_EMPTY
 
+# ---- Winch battery (4S LiPo) ----
+# PCB divider (BT4): R8 100k high / R10 18k low → ratio 18/118 ≈ 0.1525.
+# 16.8 V → 2.56 V at GP28. This uses the *schematic* divider value; the prop/elec
+# rails deliberately use different dividers in firmware (see the known divider
+# discrepancy in CLAUDE.md), so treat the 4S reading as provisional until bench-
+# calibrated against the as-built board.
+W_RATIO = 18.0 / 118.0
+INV_W_RATIO = 1.0 / W_RATIO
+W_FULL = 16.8   # 4.20 V × 4
+W_EMPTY = 12.0  # 3.00 V × 4
+W_WARN = 13.2   # 3.30 V × 4
+W_CRIT = 12.8   # 3.20 V × 4
+W_RANGE = W_FULL - W_EMPTY
+
 # ---- Air temp/humidity (two SHT41 on separate SoftI2C buses) ----
 SHT_A_SDA = 12
 SHT_A_SCL = 13
@@ -66,6 +81,7 @@ SHT_FREQ = 100_000   # 100 kHz — comfortable for bit-banged I2C + cabling
 # ---- Hardware handles ----
 _prop_adc = None
 _elec_adc = None
+_winch_adc = None
 _sht_a = None
 _sht_b = None
 _hull_l = None
@@ -76,9 +92,11 @@ prop_batt_v = 0.0
 prop_batt_pct = 0
 elec_batt_v = 0.0
 elec_batt_pct = 0
-air_temp = 0.0        # SHT41 #A (J11)
+winch_batt_v = 0.0    # 4S winch pack (GP28 ADC2)
+winch_batt_pct = 0
+air_temp = 0.0        # SHT41 #A (J11) — open air
 air_humidity = 0.0
-air_temp2 = 0.0       # SHT41 #B (J13)
+air_temp2 = 0.0       # SHT41 #B (J13) — electronics enclosure
 air_humidity2 = 0.0
 hull_leak_left = False
 hull_leak_right = False
@@ -86,13 +104,17 @@ hull_leak_right = False
 
 def init():
     """Initialise all onboard sensor hardware."""
-    global _prop_adc, _elec_adc, _sht_a, _sht_b, _hull_l, _hull_r
+    global _prop_adc, _elec_adc, _winch_adc, _sht_a, _sht_b, _hull_l, _hull_r
     try:
         _prop_adc = ADC(26)
     except:
         pass
     try:
         _elec_adc = ADC(27)
+    except:
+        pass
+    try:
+        _winch_adc = ADC(28)
     except:
         pass
     # SHT41 #A (J11) — bit-banged so it doesn't fight the BNO085 on I2C0.
@@ -148,6 +170,17 @@ def read_elec_battery():
         pass
 
 
+def read_winch_battery():
+    """Read winch (4S LiPo) battery voltage and percentage from GP28."""
+    global winch_batt_v, winch_batt_pct
+    try:
+        winch_batt_v = _read_battery_voltage(_winch_adc, INV_W_RATIO)
+        winch_batt_pct = max(0, min(100,
+                                    int((winch_batt_v - W_EMPTY) / W_RANGE * 100)))
+    except:
+        pass
+
+
 def read_temp_humidity():
     """Read both SHT41 air temp/humidity sensors.
 
@@ -173,9 +206,10 @@ def read_hull():
 
 
 def read_all_fast():
-    """Read fast sensors — both batteries. Call at ~10 Hz."""
+    """Read fast sensors — all three battery rails. Call at ~10 Hz."""
     read_prop_battery()
     read_elec_battery()
+    read_winch_battery()
 
 
 def read_all_slow():

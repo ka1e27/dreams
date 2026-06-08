@@ -315,16 +315,22 @@
   <div class="panel">
     <div class="ttl"><span>⛵ BOAT HEALTH</span><span class="lbl" id="boat-link">PICO —</span></div>
     <div class="boat-grid">
-      <div class="stat"><span class="lbl">BATTERY</span><span class="sv" id="b-batt">-- V</span>
-        <div class="bar"><i id="b-batt-bar" style="width:0"></i></div></div>
-      <div class="stat"><span class="lbl">HULL</span><span class="sv" id="b-hull">--</span></div>
+      <div class="stat"><span class="lbl">12S DRIVE</span><span class="sv" id="b-batt12">--</span>
+        <div class="bar"><i id="b-batt12-bar" style="width:0"></i></div></div>
+      <div class="stat"><span class="lbl">4S WINCH</span><span class="sv" id="b-batt4">--</span>
+        <div class="bar"><i id="b-batt4-bar" style="width:0"></i></div></div>
+      <div class="stat"><span class="lbl">3S ELEC</span><span class="sv" id="b-batt3">--</span>
+        <div class="bar"><i id="b-batt3-bar" style="width:0"></i></div></div>
+      <div class="stat"><span class="lbl">HULL · LEFT</span><span class="sv" id="b-hullL">--</span></div>
+      <div class="stat"><span class="lbl">HULL · RIGHT</span><span class="sv" id="b-hullR">--</span></div>
       <div class="stat"><span class="lbl">HEADING</span><span class="sv" id="b-hdg">--</span></div>
       <div class="stat"><span class="lbl">SPEED</span><span class="sv" id="b-spd">--</span></div>
       <div class="stat"><span class="lbl">MOTOR L / R</span><span class="sv" id="b-mot">--</span></div>
       <div class="stat"><span class="lbl">GPS FIX</span><span class="sv" id="b-gps">--</span></div>
+      <div class="stat"><span class="lbl">AIR T / RH</span><span class="sv" id="b-air">--</span></div>
+      <div class="stat"><span class="lbl">ENCLOSURE T / RH</span><span class="sv" id="b-enc">--</span></div>
       <div class="stat"><span class="lbl">WATER TEMP</span><span class="sv" id="b-wtemp">--</span></div>
       <div class="stat"><span class="lbl">WATER EC</span><span class="sv" id="b-wec">--</span></div>
-      <div class="stat"><span class="lbl">AIR T / RH</span><span class="sv" id="b-air">--</span></div>
     </div>
     <div class="boat-flags" id="boat-flags"></div>
     <div class="boat-alert" id="boat-alert"></div>
@@ -654,18 +660,34 @@ function renderHealth(h){
 }
 // ---- boat / pico health panel --------------------------------------------
 const FLAG_LABELS = { GPS:'GPS', CMP:'COMPASS', BAT:'BATT', DHT:'TEMP', MOT:'MOTOR', POD:'POD' };
+// one battery tile: voltage · % + coloured bar; <=0.5 V reads as no sensor
+function setBatt(vId, barId, v, pct){
+  const el = $(vId), bar = $(barId);
+  if (v == null || v <= 0.5){ el.textContent = 'N/A'; el.style.color = 'var(--muted)';
+    bar.style.width = '0%'; return; }
+  const p = (pct == null) ? 0 : Math.max(0, Math.min(100, pct));
+  el.textContent = v.toFixed(1) + ' V · ' + p + '%';
+  el.style.color = p < 15 ? 'var(--crit)' : p < 40 ? 'var(--warn)' : '#eaf6fb';
+  bar.style.width = p + '%';
+}
+function setHull(id, wet){
+  const el = $(id);
+  el.textContent = wet ? 'WET' : 'DRY';
+  el.style.color = wet ? 'var(--crit)' : 'var(--ok)';
+}
 function renderBoat(b){
   const link = $('boat-link');
   if (!b){ link.textContent = 'PICO N/A'; link.style.color = 'var(--muted)';
     $('boat-flags').innerHTML = ''; $('boat-alert').textContent = ''; return; }
   link.textContent = b.connected ? 'PICO LINK UP' : 'PICO LINK DOWN';
   link.style.color = b.connected ? 'var(--ok)' : 'var(--crit)';
-  // battery — voltage + % + bar
-  $('b-batt').textContent = fmt(b.batt_v, ' V', 1) + (b.batt_pct!=null ? ' · '+b.batt_pct+'%' : '');
-  $('b-batt-bar').style.width = Math.max(0, Math.min(100, b.batt_pct||0)) + '%';
-  // hull
-  const hu = $('b-hull'); hu.textContent = b.hull || '--';
-  hu.style.color = (b.hull && b.hull !== 'DRY') ? 'var(--crit)' : 'var(--ok)';
+  // three battery rails: 12S drive (TEL), 4S winch + 3S elec (ENV)
+  setBatt('b-batt12', 'b-batt12-bar', b.batt_v, b.batt_pct);
+  setBatt('b-batt4',  'b-batt4-bar',  b.winch_v, b.winch_pct);
+  setBatt('b-batt3',  'b-batt3-bar',  b.elec_v,  b.elec_pct);
+  // hull leak — left + right hulls independently
+  setHull('b-hullL', !!b.hull_left);
+  setHull('b-hullR', !!b.hull_right);
   $('b-hdg').textContent = fmt(b.heading, '°', 0);
   $('b-spd').textContent = fmt(b.speed_knots, ' kn', 1);
   // motor temps
@@ -679,11 +701,17 @@ function renderBoat(b){
   g.textContent = noFix ? 'NO FIX' : b.lat.toFixed(5) + ', ' + b.lon.toFixed(5);
   g.style.color = noFix ? 'var(--warn)' : '#eaf6fb';
   g.style.fontSize = noFix ? '17px' : '12px';
-  // water + air
-  $('b-wtemp').textContent = (b.water_temp <= -900) ? 'N/A' : fmt(b.water_temp, ' °C', 1);
-  $('b-wec').textContent = fmt(b.water_ec, ' µS', 0);
+  // two SHT41s: open air + electronics enclosure
   $('b-air').textContent = (b.air_temp!=null ? b.air_temp+'°C' : '--') + ' / '
     + (b.air_humidity!=null ? b.air_humidity+'%' : '--');
+  const encEl = $('b-enc');
+  if (b.enc_temp == null || b.enc_temp <= -900){ encEl.textContent = 'N/A'; encEl.style.color = 'var(--muted)'; }
+  else { encEl.textContent = b.enc_temp.toFixed(1) + '°C / '
+    + ((b.enc_humidity!=null && b.enc_humidity >= 0) ? Math.round(b.enc_humidity)+'%' : '--');
+    encEl.style.color = b.enc_temp >= 60 ? 'var(--crit)' : b.enc_temp >= 50 ? 'var(--warn)' : '#eaf6fb'; }
+  // water
+  $('b-wtemp').textContent = (b.water_temp <= -900) ? 'N/A' : fmt(b.water_temp, ' °C', 1);
+  $('b-wec').textContent = fmt(b.water_ec, ' µS', 0);
   // sensor health flags
   const f = b.health_flags || {};
   $('boat-flags').innerHTML = Object.keys(FLAG_LABELS).map(k => {

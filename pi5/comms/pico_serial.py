@@ -35,13 +35,26 @@ class Telemetry:
 
 @dataclass
 class Environment:
-    """Latest environment data from the Boat Pico."""
-    air_temp: int = 0
+    """Latest environment data from the Boat Pico.
+
+    The first six fields are ENV v1.0. The rest are appended by ENV v1.1
+    (backward compatible — older firmware simply omits them, leaving defaults):
+    a second SHT41 inside the electronics enclosure, plus the 3S electronics and
+    4S winch battery rails (the 12S propulsion rail stays in TEL as batt_v).
+    """
+    air_temp: int = 0              # SHT41 #A — open air
     air_humidity: int = 0
     water_temp: float = -999.0
     water_ec: float = 0.0
     water_light: int = 0
     bottom_contact: bool = False
+    # ENV v1.1 appended fields
+    enc_temp: float = -999.0       # SHT41 #B — electronics enclosure (-999 = none)
+    enc_humidity: float = -1.0     # %RH (-1 = none)
+    elec_batt_v: float = 0.0       # 3S electronics rail
+    elec_batt_pct: int = 0
+    winch_batt_v: float = 0.0      # 4S winch rail
+    winch_batt_pct: int = 0
 
 
 @dataclass
@@ -312,12 +325,16 @@ class PicoSerial:
             logger.debug("TEL parse error: %s", e)
 
     def _handle_env(self, msg: ParsedFrame) -> None:
-        """Update environment from an ENV message."""
+        """Update environment from an ENV message.
+
+        Fields 0-5 are ENV v1.0; 6-11 are the v1.1 appendix (enclosure SHT41 +
+        3S/4S battery rails). Parsed only when present so v1.0 firmware still works.
+        """
         f = msg.fields
         if len(f) < 6:
             return
         try:
-            self.environment = Environment(
+            env = Environment(
                 air_temp=int(f[0]),
                 air_humidity=int(f[1]),
                 water_temp=float(f[2]),
@@ -325,6 +342,14 @@ class PicoSerial:
                 water_light=int(f[4]),
                 bottom_contact=f[5] == "1",
             )
+            if len(f) >= 12:
+                env.enc_temp = float(f[6])
+                env.enc_humidity = float(f[7])
+                env.elec_batt_v = float(f[8])
+                env.elec_batt_pct = int(f[9])
+                env.winch_batt_v = float(f[10])
+                env.winch_batt_pct = int(f[11])
+            self.environment = env
             if self._on_environment:
                 self._on_environment(self.environment)
         except (ValueError, IndexError) as e:

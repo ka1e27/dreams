@@ -23,7 +23,7 @@ Pin map:
   GP18      — Hull leak right
   GP26      — Propulsion battery (12S LiPo) ADC
   GP27      — Electronics battery (3S Li-ion) ADC
-  GP28      — Spare ADC
+  GP28      — Winch battery (4S LiPo) ADC (PCB BT4 100k/18k divider, provisional)
 
 ⚠ As-built board divergence: vesc.py (UART0 GP12/13), motor_control.py (winch
   PWM GP14) and sbus.py (SBUS GP15) still claim GP12-15, but on the fabricated
@@ -320,13 +320,20 @@ async def task_telemetry_ext():
 
 
 async def task_env_telemetry():
-    """Send periodic environment data to Pi 5."""
+    """Send periodic environment data to Pi 5.
+
+    Carries the open-air SHT41 (#A) + water + bottom, plus the ENV v1.1 appendix:
+    the enclosure SHT41 (#B) and the 3S electronics / 4S winch battery rails (the
+    12S propulsion rail rides in TEL as batt_v)."""
     while True:
         try:
             serial.send_env(
                 sensors.air_temp, sensors.air_humidity,
                 pod_uart.water_temp, pod_uart.salinity_ec,
-                pod_uart.light_pct, pod_uart.bottom_contact)
+                pod_uart.light_pct, pod_uart.bottom_contact,
+                sensors.air_temp2, sensors.air_humidity2,
+                sensors.elec_batt_v, sensors.elec_batt_pct,
+                sensors.winch_batt_v, sensors.winch_batt_pct)
         except:
             pass
         await asyncio.sleep(5)
@@ -553,7 +560,7 @@ async def main():
     print("  !! As-built conflict: SHT41 GP12-15 overlap VESC/winch/SBUS; "
           "those modules are mis-pinned for this board (see docs/pin_map.md)")
     print("  Hull: GP17(L) GP18(R)")
-    print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)")
+    print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)  Winch batt: GP28 (4S)")
     print("  Watchdog: 3000ms heartbeat timeout")
     print("  Pulley L:%.3f R:%.3f" % (
         motor_control.PULLEY_L, motor_control.PULLEY_R))

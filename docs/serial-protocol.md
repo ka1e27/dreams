@@ -414,21 +414,37 @@ $TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<h
 Sent every 5000 ms (slow-changing data).
 
 ```
-$ENV,0,<air_t>,<air_h>,<water_t>,<water_ec>,<water_light>,<bottom>*<cs>\n
+$ENV,0,<air_t>,<air_h>,<water_t>,<water_ec>,<water_light>,<bottom>[,<enc_t>,<enc_h>,<elec_v>,<elec_pct>,<winch_v>,<winch_pct>]*<cs>\n
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
-| air_t | int | Air temperature (°C, from DHT11) |
-| air_h | int | Air humidity (%, from DHT11) |
+| air_t | int | Open-air temperature (°C, SHT41 #A on J11) |
+| air_h | int | Open-air humidity (%, SHT41 #A) |
 | water_t | float | Water temperature (°C, -999.0 = no reading) |
 | water_ec | float | Water EC (µS/cm) |
 | water_light | int | Underwater light level (0–100%) |
 | bottom | int | 1 = bottom contact, 0 = no contact |
 
-**Example:**
+**ENV v1.1 appendix (optional trailing fields).** Fields 0–5 above are v1.0;
+the six below are appended by current firmware and are backward compatible — a
+parser that only knows v1.0 stops at `bottom`, and v1.0 firmware simply omits
+them. They carry the second SHT41 (electronics enclosure) and the two battery
+rails *not* in TEL (the 12S propulsion rail stays in TEL as `batt_v`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| enc_t | float | Electronics-enclosure temperature (°C, SHT41 #B on J13; -999.0 = none) |
+| enc_h | float | Electronics-enclosure humidity (%, SHT41 #B; -1.0 = none) |
+| elec_v | float | 3S electronics battery voltage |
+| elec_pct | int | 3S electronics battery percentage (0–100) |
+| winch_v | float | 4S winch battery voltage (GP28 ADC; provisional divider — see CLAUDE.md) |
+| winch_pct | int | 4S winch battery percentage (0–100) |
+
+**Examples:**
 ```
-< $ENV,0,22,65,18.3,4520.0,45,0*77\n
+< $ENV,0,22,65,18.3,4520.0,45,0*77\n                                  (v1.0)
+< $ENV,0,22,65,18.3,4520.0,45,0,29.5,42.0,12.40,94,16.20,87*..\n       (v1.1)
 ```
 
 ### 4.3 ALERT — Alerts and Events

@@ -58,7 +58,9 @@ class BoatSimulator:
         self.lon = start_lon
         self.heading = start_heading
         self.speed_mps = 0.0
-        self.batt_v = 16.8
+        self.batt_v = 50.4          # 12S propulsion rail (drains as it drives)
+        self.elec_batt_v = 12.4     # 3S electronics rail
+        self.winch_batt_v = 16.2    # 4S winch rail (drops while the winch runs)
 
         # Throttle input (set by commands)
         self._thr_left = 0
@@ -77,6 +79,9 @@ class BoatSimulator:
         # Simulated air conditions (randomized once, drift slowly)
         self._air_temp = random.uniform(12.0, 28.0)
         self._air_humidity = random.uniform(40.0, 85.0)
+        # Electronics-enclosure SHT41 (#B) — runs warmer + drier than open air
+        self._enc_temp = self._air_temp + random.uniform(5.0, 9.0)
+        self._enc_humidity = max(20.0, self._air_humidity * 0.6)
 
         # Simulated bottom depth for current waypoint (randomised per data WP)
         # Converts ft to metres: 15–100 ft → ~4.6–30.5 m
@@ -210,11 +215,15 @@ class MockPicoSerial:
 
         self._hb_task: asyncio.Task[None] | None = None
 
+    @staticmethod
+    def _pct(v: float, empty: float, full: float) -> int:
+        return max(0, min(100, int((v - empty) / (full - empty) * 100)))
+
     @property
     def telemetry(self) -> Telemetry:
-        """Build telemetry from simulator state."""
+        """Build telemetry from simulator state. batt_v is the 12S propulsion rail."""
         s = self._sim
-        batt_pct = max(0, min(100, int((s.batt_v - 13.2) / (16.8 - 13.2) * 100)))
+        batt_pct = self._pct(s.batt_v, 39.6, 50.4)   # 12S range
         return Telemetry(
             lat=s.lat,
             lon=s.lon,
@@ -230,7 +239,10 @@ class MockPicoSerial:
 
     @property
     def environment(self) -> Environment:
-        """Build environment from simulator state."""
+        """Build environment from simulator state.
+
+        Carries the open-air SHT41 (#A), the enclosure SHT41 (#B), and the 3S
+        electronics / 4S winch battery rails (12S rides in TEL as batt_v)."""
         s = self._sim
         return Environment(
             air_temp=int(round(s._air_temp)),
@@ -239,6 +251,12 @@ class MockPicoSerial:
             water_ec=s._pod_ec,
             water_light=s._pod_light,
             bottom_contact=s._pod_bottom,
+            enc_temp=round(s._enc_temp, 1),
+            enc_humidity=round(s._enc_humidity, 1),
+            elec_batt_v=round(s.elec_batt_v, 2),
+            elec_batt_pct=self._pct(s.elec_batt_v, 9.0, 12.6),    # 3S range
+            winch_batt_v=round(s.winch_batt_v, 2),
+            winch_batt_pct=self._pct(s.winch_batt_v, 12.0, 16.8),  # 4S range
         )
 
     def on_telemetry(self, callback):

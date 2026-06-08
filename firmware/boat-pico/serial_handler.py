@@ -83,11 +83,19 @@ def send_tel_with_seq(seq, lat, lon, heading, speed, batt_v, batt_pct, hull,
         mt_l, mt_r, health))
 
 
-def send_env(air_t, air_h, water_t, water_ec, water_light, bottom):
-    """Send unsolicited environment telemetry (ENV). Seq=0."""
-    _send("ENV,0,%d,%d,%.1f,%.1f,%d,%d" % (
+def send_env(air_t, air_h, water_t, water_ec, water_light, bottom,
+             enc_t=-999.0, enc_h=-1.0, elec_v=0.0, elec_pct=0,
+             winch_v=0.0, winch_pct=0):
+    """Send unsolicited environment telemetry (ENV). Seq=0.
+
+    Fields 0-5 are ENV v1.0 (open-air SHT41 #A + water + bottom). The trailing
+    six are the v1.1 appendix: enclosure SHT41 #B temp/humidity, then the 3S
+    electronics and 4S winch battery rails. Defaults keep v1.0 callers working.
+    """
+    _send("ENV,0,%d,%d,%.1f,%.1f,%d,%d,%.1f,%.1f,%.2f,%d,%.2f,%d" % (
         air_t, air_h, water_t, water_ec, water_light,
-        1 if bottom else 0))
+        1 if bottom else 0,
+        enc_t, enc_h, elec_v, elec_pct, winch_v, winch_pct))
 
 
 def send_pod_data(seq, water_t, ec, light, bottom, leak):
