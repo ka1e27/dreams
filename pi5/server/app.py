@@ -592,6 +592,7 @@ _NO_CAM_JPEG = base64.b64decode(
 _latest_health: dict | None = None
 _health_task: asyncio.Task[None] | None = None
 _cam_fps: float = 0.0  # rolling estimate updated by the /video streamer
+_net_prev: tuple[int, int, float] | None = None  # (bytes_sent, bytes_recv, monotonic)
 
 
 def _http_key_ok(request: Request) -> bool:
@@ -661,16 +662,35 @@ async def _gather_health() -> dict:
     must never tear down /ws/health — that would make the dashboard
     reconnect-loop (open → error → close → retry).
     """
+    global _net_prev
     cpu_percent = ram_used = ram_total = disk_used = disk_total = None
+    swap_used = swap_total = uptime_s = proc_count = load_avg = None
+    net_rx_kbps = net_tx_kbps = None
     try:
         import psutil
         cpu_percent = psutil.cpu_percent(percpu=True)
         vm = psutil.virtual_memory()
         du = psutil.disk_usage(os.path.abspath(os.sep))
+        sw = psutil.swap_memory()
         ram_used = round((vm.total - vm.available) / 1e9, 2)
         ram_total = round(vm.total / 1e9, 2)
         disk_used = round(du.used / 1e9, 2)
         disk_total = round(du.total / 1e9, 2)
+        swap_used = round(sw.used / 1e9, 2)
+        swap_total = round(sw.total / 1e9, 2)
+        uptime_s = max(0.0, time.time() - psutil.boot_time())
+        proc_count = len(psutil.pids())
+        try:
+            load_avg = [round(x, 2) for x in psutil.getloadavg()]
+        except (OSError, AttributeError):
+            load_avg = None  # not available on this platform
+        net = psutil.net_io_counters()
+        nowm = time.monotonic()
+        if _net_prev is not None and nowm > _net_prev[2]:
+            dt = nowm - _net_prev[2]
+            net_tx_kbps = max(0.0, (net.bytes_sent - _net_prev[0]) / dt / 1024)
+            net_rx_kbps = max(0.0, (net.bytes_recv - _net_prev[1]) / dt / 1024)
+        _net_prev = (net.bytes_sent, net.bytes_recv, nowm)
     except Exception as e:  # noqa: BLE001 — psutil missing/unavailable is non-fatal
         logger.debug("psutil unavailable: %s", e)
 
@@ -691,6 +711,13 @@ async def _gather_health() -> dict:
         "ram_total_gb": ram_total,
         "disk_used_gb": disk_used,
         "disk_total_gb": disk_total,
+        "swap_used_gb": swap_used,
+        "swap_total_gb": swap_total,
+        "uptime_s": uptime_s,
+        "proc_count": proc_count,
+        "load_avg": load_avg,
+        "net_rx_kbps": round(net_rx_kbps, 1) if net_rx_kbps is not None else None,
+        "net_tx_kbps": round(net_tx_kbps, 1) if net_tx_kbps is not None else None,
         "clock_mhz": round(clock_hz / 1e6, 1) if clock_hz else None,
         "volts": volts,
         "camera_fps": round(_cam_fps, 1) if _camera is not None else None,

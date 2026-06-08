@@ -26,6 +26,45 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Added run_hardware.py (real Pico + camera entry point)
+
+**Worked on:** user has a real Pico + camera on the Pi and asked how to use them. Confirmed the gap I'd
+flagged: `run_sim.py` was the ONLY runner (mock Pico, no camera). README says "set `mode: hardware`"
+but no such key exists in config.yaml and nothing reads it. The `configure()` plumbing already accepts
+a `camera=` producer — it was just never instantiated.
+**Changed:** `run_hardware.py` (new, top-level) — hardware counterpart to run_sim.py. Wires a real
+`PicoSerial(port,baud)` (+ `connect()` + `start_heartbeat()`) and a real `CameraProducer` into
+`configure(..., simulator=None, camera=camera)`, then serves the app. Loads `pi5/config.yaml` for
+serial/camera/server/heartbeat with sane fallbacks. Degrades gracefully: camera open failure →
+`server_app._camera=None` (NO-SIGNAL placeholder); Pico connect failure → logs, keeps serving. On
+startup connects Pico + heartbeat (watchdog ESTOPs if heartbeats stop = safe), starts nav + pod;
+shutdown reverses it.
+**Result on the Pi:** `/command` shows the LIVE camera (MJPEG), real parsed Pico telemetry + working
+commands + Push-to-Pico, and real vcgencmd/psutil health — vs the simulator's placeholders.
+**Verified (Windows):** ruff clean; module imports cleanly (main() guarded). **NOT testable here** —
+no real serial/camera on this box; the connect/camera-open path only runs on the Pi. Mirrors the
+working run_sim wiring.
+**Pi prereqs documented for user:** `pip install -r pi5/requirements.txt`; `dialout`+`video` groups;
+check `/dev/ttyACM0` + `/dev/video0`; single camera is fine (stereo off).
+**Next steps:** uncommitted along with the health-metrics changes (offered to commit). Real next step
+is bench-testing run_hardware.py on the Pi; also `/pico/push` reconnect still untested on hardware.
+
+## 2026-06-07 — More health metrics on the Command Center
+
+**Worked on:** user asked for more health status points on `/command`.
+**Changed:**
+- `pi5/server/app.py` `_gather_health()` — added swap, uptime, process count, load average (1/5/15),
+  and live network throughput (↓/↑ KB/s, computed from a delta against a new `_net_prev` module
+  global). All inside the existing psutil try/except so they degrade to None if psutil is missing.
+- `pi5/server/templates/command_center.html` — new SWAP bar + vgrid rows (LOAD, UPTIME, PROCS,
+  NET ↓/↑, SDRAM V alongside CORE V); added `fmtUptime()`/`fmtRate()` JS formatters; each field
+  shows N/A when its source is unavailable.
+**Verified (sim):** ruff clean; `/health` returns the new fields with real values (uptime, procs,
+swap, net rates populate after the 2nd sample); all 7 new element ids present in the page. On the Pi,
+load avg + voltages will be real (Windows shows emulated load 0.00).
+**Next steps:** uncommitted (offered). Still open: hardware `/pico/push` test; real hardware entry
+point (live camera + Pico).
+
 ## 2026-06-07 — Added a buttons-only COMMANDS panel to /command
 
 **Worked on:** user found `/docs` (Swagger) too verbose ("I just want them to send commands"). Added a

@@ -224,9 +224,19 @@
           <div class="kv"><span class="sec-ttl">DISK</span><span class="v" id="disk-lbl">-- / -- GB</span></div>
           <div class="bar"><i id="disk-bar" style="width:0"></i></div>
         </div>
+        <div>
+          <div class="kv"><span class="sec-ttl">SWAP</span><span class="v" id="swap-lbl">-- / -- GB</span></div>
+          <div class="bar"><i id="swap-bar" style="width:0"></i></div>
+        </div>
         <div class="vgrid">
           <div class="kv"><span class="lbl">CLOCK</span><span class="v" id="clock">-- MHz</span></div>
+          <div class="kv"><span class="lbl">LOAD 1/5/15</span><span class="v" id="load">--</span></div>
+          <div class="kv"><span class="lbl">UPTIME</span><span class="v" id="uptime">--</span></div>
+          <div class="kv"><span class="lbl">PROCS</span><span class="v" id="procs">--</span></div>
+          <div class="kv"><span class="lbl">NET ↓</span><span class="v" id="net-rx">--</span></div>
+          <div class="kv"><span class="lbl">NET ↑</span><span class="v" id="net-tx">--</span></div>
           <div class="kv"><span class="lbl">CORE V</span><span class="v" id="volts">-- V</span></div>
+          <div class="kv"><span class="lbl">SDRAM V</span><span class="v" id="volts-sdram">-- V</span></div>
           <div class="kv"><span class="lbl">CAM FPS</span><span class="v" id="fps">--</span></div>
           <div class="kv"><span class="lbl">THR RAW</span><span class="v" id="thr-raw">--</span></div>
         </div>
@@ -365,6 +375,15 @@ function buildCores(n){
   }
 }
 function fmt(v, unit, d){ return (v===null||v===undefined) ? 'N/A' : v.toFixed(d===undefined?1:d)+(unit||''); }
+function fmtUptime(s){
+  if (s===null||s===undefined) return 'N/A';
+  s=Math.floor(s); const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
+  if (d) return `${d}d ${h}h`; if (h) return `${h}h ${m}m`; return `${m}m`;
+}
+function fmtRate(kbps){
+  if (kbps===null||kbps===undefined) return 'N/A';
+  return kbps>=1024 ? (kbps/1024).toFixed(1)+' MB/s' : kbps.toFixed(0)+' KB/s';
+}
 function renderHealth(h){
   lastHealth = Date.now();
   setDot('dot-health', true);
@@ -382,15 +401,27 @@ function renderHealth(h){
   const cores = h.cpu_percent || [];
   buildCores(cores.length || 0);
   cores.forEach((p,i)=>{ const el=$('cpu'+i); if(el) el.style.height = Math.max(2,Math.min(100,p)) + '%'; });
-  // ram / disk
+  // ram / disk / swap
   if (h.ram_total_gb){ $('ram-lbl').textContent = `${h.ram_used_gb} / ${h.ram_total_gb} GB`;
     $('ram-bar').style.width = (h.ram_used_gb/h.ram_total_gb*100)+'%'; }
+  else { $('ram-lbl').textContent = 'N/A'; }
   if (h.disk_total_gb){ $('disk-lbl').textContent = `${h.disk_used_gb} / ${h.disk_total_gb} GB`;
     $('disk-bar').style.width = (h.disk_used_gb/h.disk_total_gb*100)+'%'; }
+  else { $('disk-lbl').textContent = 'N/A'; }
+  if (h.swap_total_gb){ $('swap-lbl').textContent = `${h.swap_used_gb} / ${h.swap_total_gb} GB`;
+    $('swap-bar').style.width = (h.swap_used_gb/h.swap_total_gb*100)+'%'; }
+  else { $('swap-lbl').textContent = (h.swap_total_gb===0?'0 / 0 GB':'N/A'); $('swap-bar').style.width='0%'; }
   // misc
   $('clock').textContent = fmt(h.clock_mhz,' MHz',0);
+  $('load').textContent = h.load_avg ? h.load_avg.map(x=>x.toFixed(2)).join(' / ') : 'N/A';
+  $('uptime').textContent = fmtUptime(h.uptime_s);
+  $('procs').textContent = (h.proc_count===null||h.proc_count===undefined) ? 'N/A' : h.proc_count;
+  $('net-rx').textContent = fmtRate(h.net_rx_kbps);
+  $('net-tx').textContent = fmtRate(h.net_tx_kbps);
   const cv = h.volts && (h.volts.core!==undefined ? h.volts.core : null);
   $('volts').textContent = fmt(cv,' V',2);
+  const sv = h.volts && (h.volts.sdram_c!==undefined ? h.volts.sdram_c : null);
+  $('volts-sdram').textContent = fmt(sv,' V',2);
   // camera fps
   if (h.camera_fps === null || h.camera_fps === undefined){
     $('fps').textContent = 'N/A'; $('cam-fps').textContent = 'NO CAM';
