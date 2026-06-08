@@ -26,6 +26,34 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Cooperative REFLASH so auto-deploy actually works
+
+**Worked on:** the boot auto-deploy was failing — `mpremote.transport.TransportError: could not enter
+raw repl`. Diagnosed + fixed.
+**Root cause:** the Boat Pico firmware's `task_serial_rx`→`read_usb()` loop continuously reads
+`sys.stdin.buffer` (the USB-CDC command channel). That swallows mpremote's Ctrl-C/Ctrl-A REPL-entry
+handshake, so mpremote can't take the port **while the firmware is running** — which it always is by
+deploy time. No `kbd_intr(-1)` / `boot.py`; it's the raw stdin reads. So you can't mpremote-reflash a
+running Pico over the shared USB CDC. (User chose: build cooperative REFLASH.)
+**Changed (firmware):**
+- `serial_handler.py` — new `reflash_requested` flag + `REFLASH` command (ACK then set flag).
+- `main.py` — `task_serial_rx` polls the flag; on set it `motor_control.estop()` then `raise
+  SystemExit` to exit the asyncio loop to the bare REPL (frees the USB CDC for mpremote).
+**Changed (deploy + docs):**
+- `pi5/scripts/deploy_pico.py` — `_request_repl()` writes `$REFLASH,0*91` over pyserial and waits
+  1.5 s before the mpremote copy; best-effort (degrades if port busy / pyserial missing).
+- `docs/serial-protocol.md` — added §3.13 REFLASH.
+**Boot chain now:** run_hardware → deploy sends REFLASH → firmware stops+drops to REPL → mpremote cp +
+reset → fresh firmware → Pi connects.
+**CRITICAL one-time step:** the Pico currently runs OLD firmware (no REFLASH → NAKs, keeps eating
+stdin), so mpremote still fails until the REFLASH-aware firmware is installed once by hand. Reliable
+path: BOOTSEL + drag MicroPython .uf2 (wipes filesystem/old main.py) → clean REPL → run
+`python pi5/scripts/deploy_pico.py` once. Then boot auto-deploy works.
+**Verified (Windows):** ruff clean; serial_handler.py + main.py py_compile OK; REFLASH frame/checksum
+correct ($REFLASH,0*91); `_request_repl` degrades cleanly without a port; 95 tests pass. UNTESTED on
+hardware: whether `raise SystemExit` cleanly drops uasyncio to the REPL (fallback = manual wipe).
+**Next steps:** uncommitted (offered). Bench-test the REFLASH drop on the Pi.
+
 ## 2026-06-07 — Camera 10→30 fps (MJPG) + view on-Pico code from command center
 
 **Worked on:** camera was stuck at 10 fps though the sensor does 30; user also couldn't see what code

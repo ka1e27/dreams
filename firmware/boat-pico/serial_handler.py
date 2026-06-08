@@ -29,6 +29,10 @@ on_get_status = None
 _rx_buf = bytearray(256)
 _rx_pos = 0
 
+# Set True when the Pi sends REFLASH. The main loop polls this and exits the
+# async loop to the bare REPL so the USB CDC is free for mpremote to reflash.
+reflash_requested = False
+
 
 def _checksum(payload):
     """XOR checksum over payload string."""
@@ -192,6 +196,13 @@ def _dispatch(payload):
         if on_heartbeat:
             on_heartbeat()
         ack(seq, "HB")
+
+    elif cmd == "REFLASH":
+        # Pi wants to reflash us over USB. ACK, then flag the main loop to stop
+        # and drop to the REPL so mpremote can take the serial port.
+        ack(seq, "REFLASH")
+        global reflash_requested
+        reflash_requested = True
 
     elif cmd == "SET_TRIM" and len(parts) >= 3:
         try:

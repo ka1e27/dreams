@@ -353,6 +353,32 @@ $STATUS,<seq>,<state>,<health_flags>,<safety_overrides>*<cs>\n
 
 ---
 
+### 3.13 REFLASH — Drop to REPL for Firmware Upload
+
+Tells the Boat Pico to stop its async loop and return to the bare MicroPython
+REPL so the Pi 5 can reflash it over USB with `mpremote`. Without this, the
+firmware continuously reads the USB-CDC channel and `mpremote` can't enter the
+raw REPL ("could not enter raw repl"). On receipt the Pico ACKs, **stops the
+motors**, then exits to the REPL; the Pi must re-establish the link afterwards
+(the firmware is no longer running until it is reflashed and reset).
+
+```
+$REFLASH,<seq>*<cs>\n
+```
+
+**Response:**
+```
+$ACK,<seq>,REFLASH*<cs>\n
+```
+
+Used by `pi5/scripts/deploy_pico.py` (and `run_hardware.py` on startup): it
+sends REFLASH over raw serial, waits ~1.5 s for the Pico to drop out, then runs
+`mpremote fs cp` + `reset`. Note: firmware that predates this command will NAK
+it (`UNKNOWN`) and keep running — so the REFLASH-aware firmware must be
+installed once by hand (Pico at a clean REPL) before auto-deploy works.
+
+---
+
 ## 4. Unsolicited Messages (Boat Pico → Pi 5)
 
 These are sent periodically or on events. They always use SEQ=0.

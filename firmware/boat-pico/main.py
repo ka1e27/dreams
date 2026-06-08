@@ -188,6 +188,14 @@ async def task_serial_rx():
             serial.read_usb()
         except:
             pass
+        if serial.reflash_requested:
+            # Pi asked to reflash us. Stop motors and exit the async loop so the
+            # USB CDC drops to the bare REPL — mpremote can then take the port.
+            try:
+                motor_control.estop()
+            except:
+                pass
+            raise SystemExit
         await asyncio.sleep(0.02)
 
 

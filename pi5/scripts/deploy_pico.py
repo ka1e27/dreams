@@ -19,6 +19,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 try:
@@ -49,6 +50,36 @@ def _default_port() -> str:
     return "/dev/ttyACM0"
 
 
+def _request_repl(port: str, baud: int = 115200) -> None:
+    """Ask a running firmware to drop to the REPL so mpremote can take the port.
+
+    Writes a ``$REFLASH,0*<xor>`` frame over raw serial and waits for the
+    firmware to exit its async loop. Best-effort and harmless if nothing is
+    listening (e.g. the Pico is already at a fresh REPL, or runs older firmware
+    that doesn't know REFLASH — it just NAKs and keeps running, and the copy
+    below will report the usual 'could not enter raw repl' until the
+    REFLASH-aware firmware is flashed once by hand).
+    """
+    payload = "REFLASH,0"
+    cs = 0
+    for ch in payload:
+        cs ^= ord(ch)
+    frame = ("$%s*%d\n" % (payload, cs)).encode()
+    try:
+        import serial  # pyserial (dependency of pyserial-asyncio)
+    except ImportError:
+        logger.warning("pyserial not available — skipping REPL request")
+        return
+    try:
+        with serial.Serial(port, baud, timeout=1) as s:
+            s.write(frame)
+            s.flush()
+        logger.info("Sent REFLASH — waiting for firmware to drop to REPL…")
+        time.sleep(1.5)
+    except Exception as e:  # noqa: BLE001 — best-effort; try mpremote regardless
+        logger.warning("REPL request failed (%s) — trying mpremote anyway", e)
+
+
 def _run(args: list[str], timeout: float = 60.0) -> tuple[bool, str]:
     try:
         proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
@@ -72,6 +103,9 @@ def deploy(port: str, reset: bool = True) -> bool:
         return False
 
     logger.info("Deploying %d firmware files to Pico on %s", len(files), port)
+    # Ask any running firmware to drop to the REPL first, so mpremote can take
+    # the USB-CDC port (the firmware otherwise consumes the bytes mpremote needs).
+    _request_repl(port)
     ok, msg = _run([*_MPREMOTE, "connect", port, "fs", "cp", *map(str, files), ":"])
     if not ok:
         logger.warning("Batch copy failed (%s) — retrying file-by-file", msg)
