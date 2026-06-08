@@ -26,6 +26,26 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Committed and pushed the V2 working tree
+
+**Worked on:** "is everything pushed?" → it wasn't (local main was even with origin, but a large
+uncommitted/untracked V2 tree remained). Scanned for secrets, excluded junk, then committed + pushed.
+**Secret scan:** clean — all matches were API-key *handling* (var names, FastAPI deps) and config
+templates with empty values (`api_key: ""`, set via env var). No real secrets committed.
+**Changed:**
+- `.gitignore` — added KiCad local/temp artifacts (`*.lck`, `~*.lck`, `*.kicad_prl`, `.history/`,
+  `fp-info-cache`, `*-backups/`) so they're never committed.
+- Committed `14294ac` and pushed to `origin/main`: CLAUDE.md, the V2 docs set
+  (changelog_and_decisions, hardware_changes_v1_to_v2, pcb_design_notes, session_journal),
+  `Boat_PCB/` (kicad_pcb/pro/sch + report.txt), `firmware/boat-pico/status_led.py`, the two new
+  Pi5 loop tests, edits to cloud/api, pin_map, main.py, network.py, stereo.py, run_sim.py, and the
+  `docs/wiring_diagram.html` deletion. Also committed `.claude/hooks/journal_reminder.ps1`
+  (settings.local.json stays gitignored).
+**Excluded deliberately:** KiCad lock files, `Boat_PCB-backups/*.zip`, `Boat_PCB/.history/`,
+`Boat_PCB.kicad_prl` — local/regenerable artifacts.
+**Next steps:** this journal entry itself is committed in a follow-up. The two flagged hardware
+discrepancies (battery dividers/GP28, winch power source) remain open.
+
 ## 2026-06-01 — Reviewed firmware/docs wiring against the Boat_PCB schematic
 
 **Worked on:** verified the documented Pico pinout (`docs/pin_map.md`, firmware docstrings,
