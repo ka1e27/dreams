@@ -127,16 +127,31 @@ class PicoSerial:
     async def connect(self) -> None:
         """Open the serial connection and start the read loop."""
         try:
-            self._reader, self._writer = await serial_asyncio.open_serial_connection(
-                url=self._port, baudrate=self._baud
-            )
-            self._connected = True
+            await self._open_streams()
             self._read_task = asyncio.create_task(self._read_loop())
             logger.info("Connected to Boat Pico on %s @ %d", self._port, self._baud)
         except Exception as e:
             self._connected = False
             logger.error("Failed to connect to %s: %s", self._port, e)
             raise
+
+    async def _open_streams(self) -> None:
+        """Open (or re-open) the underlying serial streams."""
+        self._reader, self._writer = await serial_asyncio.open_serial_connection(
+            url=self._port, baudrate=self._baud
+        )
+        self._connected = True
+
+    async def _close_streams(self) -> None:
+        """Drop the serial streams so the read loop will re-open them."""
+        self._connected = False
+        if self._writer is not None:
+            try:
+                self._writer.close()
+            except Exception:  # noqa: BLE001
+                pass
+        self._reader = None
+        self._writer = None
 
     async def disconnect(self) -> None:
         """Close the serial connection."""
@@ -210,26 +225,37 @@ class PicoSerial:
         )
 
     async def _read_loop(self) -> None:
-        """Background task: read lines from serial and dispatch."""
-        assert self._reader is not None
+        """Background task: read lines from serial, dispatch, and self-heal.
+
+        If the link drops — the Pico resets/re-enumerates on a reflash, a power
+        glitch, or another process grabs the port — reopen it with a backoff
+        instead of tight-looping the same read error.
+        """
+        backoff = 0.5
         while True:
             try:
+                if self._reader is None:
+                    await self._open_streams()
+                    logger.info("Reconnected to Boat Pico on %s", self._port)
+                    backoff = 0.5
                 raw_line = await self._reader.readline()
                 if not raw_line:
-                    continue
+                    # Empty read = EOF; the device most likely went away.
+                    raise ConnectionError("empty read (device disconnected?)")
                 line = raw_line.decode("ascii", errors="ignore").strip()
-                if not line:
-                    continue
-                msg = parse_frame(line)
-                if msg is None:
-                    logger.debug("Bad frame: %s", line)
-                    continue
-                self._dispatch(msg)
+                if line:
+                    msg = parse_frame(line)
+                    if msg is None:
+                        logger.debug("Bad frame: %s", line)
+                    else:
+                        self._dispatch(msg)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error("Read loop error: %s", e)
-                await asyncio.sleep(0.1)
+                await self._close_streams()
+                logger.warning("Serial link lost (%s) — retrying in %.1fs", e, backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 5.0)
 
     def _dispatch(self, msg: ParsedFrame) -> None:
         """Route a parsed message to the appropriate handler."""

@@ -427,8 +427,10 @@ body::after{
 
     <div class="panel">
       <div class="panel-title">Controls</div>
-      <div class="data-row"><span class="data-label">Sim Speed</span><span class="speed-val"><span id="speedVal">1.5</span> m/s</span></div>
-      <div class="speed-control"><input type="range" id="speedSlider" min="0.5" max="20" step="0.5" value="1.5"></div>
+      <div id="simSpeedControl">
+        <div class="data-row"><span class="data-label">Sim Speed</span><span class="speed-val"><span id="speedVal">1.5</span> m/s</span></div>
+        <div class="speed-control"><input type="range" id="speedSlider" min="0.5" max="20" step="0.5" value="1.5"></div>
+      </div>
       <div class="data-row" style="margin-top:.5rem"><span class="data-label">Cruise Throttle</span><span class="speed-val"><span id="thrVal">40</span>%</span></div>
       <div class="speed-control"><input type="range" id="thrSlider" min="10" max="100" step="5" value="40"></div>
       <div class="data-row" style="margin-top:.5rem"><span class="data-label">Winch Down</span><span class="speed-val"><span id="winchDVal">50</span></span></div>
@@ -560,6 +562,7 @@ const speedValEl = $('speedVal');
 // Load current speed
 fetch('/api/sim/speed').then(r=>r.json()).then(d=>{
   if(d.max_speed_mps!=null){slider.value=d.max_speed_mps;speedValEl.textContent=d.max_speed_mps;}
+  else{const el=document.getElementById('simSpeedControl');if(el)el.style.display='none';}  // hardware mode — no simulator
 }).catch(()=>{});
 
 function bindSlider(sliderId, valId, endpoint, payloadFn, toastFn, loadKey){

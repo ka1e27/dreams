@@ -26,6 +26,28 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Self-healing serial read loop + hide Sim Speed on hardware
+
+**Worked on:** user hit a tight error loop on push: `Read loop error: device reports readiness to
+read but returned no data (device disconnected or multiple access on port?)` repeating ~every 100 ms;
+also asked to drop the Sim Speed control on hardware.
+**Cause:** `PicoSerial._read_loop` caught the disconnect exception, slept 0.1 s, and retried the SAME
+dead connection forever — never reconnecting (and `... multiple access on port` suggests it can also
+fire if a 2nd process, e.g. a manual `deploy_pico.py`, grabs the port while run_hardware holds it).
+**Changed:**
+- `pi5/comms/pico_serial.py` — read loop self-heals: on any read error it closes the streams and
+  re-opens with backoff (0.5→5 s), and treats an empty read as a disconnect. Added `_open_streams()` /
+  `_close_streams()`; `connect()` uses them. So a Pico reset/reflash/port-contention recovers cleanly
+  instead of spamming.
+- `pi5/server/static/index.html` — wrapped the Sim Speed row+slider in `#simSpeedControl` and hide it
+  when `/api/sim/speed` returns null (hardware mode, `_sim is None`). Other control sliders stay.
+**Verified (sim/Windows):** ruff clean; PicoSerial imports with new helpers; 95 tests pass; dashboard
+serves with `#simSpeedControl`; `/api/sim/speed` returns 1.5 in sim (control visible). The reconnect
+path is Pi-only (sim uses MockPicoSerial, no read loop) — reasoned, not runtime-tested.
+**Note for user:** don't run a manual `deploy_pico.py` while `run_hardware.py` is up — two processes on
+/dev/ttyACM0 is itself a cause of that error. Stop run_hardware first, or use the command center push.
+**Next steps:** uncommitted at write time (committing now).
+
 ## 2026-06-08 — Non-blocking Pico serial read (likely fixes HB timeout AND REFLASH)
 
 **On-Pi test results:** standalone `deploy_pico.py` worked from a clean REPL (all 11 files copied, Pico
