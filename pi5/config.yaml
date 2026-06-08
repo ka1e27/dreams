@@ -144,6 +144,10 @@ camera:
     # Highlighted (amber) classes — covers both the COCO fallback ('boat','person')
     # and the maritime model ('vessel','kayak'). Others are drawn muted.
     highlight_classes: ["vessel", "person", "kayak", "boat"]
+    # Default class for the lock reticle / radar bar to follow. "" = AUTO (the
+    # highest-confidence highlighted target). Changeable live from the command
+    # center's TRACK picker (which also retargets the radar bar).
+    track_class: ""
 
 avoidance:
   # COCO class id for "boat" — used by the YOLO detector to filter

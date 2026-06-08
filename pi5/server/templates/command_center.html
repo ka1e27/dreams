@@ -30,7 +30,7 @@
                      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
     background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
   .app{position:relative;z-index:1;display:grid;gap:12px;padding:12px;min-height:100vh;
-    grid-template-rows:auto 1fr auto 1fr auto auto;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
+    grid-template-rows:auto 1fr auto auto auto 1fr;grid-template-columns:1fr;max-width:1700px;margin:0 auto}
   /* ---- header ---- */
   header{display:flex;align-items:center;justify-content:space-between;
     padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
@@ -265,6 +265,9 @@
           <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
         </span>
         <label class="tg"><input type="checkbox" id="detOn"> DETECT</label>
+        <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
+          title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
+          <option value="">AUTO</option></select></span>
         <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
         <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
           title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
@@ -342,38 +345,6 @@
     </div>
     <div class="boat-flags" id="boat-flags"></div>
     <div class="boat-alert" id="boat-alert"></div>
-  </div>
-
-  <!-- PICO TERMINAL -->
-  <div class="panel">
-    <div class="ttl"><span>⌨ PICO TERMINAL</span>
-      <span class="lbl">RP2040 · USB CDC · 115200</span></div>
-    <div class="pico-inner">
-      <!-- editor -->
-      <div class="editor-col">
-        <div id="editor"></div>
-        <div class="editor-bar">
-          <button id="push" onclick="pushToPico()">▲ PUSH TO PICO</button>
-          <select id="filename" title="target file on Pico">
-            <option value="main.py">main.py</option>
-          </select>
-          <button class="ghost" onclick="loadFiles()">⟳ files</button>
-          <button class="ghost" onclick="loadFromPico()">⤓ view on pico</button>
-          <span style="flex:1"></span>
-          <span class="lbl" id="push-note"></span>
-        </div>
-      </div>
-      <!-- monitor -->
-      <div class="mon-col">
-        <div class="term" id="term"></div>
-        <div class="term-bar">
-          <input class="cmd" id="cmd" type="text" autocomplete="off" spellcheck="false"
-                 placeholder="command (e.g. SET_THR 20 20 · ESTOP · REQ_TEL)">
-          <button onclick="sendCmd()">SEND</button>
-          <button class="ghost" onclick="clearTerm()">CLEAR</button>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- RADAR BAR / STEPPER -->
@@ -467,6 +438,38 @@
         <input id="gotoLon" class="cmd-in" type="number" step="any" placeholder="lon">
         <button class="cbtn" onclick="sendGoto()">GO TO</button>
         <button class="cbtn" onclick="cmd('rth','Returning home')">RTH</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PICO TERMINAL (bottom of page) -->
+  <div class="panel">
+    <div class="ttl"><span>⌨ PICO TERMINAL</span>
+      <span class="lbl">RP2040 · USB CDC · 115200</span></div>
+    <div class="pico-inner">
+      <!-- editor -->
+      <div class="editor-col">
+        <div id="editor"></div>
+        <div class="editor-bar">
+          <button id="push" onclick="pushToPico()">▲ PUSH TO PICO</button>
+          <select id="filename" title="target file on Pico">
+            <option value="main.py">main.py</option>
+          </select>
+          <button class="ghost" onclick="loadFiles()">⟳ files</button>
+          <button class="ghost" onclick="loadFromPico()">⤓ view on pico</button>
+          <span style="flex:1"></span>
+          <span class="lbl" id="push-note"></span>
+        </div>
+      </div>
+      <!-- monitor -->
+      <div class="mon-col">
+        <div class="term" id="term"></div>
+        <div class="term-bar">
+          <input class="cmd" id="cmd" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="command (e.g. SET_THR 20 20 · ESTOP · REQ_TEL)">
+          <button onclick="sendCmd()">SEND</button>
+          <button class="ghost" onclick="clearTerm()">CLEAR</button>
+        </div>
       </div>
     </div>
   </div>
@@ -891,10 +894,28 @@ function postCamera(body){
       body: JSON.stringify(body) }).catch(()=>{});
   }, 150);
 }
+// Seed classes so the picker is usable before a model loads (covers the COCO
+// fallback + the maritime model labels). The loaded model's real classes, when
+// present, take over. AUTO = let the overlay pick the best highlighted target.
+const DEFAULT_TRACK_CLASSES = ['boat','person','vessel','kayak','buoy','dock','debris'];
+function populateTrackClasses(classes, current){
+  const sel = $('trackClass');
+  const list = (classes && classes.length) ? classes.slice() : DEFAULT_TRACK_CLASSES.slice();
+  const cur = current || '';
+  if (cur && !list.includes(cur)) list.push(cur);   // keep an out-of-list choice visible
+  // skip a rebuild if nothing changed (avoids clobbering an open dropdown)
+  const want = 'AUTO|' + list.join('|');
+  if (sel.dataset.sig === want){ sel.value = cur; return; }
+  sel.dataset.sig = want;
+  sel.innerHTML = '<option value="">AUTO</option>'
+    + list.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = cur;
+}
 async function loadCameraControls(){
   try{
     const c = await (await fetch('/api/camera', { headers: apiHeaders() })).json();
     $('detOn').checked = !!c.detection_enabled;
+    populateTrackClasses(c.classes, c.track_class);
     if (c.detect_max_fps != null){ $('detFps').value = c.detect_max_fps; $('detFpsV').textContent = c.detect_max_fps; }
     if (c.conf != null){ $('conf').value = c.conf; $('confV').textContent = Number(c.conf).toFixed(2); }
     if (c.jpeg_quality != null){ $('jq').value = c.jpeg_quality; $('jqV').textContent = c.jpeg_quality; }
@@ -910,6 +931,11 @@ async function loadCameraControls(){
   }catch(e){}
 }
 $('detOn').addEventListener('change', () => postCamera({ detection_enabled: $('detOn').checked }));
+$('trackClass').addEventListener('change', () => {
+  const v = $('trackClass').value;
+  postCamera({ track_class: v });
+  toast(v ? ('◎ Tracking ' + v) : '◎ Tracking AUTO (best target)', true);
+});
 $('detFps').addEventListener('input', () => { $('detFpsV').textContent = $('detFps').value; postCamera({ detect_max_fps: parseFloat($('detFps').value) }); });
 $('imgsz').addEventListener('change', () => postCamera({ imgsz: parseInt($('imgsz').value) }));
 $('conf').addEventListener('input', () => { $('confV').textContent = Number($('conf').value).toFixed(2); postCamera({ conf: parseFloat($('conf').value) }); });

@@ -87,6 +87,7 @@ def main() -> None:
         detect_max_fps=det_cfg.get("detect_max_fps", 8),
         target_classes=det_cfg.get("target_classes") or [],
         highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
+        track_class=det_cfg.get("track_class", "") or "",
     ))
 
     # Radar-bar pan stepper on the Pi 5 GPIO header (the only Pi 5 GPIO use in

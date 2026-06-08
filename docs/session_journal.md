@@ -26,6 +26,38 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Move Pico terminal to page bottom + choose which CV target to track
+
+**Worked on:** two command-center requests — (1) move the PICO TERMINAL panel to the bottom of the
+page, (2) add a way to choose which detected class the computer vision locks onto.
+**Layout (1):** reordered the `.app` grid so the terminal is the last panel (header → camera/health →
+boat health → radar → commands → **pico terminal**); `grid-template-rows` is now
+`auto 1fr auto auto auto 1fr` — the terminal keeps its `1fr` so it still scrolls internally (the prior
+scroll fix is intact). Moved the panel markup; the `@media` stack rule still covers `.pico-inner`.
+**Target picker (2) — one control drives BOTH the overlay reticle and the radar bar:**
+- `pi5/cv/vision_overlay.py` — `DetectionConfig.track_class` ("" = AUTO). `_infer()` now locks the
+  primary target onto the chosen class (and highlights it amber) when set, else keeps the old behavior
+  (highest-conf highlight class). `controls()` exposes `track_class` + `classes` (model labels for the
+  picker); `apply_controls()` accepts `track_class` (treats ""/"AUTO" as auto). New `class_names()`.
+- `pi5/cv/radar_tracker.py` — `set_track_class(label)` (thread-safe); `_best_target()` filters to the
+  chosen class when set, else `priority_classes`; `status()` reports `track_class`.
+- `pi5/server/app.py` — `POST /api/camera` also calls `_radar.set_track_class()` when `track_class` is
+  in the payload, so picking a class retargets the bar too (guarded; never 500s). `_camera_state()`
+  already merges `controls()`, so the picker fields flow to the UI.
+- `pi5/server/templates/command_center.html` — TRACK `<select>` in the camera control bar (next to
+  DETECT); `populateTrackClasses()` fills it from `controls().classes` (falls back to a maritime+COCO
+  seed so it's usable in sim/before a model loads), preserves selection; change handler POSTs
+  `track_class` + toasts.
+- `run_hardware.py` + `pi5/config.yaml` — plumb/document a default `camera.detection.track_class: ""`.
+**Verified (sim/Windows):** ruff clean on `pi5 run_hardware.py`; py_compile OK; **95 tests pass**;
+functional check — overlay picks person under AUTO, switches to boat / buoy when chosen (and highlights
+it), reverts on AUTO; radar `_best_target` follows the chosen class and `status.track_class` updates.
+Booted `run_sim`: `/command` serves the TRACK picker + `populateTrackClasses` and the terminal panel is
+last; `POST /api/camera {track_class:boat}` returns 200 (sim has no overlay/radar, so it's a graceful
+no-op). **Real lock-on/bar-slew behavior is Pi-only (camera + YOLO + stepper) and UNTESTED on hardware.**
+**Next steps:** uncommitted (offer). On the Pi: with a model + a target in frame, confirm the TRACK
+picker changes the cyan reticle/◎TRACKING badge to the chosen class and that the radar bar slews to it.
+
 ## 2026-06-08 — Maritime YOLOv8 fine-tuning pipeline (ml/) + ONNX inference backend on the Pi
 
 **Worked on:** implemented `~/Downloads/DREAMS_maritime_ml_instruction.md` — a laptop/Colab pipeline

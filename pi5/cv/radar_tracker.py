@@ -45,6 +45,7 @@ class RadarTracker:
         self.priority = set(priority_classes or ["boat", "person"])
         self.lost_timeout_s = float(lost_timeout_s)
 
+        self._track_class = ""   # operator-chosen single class; "" = use self.priority
         self._mode = initial_mode
         self._goto: float | None = None
         self._target_locked = False
@@ -62,6 +63,20 @@ class RadarTracker:
         with self._lock:
             self._mode = mode
             if mode != TRACK:
+                self._target_locked = False
+                self._target_info = None
+
+    def set_track_class(self, label: str | None) -> None:
+        """Restrict tracking to one class label (keeps the bar following the same
+        target the operator picked for the vision overlay). "" / None / "AUTO"
+        restores the default priority_classes set."""
+        tc = str(label or "").strip()
+        if tc.upper() == "AUTO":
+            tc = ""
+        with self._lock:
+            self._track_class = tc
+            # Dropping the lock lets the next loop re-acquire against the new class.
+            if tc:
                 self._target_locked = False
                 self._target_info = None
 
@@ -95,6 +110,7 @@ class RadarTracker:
             mode = self._mode
             locked = self._target_locked
             info = dict(self._target_info) if self._target_info else None
+            track_class = self._track_class
         # While scanning the stepper reports SCANNING; otherwise mirror our mode.
         state = "SCANNING" if mode == SCAN else mode
         return {
@@ -105,6 +121,7 @@ class RadarTracker:
             "mode": mode,
             "target_locked": locked,
             "target": info,                       # {label, conf} when locked
+            "track_class": track_class,           # "" = auto (priority_classes)
             "limits": s.get("limits"),            # manual travel range
             "sweep": [self.sweep_min, self.sweep_max],   # auto-scan range
             "has_slip_ring": s.get("has_slip_ring"),
@@ -203,10 +220,14 @@ class RadarTracker:
             return []
 
     def _best_target(self):
-        """Highest-confidence box whose label is a priority class, else None.
+        """Highest-confidence box matching the wanted classes, else None.
 
+        Wanted = the operator-chosen single class if set, else priority_classes.
         Box layout matches DetectionOverlay: (x1, y1, x2, y2, label, conf, hl).
         """
+        with self._lock:
+            tc = self._track_class
+        wanted = {tc} if tc else self.priority
         best = None
         best_conf = -1.0
         for box in self._boxes():
@@ -214,7 +235,7 @@ class RadarTracker:
                 label, conf = box[4], float(box[5])
             except (IndexError, TypeError, ValueError):
                 continue
-            if label in self.priority and conf > best_conf:
+            if label in wanted and conf > best_conf:
                 best, best_conf = box, conf
         return best
 

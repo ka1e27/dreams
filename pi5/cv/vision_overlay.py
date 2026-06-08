@@ -47,6 +47,7 @@ class DetectionConfig:
     detect_max_fps: float = 8.0
     target_classes: list[str] = field(default_factory=list)            # empty = keep all
     highlight_classes: list[str] = field(default_factory=lambda: ["boat", "person"])
+    track_class: str = ""    # lock the tracker to this one class; "" = auto (any highlight)
 
 
 class DetectionOverlay:
@@ -163,6 +164,13 @@ class DetectionOverlay:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
         }
 
+    def class_names(self) -> list[str]:
+        """Sorted unique class labels the loaded model can emit (for the UI's
+        target picker). Empty until a model is loaded."""
+        names = self._names
+        vals = names.values() if isinstance(names, dict) else names
+        return sorted({str(v) for v in vals})
+
     def controls(self) -> dict:
         return {
             "detection_enabled": self.enabled,
@@ -173,6 +181,8 @@ class DetectionOverlay:
             "backend": "onnx" if self._onnx is not None else ("ultralytics" if self._model else None),
             "model_loaded": self.available,
             "detect_fps": self.detect_fps,
+            "track_class": self._cfg.track_class,    # "" = auto
+            "classes": self.class_names(),           # available labels for the picker
         }
 
     def apply_controls(self, updates: dict) -> dict:
@@ -198,6 +208,11 @@ class DetectionOverlay:
                 self._cfg.imgsz = max(32, int(round(v / 32)) * 32)
             except (TypeError, ValueError):
                 pass
+        if "track_class" in updates:
+            # Which single class the lock reticle / primary target follows.
+            # "" or "AUTO" → auto (highest-confidence highlight class).
+            tc = str(updates["track_class"] or "").strip()
+            self._cfg.track_class = "" if tc.upper() == "AUTO" else tc
         return self.controls()
 
     # -- detection loop ----------------------------------------------------- #
@@ -265,16 +280,21 @@ class DetectionOverlay:
         primary_conf = -1.0
         target = set(self._cfg.target_classes)
         highlight = set(self._cfg.highlight_classes)
+        track_cls = (self._cfg.track_class or "").strip()
         for x1, y1, x2, y2, label, conf in raw:
             if target and label not in target:
                 continue
-            is_hl = label in highlight
+            # Highlight the configured classes; when a specific track class is
+            # chosen, highlight it too so the picked target is always visible.
+            is_hl = label in highlight or (track_cls != "" and label == track_cls)
             entry = (x1, y1, x2, y2, label, conf, is_hl)
             boxes.append(entry)
             dets.append({"label": label, "confidence": round(conf, 3)})
-            # The tracked object = highest-confidence highlight-class box. This
-            # matches what radar_tracker treats as its priority target.
-            if is_hl and conf > primary_conf:
+            # The tracked object: if the operator picked a class, lock onto the
+            # highest-confidence box of THAT class; otherwise fall back to the
+            # highest-confidence highlight-class box (what radar_tracker uses).
+            is_candidate = (label == track_cls) if track_cls else is_hl
+            if is_candidate and conf > primary_conf:
                 primary, primary_conf = entry, conf
         return boxes, dets, primary
 

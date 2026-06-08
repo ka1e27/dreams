@@ -972,7 +972,8 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
     """Adjust the camera feed / detection at runtime.
 
     Accepts any subset of: jpeg_quality (20-95), stream_fps (1-60),
-    detection_enabled (bool), detect_max_fps (0.5-30), conf (0.05-0.95).
+    detection_enabled (bool), detect_max_fps (0.5-30), conf (0.05-0.95),
+    imgsz (160-640), track_class (class label to lock onto, "" = auto).
     Capture resolution / device / camera FPS are set in config.yaml (restart).
     """
     global _jpeg_quality, _stream_fps_cap
@@ -988,6 +989,12 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
             pass
     if _overlay is not None:
         _overlay.apply_controls(payload)
+    # Keep the radar bar tracking the same class the operator picked for vision.
+    if "track_class" in payload and _radar is not None:
+        try:
+            _radar.set_track_class(payload["track_class"])
+        except Exception:  # noqa: BLE001 — never let the UI control 500
+            pass
     return _camera_state()
 
 
