@@ -6,14 +6,14 @@ with a MockPicoSerial, and launches the FastAPI server on port 8080.
 Usage:
     python run_sim.py
 """
-import asyncio
 import logging
+
 import uvicorn
 
-from pi5.navigation.simulator import BoatSimulator
-from pi5.navigation.navigator import Navigator
 from pi5.comms.pod_bridge import PodBridge
 from pi5.navigation.mission_manager import MissionManager
+from pi5.navigation.navigator import Navigator
+from pi5.navigation.simulator import BoatSimulator
 from pi5.server.app import app, configure
 
 logging.basicConfig(

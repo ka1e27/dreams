@@ -37,3 +37,11 @@ upload_buffer.json
 
 # Docker
 pgdata/
+
+# KiCad (local/temp artifacts)
+*.lck
+~*.lck
+*.kicad_prl
+.history/
+fp-info-cache
+*-backups/

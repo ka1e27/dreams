@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import os
 
+from models import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from .models import Base
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",

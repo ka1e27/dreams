@@ -15,6 +15,7 @@ Pin map:
   GP0/GP1   — DEAD, do not use
   GP4/GP5   — UART1 (GPS M10Q + Pod, shared bus, 9600 baud)
   GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
+  GP10      — Status NeoPixel (WS2812, 1 pixel)
   GP12/GP13 — UART0 (VESC master, 115200 baud)
   GP14      — Winch motor ESC PWM (50 Hz)
   GP15      — SBUS receiver input (PIO software UART)
@@ -37,6 +38,7 @@ import serial_handler as serial
 import watchdog
 import vesc
 import sbus
+import status_led
 
 
 # ---- Health flags (6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD) ----
@@ -420,6 +422,46 @@ async def task_watchdog():
         await asyncio.sleep(1)
 
 
+# ---- Status LED ----
+
+def _compute_led_mode():
+    """Derive NeoPixel mode from current state and active alerts.
+
+    Priority: ESTOP > CRIT > RC (with SBUS warn) > WARN > ACTIVE > IDLE.
+    """
+    rc, estop = motor_control.get_state()
+    if estop:
+        return "ESTOP"
+    if (sensors.hull_leak_left or sensors.hull_leak_right
+            or pod_uart.leak_detected
+            or sensors.is_prop_critical() or sensors.is_elec_critical()
+            or vesc.max_motor_temp() >= 85.0):
+        return "CRIT"
+    if rc:
+        if not sbus.is_link_alive():
+            return "WARN"
+        return "RC"
+    if (sensors.is_prop_low() or sensors.is_elec_low()
+            or vesc.max_motor_temp() >= 70.0
+            or not gps.is_healthy() or not compass.is_healthy()
+            or (pod_uart.pod_ok and not pod_uart.is_healthy())):
+        return "WARN"
+    if watchdog.is_alive():
+        return "ACTIVE"
+    return "IDLE"
+
+
+async def task_status_led():
+    """Update the status NeoPixel at ~20 Hz."""
+    while True:
+        try:
+            status_led.set_mode(_compute_led_mode())
+            status_led.update(time.ticks_ms())
+        except:
+            pass
+        await asyncio.sleep(0.05)
+
+
 # ---- UART1 shared reader (GPS + Pod on same bus) ----
 
 async def task_uart1_reader():
@@ -466,6 +508,7 @@ async def main():
     """Initialise hardware and start all async tasks."""
     print("Boat Pico v6.0 (VESC + BNO085 + dual battery)")
 
+    status_led.init()
     motor_control.init()
     gps.init()
     imu_ok = compass.init()
@@ -498,6 +541,7 @@ async def main():
     if imu_ok:
         print("  I2C scan: %s" % [hex(a) for a in compass.scan_bus()])
     print("  SBUS: PIO GP%d %s" % (sbus.SBUS_PIN, "OK" if sbus_ok else "FAIL"))
+    print("  Status LED: NeoPixel GP%d" % status_led.PIN)
     print("  DHT11: GP16")
     print("  Hull: GP17(L) GP18(R)")
     print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)")
@@ -519,6 +563,7 @@ async def main():
         task_telemetry_ext(),
         task_env_telemetry(),
         task_watchdog(),
+        task_status_led(),
     )
 
 asyncio.run(main())

@@ -35,6 +35,7 @@ Source-of-truth for each row:
 | GP5 | RX | UART1 RX (shared GPS+pod bus) | u-blox M10Q GPS / Pod Pico | UART · 9600 8N1 | JST-GH 4-pin | `machine.UART` | `gps.init` → `UART(1, …, rx=Pin(5))` |
 | GP8 | SDA | I²C0 data | BNO085 IMU @ 0x4A | I²C · 400 kHz | JST-SH 4-pin | `machine.I2C` | `compass.init` → `I2C(0, sda=Pin(8))` |
 | GP9 | SCL | I²C0 clock | BNO085 IMU @ 0x4A | I²C · 400 kHz | JST-SH 4-pin | `machine.I2C` | `compass.init` → `I2C(0, scl=Pin(9))` |
+| GP10 | OUT | Status NeoPixel (WS2812, 1 px) | WS2812 indicator | Single-wire (800 kHz) | 3-pin JST-PH (5 V / GND / DIN) | `neopixel.NeoPixel` | `status_led.PIN` |
 | GP12 | TX | UART0 TX → VESC master | VESC master (CAN-forwards to slave) | UART · 115200 8N1 | JST-PH 4-pin (VESC standard) | `machine.UART` | `vesc._TX_PIN` |
 | GP13 | RX | UART0 RX ← VESC master | VESC master | UART · 115200 8N1 | JST-PH 4-pin | `machine.UART` | `vesc._RX_PIN` |
 | GP14 | OUT | Winch ESC PWM | Winch ESC (hobby) | PWM · 50 Hz · 1–2 ms pulse | 3-pin servo header | `machine.PWM` | `motor_control.MW_PIN` |

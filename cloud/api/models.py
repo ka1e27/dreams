@@ -1,8 +1,6 @@
 """SQLAlchemy models with PostGIS geometry columns."""
 from __future__ import annotations
 
-import datetime
-
 from geoalchemy2 import Geometry
 from sqlalchemy import Column, DateTime, Float, Index, Integer, String
 from sqlalchemy.orm import DeclarativeBase
