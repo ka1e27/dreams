@@ -117,10 +117,13 @@ camera:
   # Capture settings (CameraProducer). Changing these needs a restart.
   width: 640
   height: 480
-  fps: 10
+  fps: 30            # capture rate; the camera must support it at this resolution
+  use_mjpg: true     # request MJPG from the camera — far faster over USB than raw
+                     # YUYV and usually required to actually hit 30 fps
   # ---- Command-center video feed (runtime-adjustable from /command) ----
-  # Stream publish-rate cap (JPEG encode/send). Lower = lighter CPU.
-  stream_fps: 15
+  # Stream publish-rate cap (JPEG encode/send). Lower = lighter CPU. Capped to
+  # the capture rate above; raise/lower live with the STREAM FPS slider.
+  stream_fps: 30
   # MJPEG encode quality 0-100.
   jpeg_quality: 60
   # Live YOLO detection overlay drawn on the /video feed.

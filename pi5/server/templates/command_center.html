@@ -278,6 +278,7 @@
             <option value="main.py">main.py</option>
           </select>
           <button class="ghost" onclick="loadFiles()">⟳ files</button>
+          <button class="ghost" onclick="loadFromPico()">⤓ view on pico</button>
           <span style="flex:1"></span>
           <span class="lbl" id="push-note"></span>
         </div>
@@ -555,6 +556,24 @@ async function loadFiles(){
     if (!j.available) $('push-note').textContent = j.reason || 'files unavailable';
     else $('push-note').textContent = (j.files||[]).length + ' files on Pico';
   }catch(e){ $('push-note').textContent='files: error'; }
+}
+async function loadFromPico(){
+  // Read the selected file off the Pico into the editor so you can see what's
+  // actually running on it (briefly interrupts the serial link).
+  const name = $('filename').value || 'main.py';
+  $('push-note').textContent = 'reading ' + name + '…';
+  try{
+    const r = await fetch('/pico/file?name=' + encodeURIComponent(name), { headers: apiHeaders() });
+    const j = await r.json();
+    if (j.available && !j.reason){
+      if (editor) editor.setValue(j.content || '');
+      $('push-note').textContent = 'on Pico: ' + name + ' (' + (j.content || '').length + ' chars)';
+      toast('✓ loaded ' + name + ' from Pico', true);
+    } else {
+      $('push-note').textContent = j.reason || 'read failed';
+      toast('✗ ' + (j.reason || 'read failed'), false);
+    }
+  }catch(e){ toast('✗ ' + e, false); }
 }
 loadFiles();
 

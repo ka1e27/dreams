@@ -26,6 +26,29 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Camera 10→30 fps (MJPG) + view on-Pico code from command center
+
+**Worked on:** camera was stuck at 10 fps though the sensor does 30; user also couldn't see what code
+is actually on the Boat Pico.
+**FPS fix:** root cause = producer captured at `camera.fps: 10` and didn't request MJPG; the new
+stream cap was 15. Changed:
+- `pi5/config.yaml` — `camera.fps` 10→30, added `use_mjpg: true`, `stream_fps` 15→30.
+- `pi5/cv/camera.py` — `_open()` requests MJPG fourcc before resolution (far faster over USB, needed
+  for 30 fps; OpenCV falls back if unsupported), sets `BUFFERSIZE=1`, logs negotiated WxH@fps.
+  `CameraConfig` gained `use_mjpg` (default true), default fps 30.
+- `run_hardware.py` — passes `use_mjpg` through.
+Capture now 30, stream publishes up to 30 (still live-adjustable via the STREAM FPS slider).
+**View on-Pico code:** 
+- `pi5/server/app.py` — new `GET /pico/file?name=` reads a file off the Pico via `mpremote cat`
+  (same brief serial handoff as /pico/files; path-traversal guarded). Hardware-only.
+- `command_center.html` — "⤓ view on pico" button loads the selected file's real contents into the
+  Monaco editor so the operator can see exactly what's running (then edit/re-push).
+**Verified (sim/Windows):** ruff clean; `/pico/file` → hardware-only notice in sim; traversal → 400;
+button+handler present; 95 tests pass. Camera fps only confirmable on the Pi with the real camera.
+**Caveat:** view/files/push briefly release the serial link (Pico watchdog ESTOPs ~1-2s, then
+reconnects) — fine when not actively driving.
+**Next steps:** uncommitted (offered).
+
 ## 2026-06-07 — Incorporated vision (detection overlay) + adjustable FPS/camera + configurable model
 
 **Worked on:** pulled vision from the external `ka1e27/D.R.E.A.M.S-Vision-Test` repo into the command

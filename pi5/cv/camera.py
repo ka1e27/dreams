@@ -23,7 +23,8 @@ class CameraConfig:
     right_device: int = 1
     width: int = 640
     height: int = 480
-    fps: int = 10
+    fps: int = 30
+    use_mjpg: bool = True
 
 
 @dataclass
@@ -66,9 +67,22 @@ class CameraProducer:
         cap = cv2.VideoCapture(device)
         if not cap.isOpened():
             raise RuntimeError(f"camera {device} failed to open")
+        # Request MJPG before resolution/fps — far faster over USB than raw YUYV
+        # and usually required to reach 30 fps. OpenCV falls back automatically
+        # if the camera refuses it.
+        if self._cfg.use_mjpg:
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
         cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # keep only the freshest frame
+        except Exception:  # noqa: BLE001 — not all backends support it
+            pass
+        actual = cap.get(cv2.CAP_PROP_FPS)
+        logger.info("Camera %d opened: %dx%d @ %.0f fps (mjpg=%s)", device,
+                    int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), actual, self._cfg.use_mjpg)
         return cap
 
     async def stop(self) -> None:

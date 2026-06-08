@@ -70,7 +70,8 @@ def main() -> None:
         right_device=cam_cfg.get("right_device", 1),
         width=cam_cfg.get("width", 640),
         height=cam_cfg.get("height", 480),
-        fps=cam_cfg.get("fps", 10),
+        fps=cam_cfg.get("fps", 30),
+        use_mjpg=cam_cfg.get("use_mjpg", True),
     ))
 
     # Live YOLO detection overlay on the /video feed (configurable model).

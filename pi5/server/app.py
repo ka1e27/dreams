@@ -1052,6 +1052,30 @@ async def pico_files(_: str = Depends(auth.require_api_key)):
     return {"available": True, "files": files}
 
 
+@app.get("/pico/file")
+async def pico_file(name: str = "main.py", _: str = Depends(auth.require_api_key)):
+    """Read a file off the Pico (mpremote cat) so the operator can see what's
+    actually running on it. Hardware-only; briefly releases the serial link
+    (same handoff as /pico/files)."""
+    if "/" in name or "\\" in name or ".." in name:
+        return Response(status_code=400, content="invalid filename")
+    ok, reason = _pico_reflash_available()
+    if not ok:
+        return {"available": False, "name": name, "content": "", "reason": reason}
+    port = getattr(_pico, "_port", "/dev/ttyACM0")
+    was_connected = bool(getattr(_pico, "connected", False))
+    if was_connected:
+        await _pico.disconnect()
+    try:
+        rc, out = await _mpremote(port, "fs", "cat", ":" + name)
+    finally:
+        if was_connected:
+            await _reconnect_pico()
+    if not rc:
+        return {"available": True, "name": name, "content": "", "reason": out}
+    return {"available": True, "name": name, "content": out}
+
+
 @app.post("/pico/push")
 async def pico_push(payload: dict, force: bool = False,
                     _: str = Depends(auth.require_api_key)):
