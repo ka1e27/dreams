@@ -9,6 +9,10 @@ serial:
   command_timeout_ms: 2000
   # Number of retries before declaring command failure
   max_retries: 3
+  # On run_hardware.py startup, upload firmware/boat-pico/*.py to the Pico via
+  # mpremote and reset it before connecting. Set false to skip (e.g. during
+  # firmware dev when you flash manually).
+  deploy_on_start: true
 
 heartbeat:
   # Interval between HB messages sent to Boat Pico (seconds)

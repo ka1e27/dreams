@@ -15,6 +15,7 @@ rest of the dashboard still works.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -95,6 +96,21 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001 — no camera shouldn't kill the server
             logger.error("Camera failed to start (%s) — serving without video", e)
             server_app._camera = None  # so /video shows the NO-SIGNAL placeholder
+
+        # Firmware: push the latest Boat Pico code over USB and let it reboot,
+        # so the Pico is running current firmware before we open the link. The
+        # port must be free here — we connect to it just below.
+        if serial_cfg.get("deploy_on_start", True):
+            try:
+                from pi5.scripts.deploy_pico import deploy
+                loop = asyncio.get_event_loop()
+                if await loop.run_in_executor(None, deploy, port):
+                    logger.info("Pico firmware deployed; waiting for reboot…")
+                    await asyncio.sleep(2.5)
+                else:
+                    logger.error("Pico firmware deploy failed — connecting anyway")
+            except Exception as e:  # noqa: BLE001 — never block startup on deploy
+                logger.error("Pico deploy step errored: %s", e)
 
         # Pico: connect + heartbeat. Heartbeats keep the Pico's watchdog happy;
         # if they stop, the Pico ESTOPs (the safe state).

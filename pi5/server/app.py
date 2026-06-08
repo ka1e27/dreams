@@ -702,6 +702,15 @@ async def _gather_health() -> dict:
     if not any(v is not None for v in volts.values()):
         volts = None
 
+    # Pod Pico status (reached via the Boat Pico; tracked by PodBridge).
+    pod_ok = pod_leak = pod_age_s = None
+    if _pod is not None:
+        pod_ok = bool(getattr(_pod, "pod_ok", False))
+        latest = getattr(_pod, "latest", None)
+        if latest is not None:
+            pod_leak = bool(latest.leak_detected)
+            pod_age_s = round(max(0.0, time.time() - latest.timestamp), 1)
+
     return {
         "temp_c": temp_c,
         "throttled": throttled,
@@ -721,6 +730,9 @@ async def _gather_health() -> dict:
         "clock_mhz": round(clock_hz / 1e6, 1) if clock_hz else None,
         "volts": volts,
         "camera_fps": round(_cam_fps, 1) if _camera is not None else None,
+        "pod_ok": pod_ok,
+        "pod_leak": pod_leak,
+        "pod_age_s": pod_age_s,
         "timestamp": time.time(),
     }
 

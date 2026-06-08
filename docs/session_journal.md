@@ -26,6 +26,54 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-07 — Auto-deploy Boat Pico firmware on Pi boot
+
+**Worked on:** user wants the Pico's Python firmware uploaded on Pi boot (Pico is on USB). This also
+addresses the HB-timeout — a Pico without current firmware can't ACK heartbeats.
+**Changed / new:**
+- `pi5/scripts/deploy_pico.py` (new) — copies `firmware/boat-pico/*.py` to the Pico via mpremote and
+  resets it. CLI: `--port`, `--no-reset`. Reads port from config.yaml. Batch copy with per-file
+  fallback. Invokes mpremote as **`python -m mpremote`** (via `sys.executable`) so it works under
+  systemd's minimal PATH (bare `mpremote` console script wouldn't be found).
+- `pi5/scripts/__init__.py` (new) — makes scripts importable so run_hardware can call `deploy()`.
+- `run_hardware.py` — on startup, if `serial.deploy_on_start` (default true), deploys firmware +
+  waits 2.5s for reboot BEFORE opening the serial link (port must be free for mpremote). Wrapped so a
+  deploy failure never blocks startup. Added `import asyncio`.
+- `pi5/config.yaml` — new `serial.deploy_on_start: true`.
+- `pi5/services/dreams.service` (new) — systemd unit: runs run_hardware.py on boot (After
+  network-online, ExecStartPre sleep 5 for USB enumerate). Paths/User are placeholders to edit.
+**Boot chain:** power on → systemd → run_hardware → upload firmware + reset Pico → wait → connect +
+heartbeat → serve /command.
+**Verified (Windows):** ruff clean; deploy_pico finds all 11 boat-pico files; run_hardware imports the
+deploy fn; deploy() degrades cleanly (mpremote present here but no /dev/ttyACM0 → fails gracefully,
+returns False). Real upload is Pi-only.
+**User setup:** `pip install mpremote`; `sudo cp pi5/services/dreams.service /etc/systemd/system/`
+(edit paths) → `systemctl enable --now dreams`. deploy_on_start re-uploads every start (set false for
+firmware dev).
+**Next steps:** uncommitted along with the pod-light changes (offered). Bench-test on the Pi:
+firmware should upload, HB timeout should clear once the Pico runs current firmware.
+
+## 2026-06-07 — Pod Pico status light on the Command Center (+ HB-timeout explainer)
+
+**Worked on:** added a POD link light to `/command`; explained the `Timeout on HB` warning.
+**Changed:**
+- `pi5/server/app.py` `_gather_health()` — added `pod_ok` / `pod_leak` / `pod_age_s`, read from the
+  existing `PodBridge` (`_pod.pod_ok` + `_pod.latest.leak_detected`/`timestamp`). Degrades to None if
+  no pod bridge.
+- `pi5/server/templates/command_center.html` — new POD dot in the header (green=responding,
+  amber=responding+leak, red=not responding); leak also raises a prioritised red banner
+  ("POD LEAK DETECTED"). Reworked the banner logic to prioritise leak > thermal > throttle.
+**Verified (sim):** ruff clean; `/health` → `pod_ok:true, pod_leak:false, pod_age_s:1.3` after a poll;
+page has `dot-pod`.
+**HB-timeout answer (for the record):** `Timeout on HB seq=N (attempt 3/3)` = the Pi sent a heartbeat
+and got no `ACK` back within 2s × 3 retries. Firmware *does* ACK HB (`serial_handler.py:194`), so it
+means the Boat Pico isn't replying: Pico not running main.py / wrong or busy `/dev/ttyACM0` (only one
+process can own it) / framing-checksum-baud mismatch / Pico reset. The Pico side mirrors this — its
+3s watchdog ESTOPs (`CRIT HB_LOST`) if HBs stop. Diagnose: `ls /dev/ttyACM*`, `sudo fuser
+/dev/ttyACM0`, `mpremote connect /dev/ttyACM0 repl` to see boot prints; ensure nothing else holds the
+port while `run_hardware.py` runs.
+**Next steps:** uncommitted (offered). Bench-test run_hardware.py + resolve the HB link on the Pi.
+
 ## 2026-06-07 — Added run_hardware.py (real Pico + camera entry point)
 
 **Worked on:** user has a real Pico + camera on the Pi and asked how to use them. Confirmed the gap I'd

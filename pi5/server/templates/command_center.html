@@ -186,6 +186,7 @@
       <span class="lbl">PI5</span><span id="dot-health" class="dot"></span>
       <span class="lbl">CAM</span><span id="dot-cam" class="dot"></span>
       <span class="lbl">PICO</span><span id="dot-pico" class="dot"></span>
+      <span class="lbl">POD</span><span id="dot-pod" class="dot" title="Pod Pico link"></span>
     </div>
   </header>
 
@@ -430,10 +431,19 @@ function renderHealth(h){
     $('fps').textContent = h.camera_fps.toFixed(1); $('cam-fps').textContent = h.camera_fps.toFixed(1)+' FPS';
     setDot('dot-cam', true); $('nosignal').classList.remove('show');
   }
-  // warning banner
-  const danger = (h.temp_c!==null && h.temp_c>=75) ||
-                 (ts && ts!=='OK' && ts!=='N/A' && ts.indexOf('current')>=0);
-  showBanner(danger ? ('⚠ THERMAL / POWER WARNING — ' + (h.temp_c?h.temp_c.toFixed(1)+'°C · ':'') + (h.throttled||'')) : null);
+  // pod link light
+  if (h.pod_ok === null || h.pod_ok === undefined) setDot('dot-pod', false);   // no pod bridge
+  else if (h.pod_leak) setDot('dot-pod', 'warn');                              // responding but leaking
+  else if (h.pod_ok) setDot('dot-pod', true);                                  // healthy
+  else setDot('dot-pod', false);                                               // not responding
+  // warning banner (prioritised — leak is most urgent)
+  let warn = null;
+  if (h.pod_leak) warn = '⚠ POD LEAK DETECTED — retrieve the pod';
+  else if (h.temp_c !== null && h.temp_c !== undefined && h.temp_c >= 75)
+    warn = '⚠ THERMAL WARNING — ' + h.temp_c.toFixed(1) + '°C';
+  else if (ts && ts !== 'OK' && ts !== 'N/A' && ts.indexOf('current') >= 0)
+    warn = '⚠ POWER / THROTTLE — ' + h.throttled;
+  showBanner(warn);
 }
 function showBanner(msg){ const b=$('banner'); if(msg){ b.textContent=msg; b.classList.add('show'); } else b.classList.remove('show'); }
 autoWS('/ws/health', {
