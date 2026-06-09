@@ -12,6 +12,19 @@ Pi 5 GPIO → A4988 (BCM numbering):
     GPIO25 → ENABLE  (active-LOW: 0 = energised/holding, 1 = freewheel)
     GPIO8  → SLEEP   (active-LOW: 0 = zero-current sleep, 1 = awake)
 
+⚠ **RESET must be HIGH or the motor will not step.** The A4988 has *two* active-low
+control pins — SLEEP **and** RESET — and **both** must be high for STEP pulses to
+take effect. A floating/low RESET is the #1 reason an A4988 looks alive but never
+moves (no error, just silence). Handle it one of two ways:
+  • **Recommended (no extra Pi pin):** jumper the A4988's **RESET pin to its SLEEP
+    pin** on the board. SLEEP (GPIO8) then releases both together — the wake()
+    charge-pump delay below already covers the reset-recovery timing.
+  • **Or** drive RESET from a Pi GPIO by passing ``reset_pin=`` — the driver claims
+    it and holds it HIGH (released) the whole time it's energised.
+If neither is done, ``stepper_test.py`` still prints PASS (it only tracks the step
+*count* in software) but the shaft stays put. Also confirm VMOT (8–35 V motor
+supply, ~100 µF across VMOT/GND) and the VREF current limit are actually set.
+
 GPIO access uses **gpiozero** (which wraps lgpio on the Pi 5 — RPi.GPIO is
 unsupported there). If gpiozero/lgpio isn't importable or the pins can't be
 claimed (e.g. running on a laptop or in the simulator), the driver falls back
@@ -47,6 +60,7 @@ class StepperMotor:
 
     def __init__(self, step_pin: int = 23, dir_pin: int = 24,
                  enable_pin: int = 25, sleep_pin: int = 8,
+                 reset_pin: int | None = None,
                  steps_per_rev: int = 3200, max_speed_rpm: float = 10.0,
                  auto_sleep_s: float = 5.0,
                  min_deg: float = 0.0, max_deg: float = 180.0,
@@ -79,7 +93,7 @@ class StepperMotor:
         self._stop_event = threading.Event()
 
         self.mock = not _GPIO_AVAILABLE
-        self._step = self._dir = self._enable = self._sleep = None
+        self._step = self._dir = self._enable = self._sleep = self._reset = None
         if not self.mock:
             try:
                 # Raw OutputDevice + explicit values so the A4988 active-low
@@ -88,14 +102,21 @@ class StepperMotor:
                 self._dir = OutputDevice(dir_pin, initial_value=False)
                 self._enable = OutputDevice(enable_pin, initial_value=True)   # 1 = disabled
                 self._sleep = OutputDevice(sleep_pin, initial_value=True)     # 1 = awake
+                # RESET (active-low) must stay HIGH to step. Only claimed when the
+                # caller dedicates a Pi pin; otherwise RESET is expected to be
+                # jumpered to SLEEP on the board (see the module docstring).
+                if reset_pin is not None:
+                    self._reset = OutputDevice(reset_pin, initial_value=True)  # 1 = not in reset
                 self._asleep = False
             except Exception as e:  # noqa: BLE001 — no Pi / pins busy → mock
                 logger.warning("Stepper GPIO claim failed (%s) — mock mode", e)
                 self.mock = True
-        logger.info("StepperMotor init: pins step=%d dir=%d en=%d slp=%d "
+        logger.info("StepperMotor init: pins step=%d dir=%d en=%d slp=%d rst=%s "
                     "steps/rev=%d limits=[%.0f,%.0f] slip_ring=%s mock=%s",
-                    step_pin, dir_pin, enable_pin, sleep_pin, self.steps_per_rev,
-                    self.min_deg, self.max_deg, self.has_slip_ring, self.mock)
+                    step_pin, dir_pin, enable_pin, sleep_pin,
+                    reset_pin if reset_pin is not None else "jumper→SLEEP",
+                    self.steps_per_rev, self.min_deg, self.max_deg,
+                    self.has_slip_ring, self.mock)
 
     # -- low-level pin helpers --------------------------------------------- #
     def _w(self, dev, value: int) -> None:
@@ -104,8 +125,9 @@ class StepperMotor:
 
     # -- power management -------------------------------------------------- #
     def enable(self) -> None:
-        """Energise and hold position (ENABLE low, SLEEP high)."""
+        """Energise and hold position (RESET high, SLEEP high, ENABLE low)."""
         with self._lock:
+            self._w(self._reset, 1)   # release reset — STEP is ignored while low
             self._w(self._sleep, 1)
             self._w(self._enable, 0)
             self._enabled = True
@@ -312,7 +334,7 @@ class StepperMotor:
             self.sleep()
         except Exception:  # noqa: BLE001
             pass
-        for dev in (self._step, self._dir, self._enable, self._sleep):
+        for dev in (self._step, self._dir, self._enable, self._sleep, self._reset):
             try:
                 if dev is not None:
                     dev.close()

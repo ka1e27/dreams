@@ -43,6 +43,9 @@ def main() -> int:
           % (m.steps_per_rev, m.max_speed_rpm, m.auto_sleep_s, m.min_deg, m.max_deg, m.mock))
     if m.mock:
         print("  (mock mode -- no GPIO backend; verifying logic + timing only)")
+    else:
+        print("  (real GPIO -- WATCH THE BAR: it should physically move during"
+              " steps 2-8 below)")
 
     # 1. init / enable / disable
     try:
@@ -106,6 +109,37 @@ def main() -> int:
         check("cleanup releases GPIO", False, str(e))
 
     print("=== %d passed, %d failed ===" % (_passed, _failed))
+
+    # The checks above pass on software step-counting alone — they cannot tell
+    # whether the shaft actually turned. Make the verdict say which it was so a
+    # mock run is never mistaken for a working motor.
+    if m.mock:
+        on_pi = sys.platform.startswith("linux")
+        print("")
+        print("  !! MOCK MODE: NO GPIO WAS DRIVEN. The motor was never told to")
+        print("     move; the PASSes above only verify the math/timing, not motion.")
+        if on_pi:
+            print("     You're on Linux (a Pi?) but gpiozero/lgpio wasn't usable, so")
+            print("     this is almost certainly why your stepper isn't moving. Fix:")
+            print("       sudo apt install python3-lgpio")
+            print("       pip install gpiozero lgpio   # into the env running this")
+            print("     then re-run -- the config line above should read mock=False.")
+            print("=== VERDICT: NOT VERIFIED ON HARDWARE (mock on a Pi) ===")
+            return 2
+        print("     (Expected off-Pi: this was a dry run. Run it on the Pi to move"
+              " the motor.)")
+        return 0 if _failed == 0 else 1
+
+    # Real GPIO path: pins really toggled. If the bar still didn't move, it's
+    # electrical, and this test cannot detect that -- point at the usual causes.
+    print("")
+    print("  Real GPIO was driven. If the bar PHYSICALLY MOVED, you're good.")
+    print("  If it did NOT move (a passing test can't tell), check, in order:")
+    print("    1. RESET pin -- must be HIGH. Jumper A4988 RESET->SLEEP, or set")
+    print("       stepper.reset_pin in config.yaml. (Most common cause.)")
+    print("    2. VMOT -- 8-35 V motor supply present, ~100 uF cap across VMOT/GND.")
+    print("    3. VREF -- current-limit pot not turned to zero.")
+    print("    4. Coil wiring -- each pair (1A/1B, 2A/2B) not split/swapped.")
     return 0 if _failed == 0 else 1
 
 

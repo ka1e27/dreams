@@ -98,6 +98,7 @@ def main() -> None:
         dir_pin=step_cfg.get("dir_pin", 24),
         enable_pin=step_cfg.get("enable_pin", 25),
         sleep_pin=step_cfg.get("sleep_pin", 8),
+        reset_pin=step_cfg.get("reset_pin", None),  # None = RESET jumpered to SLEEP
         steps_per_rev=step_cfg.get("steps_per_rev", 3200),
         max_speed_rpm=step_cfg.get("max_rpm", 10),
         auto_sleep_s=step_cfg.get("auto_sleep_seconds", 5),

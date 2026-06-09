@@ -26,6 +26,37 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — "stepper_test.py prints PASS but motor doesn't move": honest verdict + A4988 RESET
+
+**Worked on:** user reported `pi5/cv/stepper_test.py` prints PASS on every check but the A4988-driven
+NEMA-17 (1/16 microstep) doesn't physically move. Diagnosed the misleading PASS and applied both fixes.
+**Root cause of the misleading PASS:** the test validates *software bookkeeping*, not motion. Every
+"rotate" check reads `get_position_degrees()`, derived from `self._position_steps`, which `step()`
+increments **unconditionally** (`stepper.py`) regardless of whether any pin toggles — and the pin writes
+go through `_w()`, a silent no-op when the device is `None` (mock mode). So PASS proves the math, not the
+motor. A disconnected/dead driver, a wiring fault, or full mock mode all still printed "9 passed".
+**The two real causes (the printed `mock=` line decides which):** (a) `mock=True` → no GPIO touched;
+`gpiozero`/`lgpio` not importable (neither is in `pi5/requirements.txt`) — install them. (b) `mock=False`
+→ electrical; most likely the **A4988 RESET pin floating** (RESET *and* SLEEP are both active-LOW and both
+must be HIGH to step; the driver drove SLEEP but never RESET), then VMOT/VREF/coil wiring.
+**Changed:**
+- `pi5/cv/stepper_test.py` — final verdict is now honest: on `mock=True`+Linux it prints "NOT VERIFIED ON
+  HARDWARE" + the lgpio/gpiozero install fix and **returns 2** (mock on a Pi = broken, not a dry run);
+  off-Pi mock stays a pass (documented dry run); on real GPIO it prints a "watch the bar" note up front
+  and, if it didn't move, the RESET→VMOT→VREF→coil checklist. PASS can no longer be mistaken for motion.
+- `pi5/cv/stepper.py` — added optional `reset_pin` (default `None`). When set, the driver claims it and
+  holds RESET **HIGH** (released) in `enable()` + at init, and frees it in `cleanup()`. Module docstring
+  now documents the RESET-must-be-HIGH gotcha and the two wiring options (jumper RESET↔SLEEP, or dedicate
+  a Pi GPIO). `None` = RESET jumpered to SLEEP on the board (recommended, no extra pin).
+- `run_hardware.py` — passes `reset_pin=step_cfg.get("reset_pin", None)`.
+- `pi5/config.yaml` — new `stepper.reset_pin: null` with the must-be-HIGH explanation.
+- `docs/pin_map.md` — added the RESET row to the A4988 table + a prominent RESET/VMOT/VREF caveat.
+**Verified (Windows):** ruff clean; py_compile OK; **95 tests pass**; bench test 9/9 mock and the new
+verdict prints the off-Pi dry-run message + exits 0 (would exit 2 on a Pi in mock mode).
+**Next steps:** on the Pi, re-run `python3 pi5/cv/stepper_test.py` and read the verdict — if it says
+mock-on-a-Pi, install lgpio/gpiozero; if real GPIO and still no motion, jumper A4988 RESET→SLEEP (or set
+`stepper.reset_pin`) and check VMOT/VREF. Uncommitted (offer).
+
 ## 2026-06-08 — IMX219 camera stuck at 5 fps (force V4L2) + detection boxes on BOTH views
 
 **Worked on:** two requests for the Arducam 8MP **Sony IMX219** fixed-focus camera — (1) it runs at

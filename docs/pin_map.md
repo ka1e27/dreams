@@ -129,9 +129,21 @@ gpiozero/lgpio is absent (laptop / simulator), so this never affects the sim.
 | GPIO24 | 18 | DIR  | set ≥200 ns before STEP |
 | GPIO25 | 22 | ENABLE | active-LOW (0 = energised/hold, 1 = freewheel) |
 | GPIO8  | 24 | SLEEP  | active-LOW (0 = zero-current sleep, 1 = awake) |
+| — (or `reset_pin`) | — | **RESET** | active-LOW, **must be HIGH to step**; jumper to SLEEP (default) or drive from a Pi GPIO |
 | 3V3 (pin 1/17) | — | VIO | A4988 logic supply |
 | GND | — | GND | common with the 3S electronics-pack ground (A4988 VM = 12.6 V) |
 
+> ⚠ **RESET (must be HIGH to move).** The A4988 has *two* active-low control pins,
+> SLEEP **and** RESET, and both must be high before any STEP pulse takes effect — a
+> floating/low RESET is the #1 cause of "driver powered, no error, motor never
+> moves." `stepper.py` controls SLEEP but **not** RESET unless you set
+> `stepper.reset_pin` in `config.yaml`. Default wiring: **jumper the A4988 RESET pin
+> to its SLEEP pin** (adjacent on the board) so SLEEP releases both. Alternatively
+> set `reset_pin` to a BCM pin and the driver holds RESET high while energised.
+> Also confirm **VMOT** (8–35 V motor supply with ~100 µF across VMOT/GND) and the
+> **VREF** current limit — logic runs off VIO alone, so the chip can ACK STEP with
+> no coil power at all.
+>
 > ⚠ Boot-state caveat: GPIO25 (ENABLE) defaults LOW at boot, which would briefly
 > *energise* the coils before software runs; GPIO8 (SLEEP, an SPI0 CE pin) has a
 > boot pull-up = awake. Harmless for an unloaded radar bar, but consider an

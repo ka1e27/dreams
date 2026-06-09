@@ -176,6 +176,12 @@ stepper:
   dir_pin: 24
   enable_pin: 25         # active-LOW
   sleep_pin: 8           # active-LOW
+  # RESET (active-LOW) MUST be HIGH or the A4988 ignores every STEP pulse — the
+  # most common "driver looks alive but the motor never moves" cause. Default
+  # (null) assumes RESET is jumpered to SLEEP on the board (recommended, no extra
+  # Pi pin). Set this to a BCM pin number to instead drive RESET from the Pi
+  # (the driver then holds it HIGH while energised). See docs/pin_map.md.
+  reset_pin: null
   steps_per_rev: 3200    # 200 × 16 (1/16 microstepping wired on the A4988)
   max_rpm: 10
   auto_sleep_seconds: 5
