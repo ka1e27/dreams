@@ -115,6 +115,15 @@ camera:
   baseline_m: 0.12
   calibration_path: "pi5/cv/calibration.npz"
   # Capture settings (CameraProducer). Changing these needs a restart.
+  # ---- Arducam 8MP IMX219 (fixed focus) notes ----
+  # The IMX219 is a raw sensor (no onboard JPEG). Its native 8MP mode is
+  # 3280x2464, which over USB runs at only ~5 fps. If the feed is stuck at ~5
+  # fps the camera ignored the format set below and is reading full 8MP — on
+  # Linux we now force the V4L2 backend (pi5/cv/camera.py) so the resolution +
+  # MJPG switch actually applies and it drops to the fast binned mode here.
+  # IMX219 binned modes that hit a high frame rate: 640x480, 1280x720 @ 30+,
+  # 1640x1232 @ 30. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` to see the
+  # exact MJPG modes your module advertises, and set width/height/fps to one.
   width: 640
   height: 480
   fps: 30            # capture rate; the camera must support it at this resolution

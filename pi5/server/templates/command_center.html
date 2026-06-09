@@ -619,10 +619,10 @@ function renderHealth(h){
     $('cam-det').textContent = 'DET ' + h.detect_fps.toFixed(1) + ' fps · '
       + (uniq.length ? uniq.slice(0,4).join(', ') : 'clear');
   }
-  // object tracking — the overlay marks one primary target (lock reticle on the
-  // left view); show a matching badge here. Only meaningful on the left view.
+  // object tracking — the overlay marks one primary target (lock reticle drawn
+  // on both views); show a matching badge here regardless of the active view.
   const ct = $('cam-track');
-  if (h.track && camView === 'left'){
+  if (h.track){
     ct.textContent = '◎ TRACKING ' + h.track.label + ' ' + Math.round(h.track.confidence*100) + '%';
     ct.style.display = 'block';
   } else { ct.style.display = 'none'; }

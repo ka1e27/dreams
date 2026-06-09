@@ -876,10 +876,12 @@ async def _mjpeg_stream(view: str = "left"):
 
     Placeholder frames when no producer is running. Publishes at most
     _stream_fps_cap frames/s and draws the detection overlay's latest boxes on
-    each frame. Detection runs on its own task against the LEFT frame, so the
-    overlay (boxes + tracking reticle) is only drawn on the left view; the right
-    view is shown raw. If "right" is requested but no right camera is present we
-    fall back to the left frame. Stream FPS and detect FPS stay independent.
+    each frame — on BOTH the left and right views. Detection runs on its own
+    task against the LEFT frame; the same boxes (and tracking reticle) are drawn
+    on the right view too, offset by the stereo disparity (there's no second
+    inference — the Pi is inference-bound). If "right" is requested but no right
+    camera is present we fall back to the left frame. Stream FPS and detect FPS
+    stay independent.
     """
     global _cam_fps
     if _camera is None:
@@ -905,10 +907,13 @@ async def _mjpeg_stream(view: str = "left"):
             # Pick the requested view; right falls back to left if absent.
             show_right = view == "right" and frame.right is not None
             img = frame.right if show_right else frame.left
-            # Draw the detection overlay only on the left view (it's computed
-            # from the left frame). Always on a copy — never mutate the shared one.
-            if not show_right and _overlay is not None and _overlay.enabled:
-                img = frame.left.copy()
+            # Draw the detection overlay's boxes on whichever view is shown — both
+            # left and right. Boxes are computed from the LEFT frame (no second
+            # inference; the Pi is inference-bound), so on the right view they sit
+            # at the same pixel coords, offset by the stereo disparity. Always
+            # draw on a copy — never mutate the shared producer frame.
+            if _overlay is not None and _overlay.enabled:
+                img = img.copy()
                 _overlay.draw(img)
             ok, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, _jpeg_quality])
             if not ok:
@@ -929,8 +934,8 @@ async def video(request: Request):
     """MJPEG camera stream. Auth via ?key=<api_key>.
 
     Select the view with ?cam=left|right (default left). The detection overlay
-    is drawn only on the left view; right is raw and falls back to left if no
-    right camera is present.
+    boxes are drawn on both views (computed from the left frame); right falls
+    back to left if no right camera is present.
     """
     if not _http_key_ok(request):
         return Response(status_code=403, content="Invalid or missing API key")

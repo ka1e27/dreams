@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 import time
 from dataclasses import dataclass
 
@@ -64,7 +65,15 @@ class CameraProducer:
         self._task = asyncio.create_task(self._loop())
 
     def _open(self, device: int) -> cv2.VideoCapture:
-        cap = cv2.VideoCapture(device)
+        # On Linux (the Pi) force the V4L2 backend. With OpenCV's default backend
+        # the FOURCC + resolution sets below often DON'T take, which leaves a raw
+        # sensor like the IMX219 stuck in its native 8MP mode — and 3280x2464
+        # over USB is only ~5 fps. Forcing V4L2 makes the format switch apply, so
+        # the camera actually drops to the requested (binned, fast) mode.
+        if sys.platform.startswith("linux"):
+            cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
+        else:
+            cap = cv2.VideoCapture(device)
         if not cap.isOpened():
             raise RuntimeError(f"camera {device} failed to open")
         # Request MJPG before resolution/fps — far faster over USB than raw YUYV
@@ -79,10 +88,24 @@ class CameraProducer:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # keep only the freshest frame
         except Exception:  # noqa: BLE001 — not all backends support it
             pass
-        actual = cap.get(cv2.CAP_PROP_FPS)
+        actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = cap.get(cv2.CAP_PROP_FPS)
         logger.info("Camera %d opened: %dx%d @ %.0f fps (mjpg=%s)", device,
-                    int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), actual, self._cfg.use_mjpg)
+                    actual_w, actual_h, actual_fps, self._cfg.use_mjpg)
+        # If the camera negotiated a much lower fps (or a different resolution)
+        # than asked, it most likely ignored the format set and is running a
+        # heavy native mode — the classic IMX219 "stuck at full 8MP ≈ 5 fps".
+        if actual_fps and actual_fps + 1 < self._cfg.fps:
+            logger.warning(
+                "Camera %d gave %.0f fps (< requested %d). If this is an "
+                "IMX219/USB camera it's likely stuck in a high-res mode — run "
+                "`v4l2-ctl -d /dev/video%d --list-formats-ext` and set "
+                "camera.width/height/fps to a listed MJPG mode.",
+                device, actual_fps, self._cfg.fps, device)
+        if (actual_w, actual_h) != (self._cfg.width, self._cfg.height):
+            logger.warning("Camera %d resolution is %dx%d, requested %dx%d",
+                           device, actual_w, actual_h, self._cfg.width, self._cfg.height)
         return cap
 
     async def stop(self) -> None:

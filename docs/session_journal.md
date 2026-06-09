@@ -26,6 +26,36 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — IMX219 camera stuck at 5 fps (force V4L2) + detection boxes on BOTH views
+
+**Worked on:** two requests for the Arducam 8MP **Sony IMX219** fixed-focus camera — (1) it runs at
+only ~5 fps, (2) draw the YOLO detection boxes on the **right** camera view as well as the left.
+**FPS diagnosis (5 fps = full 8MP):** the IMX219 is a raw sensor (no onboard JPEG); its native mode is
+3280×2464, which over USB is ~5 fps. The symptom = the camera ignored our 640×480/MJPG `cap.set()` and
+stayed in full-res. Root cause: OpenCV's **default capture backend** often won't apply the FOURCC +
+resolution switch, so the mode never changes.
+**Changed:**
+- `pi5/cv/camera.py` — `_open()` now forces the **V4L2 backend on Linux** (`cv2.VideoCapture(dev,
+  cv2.CAP_V4L2)`) so the MJPG + 640×480 set actually takes and the sensor drops to its fast binned mode;
+  non-Linux (sim/dev) keeps the default backend. Reads back negotiated **WxH + fps** and logs a loud
+  **WARNING** when fps is well below requested or the resolution differs (points the user at
+  `v4l2-ctl --list-formats-ext`). Added `import sys`.
+- `pi5/config.yaml` — documented the IMX219 modes in the `camera:` block (native 8MP ≈ 5 fps; fast
+  binned 640×480 / 1280×720 @ 30+ / 1640×1232 @ 30) + the V4L2-backend note and the v4l2-ctl check.
+- `pi5/server/app.py` — `_mjpeg_stream()` now draws the overlay boxes + reticle on **whichever view is
+  shown (left AND right)**, not left-only. No second inference (the Pi is inference-bound) — the
+  left-frame boxes are drawn on the right view at the same coords, offset by the stereo disparity.
+  Updated the `_mjpeg_stream`/`/video` docstrings.
+- `pi5/server/templates/command_center.html` — the ◎ TRACKING badge now shows on both views (was
+  gated to `camView === 'left'`), matching the reticle that's now drawn on both.
+**Verified (sim/Windows):** ruff clean on `pi5 run_hardware.py`; py_compile OK; **95 tests pass**;
+booted `run_sim` — `/health`, `/command`, and `/video?cam=right` all 200; camera module imports.
+**UNTESTED (Pi-only):** the V4L2 fps fix needs the real IMX219 — on the Pi, confirm the camera log line
+shows the requested mode (e.g. `640x480 @ 30 fps`) instead of `3280x2464 @ 5`; if it still warns, run
+`v4l2-ctl -d /dev/video0 --list-formats-ext` and set `camera.width/height/fps` to a listed MJPG mode.
+Boxes on the right view are also Pi-only (sim has no camera); right-view boxes carry the stereo offset.
+**Next steps:** uncommitted (offer). Bench-verify on the Pi.
+
 ## 2026-06-08 — Move Pico terminal to page bottom + choose which CV target to track
 
 **Worked on:** two command-center requests — (1) move the PICO TERMINAL panel to the bottom of the
