@@ -26,6 +26,30 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Camera capture format: YUY2/YUYV instead of MJPG (configurable FourCC)
+
+**Worked on:** user asked to capture in **YUY2** instead of MJPG. Generalized the camera's format
+selection and switched the default.
+**Key call (Linux gotcha):** YUY2 and YUYV are the *same* uncompressed 4:2:2 layout under different
+FourCC labels — but V4L2 (the Pi backend) only recognizes **YUYV** (`cv2.set(FOURCC,'YUY2')` would be
+ignored). So the code maps `YUY2→YUYV` on Linux; config can say either.
+**Changed:**
+- `pi5/cv/camera.py` — replaced the `use_mjpg: bool` flag with a `fourcc: str` (default "MJPG").
+  `_open()` sets whatever FourCC is configured (YUY2→YUYV on Linux; ""=camera default), **reads back
+  and logs the *negotiated* FourCC** (new `_fourcc_to_str()` helper) so you can see if it took, and the
+  low-fps WARNING is now format-aware (MJPG→heavy native mode; uncompressed→USB bandwidth).
+- `run_hardware.py` — passes `fourcc=cam_cfg.get("fourcc","MJPG")` instead of `use_mjpg`.
+- `pi5/config.yaml` — `camera.use_mjpg` → `camera.fourcc: "YUY2"`, documented the YUY2/MJPG/"" choices
+  and the bandwidth tradeoff (YUY2 1080p30 ≈ 1 Gbit/s = USB 3.0 only; fine at 720p/640×480).
+**Tradeoff flagged for the user:** YUY2 at the current **640×480 is light (~18 MB/s) and should hit a
+clean 30 fps** with no MJPG decode and no MJPG-mode fps cap. But uncompressed **1080p30 won't fit USB
+2.0** (~9 fps max) — if they want 1080p they need USB 3.0, or stay on MJPG, or use 720p/1640×1232.
+**Verified (sim/Windows):** ruff clean; py_compile OK; **95 tests pass**; config parses
+(`fourcc='YUY2'`); `_fourcc_to_str(VideoWriter_fourcc('YUYV'))=='YUYV'`; `CameraConfig().fourcc=='MJPG'`;
+`run_hardware` imports + `CameraConfig(fourcc='YUY2')` constructs. Real negotiation is Pi-only.
+**Next steps:** uncommitted (offer). On the Pi: confirm the new camera log line shows
+`fourcc=YUYV @ 30 fps`; if it warns/falls back, `v4l2-ctl --list-formats-ext` to pick a listed YUYV mode.
+
 ## 2026-06-08 — IMX219 "~16 fps at 1080p": diagnosed (camera mode) + unblocked the event loop
 
 **Reported:** the Arducam 8MP IMX219 streams ~16 fps; user expects a reliable 30 fps at 1080p.

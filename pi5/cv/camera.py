@@ -18,6 +18,14 @@ import cv2
 logger = logging.getLogger(__name__)
 
 
+def _fourcc_to_str(val: float) -> str:
+    """Decode an OpenCV CAP_PROP_FOURCC value into its 4-char code (e.g. 'YUYV')."""
+    v = int(val)
+    if v <= 0:
+        return ""
+    return "".join(chr((v >> (8 * i)) & 0xFF) for i in range(4)).strip("\x00 ")
+
+
 @dataclass
 class CameraConfig:
     left_device: int = 0
@@ -25,7 +33,11 @@ class CameraConfig:
     width: int = 640
     height: int = 480
     fps: int = 30
-    use_mjpg: bool = True
+    # Pixel format the camera is asked to deliver (FourCC). "MJPG" = compressed
+    # (light over USB, but the module may cap its MJPG modes, e.g. 1080p@15).
+    # "YUY2"/"YUYV" = uncompressed 4:2:2 (no decode cost, dodges the MJPG fps
+    # caps, but ~16 bpp → needs much more USB bandwidth). "" = camera default.
+    fourcc: str = "MJPG"
 
 
 @dataclass
@@ -76,11 +88,17 @@ class CameraProducer:
             cap = cv2.VideoCapture(device)
         if not cap.isOpened():
             raise RuntimeError(f"camera {device} failed to open")
-        # Request MJPG before resolution/fps — far faster over USB than raw YUYV
-        # and usually required to reach 30 fps. OpenCV falls back automatically
-        # if the camera refuses it.
-        if self._cfg.use_mjpg:
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        # Request the pixel format (FourCC) before resolution/fps. MJPG is
+        # compressed — light over USB but the module may cap its MJPG modes
+        # (e.g. 1080p@15). YUY2/YUYV is uncompressed 4:2:2 — no decode cost and
+        # it dodges the MJPG fps caps, but at ~16 bpp it needs far more USB
+        # bandwidth (1080p30 ≈ 1 Gbit/s → USB 3.0 only; fine at 720p/VGA).
+        # OpenCV falls back automatically if the camera refuses the format.
+        fourcc = self._cfg.fourcc.strip()
+        if sys.platform.startswith("linux") and fourcc.upper() == "YUY2":
+            fourcc = "YUYV"  # V4L2's label for the identical 4:2:2 format
+        if fourcc:
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc[:4]))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
         cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
@@ -91,18 +109,22 @@ class CameraProducer:
         actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = cap.get(cv2.CAP_PROP_FPS)
-        logger.info("Camera %d opened: %dx%d @ %.0f fps (mjpg=%s)", device,
-                    actual_w, actual_h, actual_fps, self._cfg.use_mjpg)
+        actual_fourcc = _fourcc_to_str(cap.get(cv2.CAP_PROP_FOURCC))
+        logger.info("Camera %d opened: %dx%d @ %.0f fps (fourcc=%s, requested %s)",
+                    device, actual_w, actual_h, actual_fps,
+                    actual_fourcc or "?", fourcc or "default")
         # If the camera negotiated a much lower fps (or a different resolution)
-        # than asked, it most likely ignored the format set and is running a
-        # heavy native mode — the classic IMX219 "stuck at full 8MP ≈ 5 fps".
+        # than asked it ignored the mode set. For MJPG that's usually a heavy
+        # native mode (the classic IMX219 "stuck at full 8MP ≈ 5 fps"); for
+        # uncompressed YUY2/YUYV at high res it's usually USB bandwidth.
         if actual_fps and actual_fps + 1 < self._cfg.fps:
             logger.warning(
-                "Camera %d gave %.0f fps (< requested %d). If this is an "
-                "IMX219/USB camera it's likely stuck in a high-res mode — run "
+                "Camera %d gave %.0f fps (< requested %d) in %s. Run "
                 "`v4l2-ctl -d /dev/video%d --list-formats-ext` and set "
-                "camera.width/height/fps to a listed MJPG mode.",
-                device, actual_fps, self._cfg.fps, device)
+                "camera.width/height/fps to a mode the camera lists at this "
+                "format. Uncompressed YUY2/YUYV at 1080p needs USB 3.0 — drop "
+                "to 720p/VGA, or use MJPG, if you're bandwidth-limited.",
+                device, actual_fps, self._cfg.fps, actual_fourcc or "?", device)
         if (actual_w, actual_h) != (self._cfg.width, self._cfg.height):
             logger.warning("Camera %d resolution is %dx%d, requested %dx%d",
                            device, actual_w, actual_h, self._cfg.width, self._cfg.height)

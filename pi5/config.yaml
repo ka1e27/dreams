@@ -120,15 +120,22 @@ camera:
   # 3280x2464, which over USB runs at only ~5 fps. If the feed is stuck at ~5
   # fps the camera ignored the format set below and is reading full 8MP — on
   # Linux we now force the V4L2 backend (pi5/cv/camera.py) so the resolution +
-  # MJPG switch actually applies and it drops to the fast binned mode here.
+  # format switch actually applies and it drops to the fast binned mode here.
   # IMX219 binned modes that hit a high frame rate: 640x480, 1280x720 @ 30+,
   # 1640x1232 @ 30. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` to see the
-  # exact MJPG modes your module advertises, and set width/height/fps to one.
+  # exact modes/formats your module advertises, and set width/height/fps to one.
   width: 640
   height: 480
-  fps: 30            # capture rate; the camera must support it at this resolution
-  use_mjpg: true     # request MJPG from the camera — far faster over USB than raw
-                     # YUYV and usually required to actually hit 30 fps
+  fps: 30            # capture rate; the camera must support it at this res+format
+  # Pixel format (FourCC) requested from the camera:
+  #   "YUY2"  — uncompressed 4:2:2 (V4L2 calls it YUYV; the code maps YUY2→YUYV
+  #             on Linux). No JPEG decode cost and it dodges the camera's MJPG
+  #             framerate caps — but ~16 bits/pixel, so it's bandwidth-heavy:
+  #             1080p30 ≈ 1 Gbit/s (USB 3.0 only); fine at 720p / 640x480.
+  #   "MJPG"  — compressed; light over USB but the module may cap its MJPG modes
+  #             (e.g. 1080p only at 15 fps).
+  #   ""      — leave the camera in its default format.
+  fourcc: "YUY2"
   # ---- Command-center video feed (runtime-adjustable from /command) ----
   # Stream publish-rate cap (JPEG encode/send). Lower = lighter CPU. Capped to
   # the capture rate above; raise/lower live with the STREAM FPS slider.
