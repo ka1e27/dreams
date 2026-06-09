@@ -26,6 +26,36 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — IMX219 "~16 fps at 1080p": diagnosed (camera mode) + unblocked the event loop
+
+**Reported:** the Arducam 8MP IMX219 streams ~16 fps; user expects a reliable 30 fps at 1080p.
+**Diagnosis (two stacked causes, ranked):**
+1. **Most likely root cause — the camera is *delivering* ~15 fps; the 30 fps request is ignored.**
+   `cap.set(CAP_PROP_FPS, 30)` is only a request. USB camera modules commonly advertise **1080p MJPG
+   @ 15 fps / 720p @ 30 fps** — the IMX219 *sensor* does 1080p30 but the module's UVC bridge often
+   doesn't. 16 fps ≈ a 15-fps mode (× the streamer's 0.9 timing tolerance). Alt: at 1080p OpenCV may
+   fall back to **YUYV** and ~1 Gbit/s of raw 1080p30 won't fit USB 2.0. `camera.py` already logs the
+   negotiated `WxH @ fps` + WARNINGs on this — that startup line is the smoking gun. Confirm with
+   `v4l2-ctl -d /dev/video0 --list-formats-ext`; if 1080p MJPG lists only 15 fps it's a hardware
+   ceiling → use **1280×720 @ 30** or **1640×1232 @ 30** (binned, near-full FOV). Also: committed
+   `config.yaml` is still **640×480** — 1080p needs `camera.width/height` bumped first.
+2. **Real software bottleneck (fixed this session) — capture + JPEG encode both blocked the single
+   asyncio event loop**, so they serialized instead of overlapping; at 1080p (~10–25 ms each) the
+   *published* stream sagged below the *capture* rate even when the camera could deliver more.
+**Changed:**
+- `pi5/cv/camera.py` — `_loop()` now runs `cap.read()` (grab + MJPEG→BGR decode) via
+  `loop.run_in_executor(None, cap.read)` for both L/R, so a 1080p decode no longer freezes the loop.
+- `pi5/server/app.py` — `_mjpeg_stream()` runs `cv2.imencode()` via `run_in_executor` (captures
+  `img`/`quality` as default args to avoid late-binding). cv2 releases the GIL in read()/imencode(),
+  so both genuinely parallelize now. (YOLO inference was already offloaded — `vision_overlay.py:236`.)
+**Verified (sim/Windows):** ruff clean on `pi5 run_hardware.py`; py_compile OK; **95 tests pass**;
+booted `run_sim` — `/health`, `/command`, `/video` all 200. The offload's real effect is Pi-only (the
+sim has no camera, so `_mjpeg_stream` takes the placeholder branch and never hits the edited line).
+**Next steps:** uncommitted (offer). On the Pi: read the camera startup log line (or run `v4l2-ctl
+--list-formats-ext`) to see what the module actually negotiates at 1080p. If it's 15 fps MJPG, drop to
+720p30 / 1640×1232. The executor offload removes the software ceiling so the stream can match whatever
+the camera delivers — it does **not** override a 15-fps camera mode.
+
 ## 2026-06-08 — "stepper_test.py prints PASS but motor doesn't move": honest verdict + A4988 RESET
 
 **Worked on:** user reported `pi5/cv/stepper_test.py` prints PASS on every check but the A4988-driven

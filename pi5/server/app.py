@@ -890,6 +890,7 @@ async def _mjpeg_stream(view: str = "left"):
             await asyncio.sleep(1.0)
 
     import cv2  # producer is running, so opencv is installed
+    loop = asyncio.get_running_loop()
     queue = _camera.subscribe()
     last_pub = 0.0
     try:
@@ -915,7 +916,15 @@ async def _mjpeg_stream(view: str = "left"):
             if _overlay is not None and _overlay.enabled:
                 img = img.copy()
                 _overlay.draw(img)
-            ok, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, _jpeg_quality])
+            # JPEG encode is blocking and CPU-heavy at 1080p; run it off the
+            # event loop so it overlaps the next capture instead of serializing
+            # with it. cv2 releases the GIL during imencode, so this parallelizes.
+            quality = _jpeg_quality
+            ok, jpeg = await loop.run_in_executor(
+                None,
+                lambda i=img, q=quality: cv2.imencode(
+                    ".jpg", i, [cv2.IMWRITE_JPEG_QUALITY, q]),
+            )
             if not ok:
                 continue
             if last_pub:

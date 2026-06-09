@@ -146,16 +146,23 @@ class CameraProducer:
         return self._cap_r is not None
 
     async def _loop(self) -> None:
+        loop = asyncio.get_running_loop()
         interval = 1.0 / max(1, self._cfg.fps)
         while not self._stop.is_set():
             t0 = time.monotonic()
             left = right = None
+            # cap.read() blocks (grab + MJPEG→BGR decode). Run it in a worker
+            # thread so a 1080p decode doesn't freeze the whole event loop —
+            # that blocking is what stops capture and the /video JPEG encode from
+            # overlapping, sagging the published stream below the capture rate at
+            # high resolution. OpenCV releases the GIL inside read(), so the
+            # offload genuinely parallelizes the two.
             if self._cap_l is not None:
-                ok, frame = self._cap_l.read()
+                ok, frame = await loop.run_in_executor(None, self._cap_l.read)
                 if ok:
                     left = frame
             if self._cap_r is not None:
-                ok, frame = self._cap_r.read()
+                ok, frame = await loop.run_in_executor(None, self._cap_r.read)
                 if ok:
                     right = frame
             if left is None:
