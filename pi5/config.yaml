@@ -136,6 +136,11 @@ camera:
   #             (e.g. 1080p only at 15 fps).
   #   ""      — leave the camera in its default format.
   fourcc: "YUY2"
+  # If the camera stops delivering frames (USB unplugged, driver hiccup), the
+  # producer releases it and retries reopening the same /dev/video* index this
+  # often (seconds) until it returns. The feed shows NO-SIGNAL meanwhile and
+  # recovers on its own — no restart needed.
+  reconnect_interval_s: 2.0
   # ---- Command-center video feed (runtime-adjustable from /command) ----
   # Stream publish-rate cap (JPEG encode/send). Lower = lighter CPU. Capped to
   # the capture rate above; raise/lower live with the STREAM FPS slider.

@@ -26,6 +26,36 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-08 — Camera auto-reconnect (USB disconnect → reopen, no restart)
+
+**Worked on:** user reported a disconnected camera never comes back — the producer retried the same
+dead `VideoCapture` handle forever. Made `CameraProducer` detect a drop and reopen on its own.
+**How it works now (`pi5/cv/camera.py`):**
+- `_read_or_drop()` — read goes through the executor (kept the fps fix); a single failed read is a
+  transient miss (handle kept), but **`_READ_FAIL_LIMIT` (5) failures in a row** = real disconnect →
+  `cap.release()` + drop the handle (one WARNING per disconnect). ~0.2 s to trip at 30 fps.
+- `_reconnect()` — when a handle is None the loop reopens the **same device index**, throttled to
+  `reconnect_interval_s` (config, default 2.0 s, **floored at 0.5 s** so it can't hammer
+  `VideoCapture(open)`). Failed attempts are quiet (debug); only success logs INFO "reconnected".
+- `_loop()` — reconnects dropped cams at the top, then reads. **Left is always retried; right only if
+  it was present at least once** (`_right_ever_open`), so a single-camera rig never polls a missing
+  device 1. While down it polls every `_DOWN_POLL_S` (0.2 s) so a returning camera is picked up
+  *promptly* — the reopen-rate cap lives in `_reconnect`, not the poll — recovery measured at ~0.48 s
+  even with the 2 s interval. The /video feed shows NO-SIGNAL meanwhile and resumes automatically.
+**Changed:** `pi5/cv/camera.py` (the above + `CameraConfig.reconnect_interval_s`, `_fourcc_to_str`
+unchanged), `run_hardware.py` (plumb `reconnect_interval_s`), `pi5/config.yaml`
+(`camera.reconnect_interval_s: 2.0` documented).
+**Caveat flagged:** reopen is on the *same* `/dev/video*` index. If a USB cam re-enumerates to a
+different node on replug (rare for a single fixed camera; can happen on a hub) it won't be found — a
+device-scan fallback would be the follow-up if that bites.
+**Verified (sim/Windows):** ruff clean; py_compile OK; **95 tests pass**; sim boots (`/health`,
+`/command` 200). Throwaway functional check (fake VideoCapture, since there's no camera here) passed
+7/7: drop-after-5-fails + release, transient miss keeps handle + resets, reconnect throttle (≤1 open
+per interval), 0.5 s floor, failed reopen returns None without raising, absent-right never polled, and
+end-to-end yank→release→reopen→**resume in 0.48 s**. Real USB-replug behavior is Pi-only.
+**Next steps:** uncommitted (offer). On the Pi: unplug/replug the camera, confirm the log shows the
+disconnect WARNING then "Camera 0 reconnected." and the feed returns on its own.
+
 ## 2026-06-08 — Camera capture format: YUY2/YUYV instead of MJPG (configurable FourCC)
 
 **Worked on:** user asked to capture in **YUY2** instead of MJPG. Generalized the camera's format

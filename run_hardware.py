@@ -75,6 +75,7 @@ def main() -> None:
         height=cam_cfg.get("height", 480),
         fps=cam_cfg.get("fps", 30),
         fourcc=cam_cfg.get("fourcc", "MJPG"),
+        reconnect_interval_s=cam_cfg.get("reconnect_interval_s", 2.0),
     ))
 
     # Live YOLO detection overlay on the /video feed (configurable model).

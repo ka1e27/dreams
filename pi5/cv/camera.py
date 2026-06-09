@@ -17,6 +17,16 @@ import cv2
 
 logger = logging.getLogger(__name__)
 
+# Consecutive failed reads before a camera is treated as disconnected (so one
+# bad frame doesn't trigger a needless reopen). At 30 fps this trips in ~0.2s.
+_READ_FAIL_LIMIT = 5
+
+# How often the loop wakes to look for a returning camera while one is down.
+# This is just the poll cadence — actual reopen attempts are rate-limited to
+# reconnect_interval_s inside _reconnect(), so a returning camera is picked up
+# promptly without hammering cv2.VideoCapture(open) faster than the interval.
+_DOWN_POLL_S = 0.2
+
 
 def _fourcc_to_str(val: float) -> str:
     """Decode an OpenCV CAP_PROP_FOURCC value into its 4-char code (e.g. 'YUYV')."""
@@ -38,6 +48,11 @@ class CameraConfig:
     # "YUY2"/"YUYV" = uncompressed 4:2:2 (no decode cost, dodges the MJPG fps
     # caps, but ~16 bpp → needs much more USB bandwidth). "" = camera default.
     fourcc: str = "MJPG"
+    # If a camera stops delivering frames (USB unplugged, driver hiccup) the
+    # producer releases it and retries the same device index this often
+    # (seconds) until it returns. The feed shows the NO-SIGNAL placeholder
+    # meanwhile and recovers automatically — no restart needed.
+    reconnect_interval_s: float = 2.0
 
 
 @dataclass
@@ -62,6 +77,13 @@ class CameraProducer:
         self._subscribers: list[asyncio.Queue[StereoFrame]] = []
         self._latest: StereoFrame | None = None
         self._stop = asyncio.Event()
+        # Auto-reconnect state. Right is only retried after it has been present
+        # at least once (so a single-camera rig never polls a missing device).
+        self._right_ever_open = False
+        # Keyed by device index: consecutive read failures + last reopen attempt.
+        self._fail: dict[int, int] = {}
+        self._last_reopen: dict[int, float] = {}
+        self._reconnect_interval = max(0.5, float(cfg.reconnect_interval_s))
 
     def start(self) -> None:
         if self._task is not None:
@@ -71,6 +93,7 @@ class CameraProducer:
         # left-camera dashboard stream still works.
         try:
             self._cap_r = self._open(self._cfg.right_device)
+            self._right_ever_open = True
         except Exception as e:
             logger.warning("Right camera unavailable: %s", e)
             self._cap_r = None
@@ -167,29 +190,88 @@ class CameraProducer:
         """True if a second (right) camera opened — gates the stereo / right view."""
         return self._cap_r is not None
 
+    async def _read_or_drop(
+        self, loop: asyncio.AbstractEventLoop, cap: "cv2.VideoCapture", device: int
+    ) -> "tuple[cv2.Mat | None, cv2.VideoCapture | None]":
+        """Read one frame. Returns (frame|None, cap|None).
+
+        cap.read() is blocking (grab + decode), so it runs in a worker thread —
+        that lets capture overlap the /video JPEG encode instead of serializing
+        on the event loop (cv2 releases the GIL inside read()). A single failed
+        read is a transient miss and the handle is kept; only after
+        _READ_FAIL_LIMIT failures in a row do we treat it as a real disconnect,
+        release the handle, and return cap=None so the loop reopens the device.
+        """
+        try:
+            ok, frame = await loop.run_in_executor(None, cap.read)
+        except Exception as e:  # noqa: BLE001 — any read error counts as a miss
+            logger.debug("Camera %d read raised: %s", device, e)
+            ok, frame = False, None
+        if ok and frame is not None:
+            self._fail[device] = 0
+            return frame, cap
+        self._fail[device] = self._fail.get(device, 0) + 1
+        if self._fail[device] >= _READ_FAIL_LIMIT:
+            logger.warning(
+                "Camera %d stopped delivering frames (%d failed reads) — "
+                "releasing and retrying every %.1fs until it returns.",
+                device, self._fail[device], self._reconnect_interval)
+            try:
+                cap.release()
+            except Exception:  # noqa: BLE001
+                pass
+            return None, None
+        return None, cap  # transient miss — keep the handle
+
+    async def _reconnect(
+        self, loop: asyncio.AbstractEventLoop, device: int
+    ) -> "cv2.VideoCapture | None":
+        """Try to reopen a dropped camera, throttled to reconnect_interval_s.
+
+        Returns the new VideoCapture on success, else None (a quiet retry —
+        only the success is logged at INFO). Reopens on the same configured
+        device index; if a USB camera re-enumerates to a different /dev/video*
+        node it won't be found here (rare for a single fixed-index camera).
+        """
+        now = time.monotonic()
+        if now - self._last_reopen.get(device, 0.0) < self._reconnect_interval:
+            return None
+        self._last_reopen[device] = now
+        try:
+            cap = await loop.run_in_executor(None, self._open, device)
+        except Exception as e:  # noqa: BLE001 — still absent; retry next interval
+            logger.debug("Camera %d reconnect attempt failed: %s", device, e)
+            return None
+        logger.info("Camera %d reconnected.", device)
+        self._fail[device] = 0
+        return cap
+
     async def _loop(self) -> None:
         loop = asyncio.get_running_loop()
         interval = 1.0 / max(1, self._cfg.fps)
         while not self._stop.is_set():
             t0 = time.monotonic()
+            # Auto-reconnect any dropped camera (throttled inside _reconnect).
+            # Left is required; right only if it was present at least once.
+            if self._cap_l is None:
+                self._cap_l = await self._reconnect(loop, self._cfg.left_device)
+            if self._cap_r is None and self._right_ever_open:
+                self._cap_r = await self._reconnect(loop, self._cfg.right_device)
+
             left = right = None
-            # cap.read() blocks (grab + MJPEG→BGR decode). Run it in a worker
-            # thread so a 1080p decode doesn't freeze the whole event loop —
-            # that blocking is what stops capture and the /video JPEG encode from
-            # overlapping, sagging the published stream below the capture rate at
-            # high resolution. OpenCV releases the GIL inside read(), so the
-            # offload genuinely parallelizes the two.
             if self._cap_l is not None:
-                ok, frame = await loop.run_in_executor(None, self._cap_l.read)
-                if ok:
-                    left = frame
+                left, self._cap_l = await self._read_or_drop(
+                    loop, self._cap_l, self._cfg.left_device)
             if self._cap_r is not None:
-                ok, frame = await loop.run_in_executor(None, self._cap_r.read)
-                if ok:
-                    right = frame
+                right, self._cap_r = await self._read_or_drop(
+                    loop, self._cap_r, self._cfg.right_device)
             if left is None:
-                # Nothing to publish; pause briefly and retry
-                await asyncio.sleep(interval)
+                # No left frame: a transient miss (handle kept) or the camera
+                # dropped and is awaiting reconnect. While down, poll quickly so
+                # a returning camera is picked up fast — _reconnect() still
+                # throttles the actual reopen attempts to reconnect_interval_s.
+                await asyncio.sleep(
+                    _DOWN_POLL_S if self._cap_l is None else interval)
                 continue
             sf = StereoFrame(left=left, right=right, ts=time.time())
             self._latest = sf
