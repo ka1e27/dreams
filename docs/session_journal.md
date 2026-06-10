@@ -26,6 +26,29 @@ describing what you did.
 
 <!-- New entries below this line, newest first. -->
 
+## 2026-06-09 — Right camera never opened: wrong /dev/video index in config (metadata node)
+
+**Worked on:** user reported only one USB camera port works in the code though the Pi sees both
+(`v4l2-ctl --list-devices`: cam A = `/dev/video2,3` on `usb-xhci-hcd.0-1`; cam B = `/dev/video0,1` on
+`usb-xhci-hcd.1-1`).
+**Root cause:** each UVC camera exposes **two** `/dev/video*` nodes — an EVEN one for image capture and
+the next ODD one for **metadata only** (opens fine, `cap.read()` yields no frames). So the capture
+indices are **0 and 2**; `video1`/`video3` are metadata. `pi5/config.yaml` had `right_device: 1` =
+cam B's *metadata* node → it "opened" but never delivered a frame, tripped `_READ_FAIL_LIMIT`, got
+released, never recovered. Left (video0) worked → "only one port works."
+**Why the prior fix didn't take:** commit `6bf61d3` ("camera id change") fixed the **`CameraConfig`
+default** `right_device` 1→2 in `camera.py`, but `run_hardware.py` reads the value from
+`config.yaml`, which still said `1`. Config overrides the code default, so runtime was still broken.
+**Changed:** `pi5/config.yaml` — `camera.right_device: 1 → 2` + a comment explaining the even=capture /
+odd=metadata UVC node split and that the capture indices here are 0 and 2.
+**Notes:** the two cameras are on **separate USB controllers**, so dual uncompressed YUY2/YUYV @
+640×480 won't contend for bandwidth — current `fourcc: "YUY2"` is fine. Auto-reconnect still keys on
+the fixed index (2); a replug that re-enumerates to a different node won't be found (known caveat).
+**Verified:** edit only (Windows, no camera). Real two-camera open is Pi-only.
+**Next steps:** uncommitted (offer; staged PCB files are unrelated, leave out). On the Pi: restart
+`run_hardware.py`, confirm **two** `Camera N opened:` log lines (0 and 2) and the SOURCE ◄LEFT/RIGHT►
+toggle shows the right view. `v4l2-ctl -d /dev/video1 --all` confirms it's a Metadata Capture node.
+
 ## 2026-06-08 — Camera auto-reconnect (USB disconnect → reopen, no restart)
 
 **Worked on:** user reported a disconnected camera never comes back — the producer retried the same

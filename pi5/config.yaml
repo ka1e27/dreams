@@ -109,9 +109,14 @@ network:
   online_probe_url: ""
 
 camera:
-  # Stereo USB cameras for distance-aware obstacle avoidance
+  # Stereo USB cameras for distance-aware obstacle avoidance.
+  # NOTE: each UVC camera exposes TWO /dev/video* nodes — an even one for image
+  # capture and the next ODD one for metadata only (opens fine but yields no
+  # frames). Use only the EVEN capture nodes. `v4l2-ctl --list-devices` here
+  # shows cam A = video2/3 and cam B = video0/1, so the capture indices are 0
+  # and 2 (NOT 1 — video1 is cam B's metadata node and never delivers frames).
   left_device: 0
-  right_device: 1
+  right_device: 2
   baseline_m: 0.12
   calibration_path: "pi5/cv/calibration.npz"
   # Capture settings (CameraProducer). Changing these needs a restart.
