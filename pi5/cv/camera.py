@@ -39,7 +39,7 @@ def _fourcc_to_str(val: float) -> str:
 @dataclass
 class CameraConfig:
     left_device: int = 0
-    right_device: int = 1
+    right_device: int = 2
     width: int = 640
     height: int = 480
     fps: int = 30
