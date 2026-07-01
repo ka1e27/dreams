@@ -39,8 +39,8 @@ class Environment:
 
     The first six fields are ENV v1.0. The rest are appended by ENV v1.1
     (backward compatible — older firmware simply omits them, leaving defaults):
-    a second SHT41 inside the electronics enclosure, plus the 3S electronics and
-    4S winch battery rails (the 12S propulsion rail stays in TEL as batt_v).
+    a second SHT41 inside the electronics enclosure, plus the M18 electronics and
+    M18 winch battery rails (the M18 drive rail stays in TEL as batt_v).
     """
     air_temp: int = 0              # SHT41 #A — open air
     air_humidity: int = 0
@@ -51,9 +51,9 @@ class Environment:
     # ENV v1.1 appended fields
     enc_temp: float = -999.0       # SHT41 #B — electronics enclosure (-999 = none)
     enc_humidity: float = -1.0     # %RH (-1 = none)
-    elec_batt_v: float = 0.0       # 3S electronics rail
+    elec_batt_v: float = 0.0       # M18 electronics rail
     elec_batt_pct: int = 0
-    winch_batt_v: float = 0.0      # 4S winch rail
+    winch_batt_v: float = 0.0      # M18 winch rail
     winch_batt_pct: int = 0
 
 
@@ -328,7 +328,7 @@ class PicoSerial:
         """Update environment from an ENV message.
 
         Fields 0-5 are ENV v1.0; 6-11 are the v1.1 appendix (enclosure SHT41 +
-        3S/4S battery rails). Parsed only when present so v1.0 firmware still works.
+        M18 elec/winch battery rails). Parsed only when present so v1.0 firmware still works.
         """
         f = msg.fields
         if len(f) < 6:

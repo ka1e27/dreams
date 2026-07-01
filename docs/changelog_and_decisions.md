@@ -14,7 +14,10 @@ Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source fi
 - **Cameras:** 2× USB cameras on Pi 5 USB-A (stereo pair). No CSI cameras.
 - **IMU:** BNO085 at I²C 0x4A (GP8/9). Not QMC5883P.
 - **VESC comms:** UART0 (GP12/13) from Boat Pico to VESC master; slave via CAN-forward. No MCP2515 HAT.
-- **Winch power:** dedicated 4S pack (BT4, XT30). See discrepancy note under "Open Items."
+- **Batteries:** three fully isolated **Milwaukee M18** domains — drive (3× M18 series, 54 V nom),
+  electronics (1× M18), winch (1× M18). Supersedes the old 12S-LiPo / 3S-Li-ion / 4S-winch design.
+  Firmware + docs updated; KiCad schematic rework pending. See `docs/battery_architecture.md`.
+- **Winch power:** dedicated 1× M18 pack (no drive-midpoint tap).
 
 ---
 
@@ -47,7 +50,8 @@ Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source fi
 
 - HC-12 as the primary radio and the Shore-Pico architecture — HC-12 survives only as an optional
   USB-TTL backup on the Pi 5; the PCB has no HC-12 connector
-- Single-pack battery system — replaced by isolated packs (3S logic, 12S drive, 4S winch)
+- Single-pack battery system — replaced by three isolated M18 domains (drive 3× M18, electronics
+  1× M18, winch 1× M18). The interim 3S-logic / 12S-drive / 4S-winch LiPo design is also retired.
 - QMC5883P compass — replaced by BNO085
 - NEO-6M GPS — replaced by u-blox M10Q
 - PWM ESC control for propulsion — replaced by UART to VESC (winch still uses PWM)
@@ -74,7 +78,7 @@ Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source fi
 | Pi 5 uses USB only | No GPIO, SPI, or I²C on the Pi 5 40-pin header. |
 | USB cameras (not CSI) | `cv2.VideoCapture(0)` and `(1)`. No Pi Camera, no CSI HAT. |
 | HC-12 is USB-backup only | No HC-12 on the PCB; primary shore comms = SIM7600 / WiFi. |
-| BT4 = 4S winch pack | Dedicated 4S pack for the winch (see open item on winch supply). |
+| M18 three-domain batteries | Isolated drive (3× M18 series) / electronics (1× M18) / winch (1× M18); no midpoint tap. |
 | BNO085 at 0x4A (not QMC5883P) | `compass.py` talks BNO085; old calibration offsets are invalid. |
 | VESC via UART0 GP12/13 | VESC master receives UART; slave via COMM_FORWARD_CAN. |
 | THT passives only | Owner preference. No SMD resistors or caps on the boards. |
@@ -87,10 +91,9 @@ Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source fi
 
 1. KiCad PCB layout — `Boat_PCB` schematic complete, layout in progress.
 2. `vesc.py` firmware — UART command set being finalized.
-3. Firmware battery monitoring vs PCB — reconcile divider values and decide whether to implement the
-   4S winch sense on GP28 (see Open Items).
-4. Winch power source — resolve BT4-dedicated vs 6S-midpoint-tap (see Open Items).
-5. Port of Oakland partnership — email sent, awaiting engineering contact.
+3. KiCad schematic — rework battery inputs and dividers to the M18 three-domain design
+   (200k/10k → GP26, 56k/10k → GP27, 56k/10k → GP28); firmware + docs already migrated.
+4. Port of Oakland partnership — email sent, awaiting engineering contact.
 
 ### Done since the earlier draft
 - `compass.py` rewritten for BNO085 ✅
@@ -98,13 +101,20 @@ Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source fi
 - FastAPI server + WebSocket (`pi5/server/`) ✅
 - React dashboard (`dashboard/`) ✅
 - Simulation mode (`pi5/navigation/simulator.py`, `run_sim.py`) ✅
+- M18 three-domain battery migration — firmware (`sensors.py`), simulator, dashboards, and docs ✅
+  (KiCad schematic rework still pending)
 
 ---
 
 ## Open Items / Known Discrepancies
 
-- **Battery dividers & GP28.** `Boat_PCB` uses 220k/13k (12S), 100k/30k (3S), and 100k/18k from BT4
-  (4S winch) to GP28 ADC2. Firmware `sensors.py` uses 3.3k/47k and 15k/100k, monitors only the 12S
-  and 3S rails, and treats GP28 as spare. The hardware winch-sense circuit is unimplemented in code.
-- **Winch supply.** Both a dedicated BT4 (4S) pack and a J6 "6s output" exist; `docs/system_tree.md`
-  shows a 6S-midpoint tap feeding the winch ESC. Intended source unresolved.
+- **KiCad schematic lags the M18 migration.** Firmware, the simulator, the dashboards, and the docs
+  now use the M18 three-domain design (drive 200k/10k → GP26, elec 56k/10k → GP27, winch 56k/10k →
+  GP28; all three rails monitored). `Boat_PCB/Boat_PCB.kicad_sch` still carries the old battery
+  inputs and divider resistors — rework it in KiCad Tool to match `docs/battery_architecture.md`.
+
+### Resolved
+- ~~Battery dividers & GP28~~ — firmware now monitors all three rails with unified M18 divider values;
+  the old firmware↔schematic mismatch no longer exists (only the schematic rework remains).
+- ~~Winch supply (dedicated vs midpoint tap)~~ — winch is now a dedicated standalone M18 pack; the
+  drive-midpoint tap is removed.

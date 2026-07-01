@@ -13,13 +13,17 @@ Read this before touching any file in the repo.
 ## Session Journal — read at start, write at end (REQUIRED)
 
 `docs/session_journal.md` is a running log of what each Claude Code session worked on. It exists so a
-fresh chat can pick up where the last one left off.
+fresh chat can pick up where the last one left off. **It's capped at the 5 most recent entries** to
+keep it cheap to load every session; older entries live in `docs/session_journal_archive.md`.
 
 1. **At the start of every session:** read `docs/session_journal.md` (entries are newest-first) to
-   understand recent work, open questions, and next steps before doing anything else.
+   understand recent work, open questions, and next steps before doing anything else. Don't read the
+   archive unless you need context on something specific from further back.
 2. **At the end of every session** — or once you've finished a meaningful chunk of work — **append a
    new entry to the top** of the journal (under the `New entries below this line` marker) using the
-   template in that file. Keep it short and factual: what changed, why, what's left.
+   template in that file. Keep it short and factual: what changed, why, what's left. If this pushes
+   the count past 5, move the oldest entry to the top of `docs/session_journal_archive.md`'s entry
+   list (newest-first there too).
 
 This is the narrative of in-progress work. Locked decisions and the architecture-of-record still live
 in `docs/changelog_and_decisions.md` — don't duplicate them in the journal.
@@ -85,12 +89,12 @@ The KiCad 10 project lives in the repo (schematic format version `20260306`, gen
 | Group | Refs | Notes |
 |-------|------|-------|
 | Compute | A1 | RaspberryPi_Pico |
-| Batteries | BT1 3S (XT60), BT2 6S (XT60), BT3 6S (XT60), BT4 4S (XT30) | BT2+BT3 in series = 12S drive rail |
-| Fuses | F1 (ATO blade), F2/F3/F4 (off-board) | |
-| Battery dividers | R2/R4 (12S), R5/R6 (3S), R8/R10 (4S winch) | See discrepancy note below |
-| Drive output | J4/J5 (XT90, VESC L/R), J6 (XT60, "6s output") | |
+| Batteries | 3× M18 (drive, series), 1× M18 (electronics), 1× M18 (winch) | Three fully isolated domains — see `docs/battery_architecture.md` |
+| Fuses | Drive 200A ANL + 100A ANL per ESC; elec 15A blade; winch 20A blade | Per-pack overcurrent handled by M18 REDLINK BMS |
+| Battery dividers | Drive 200k/10k → GP26, Elec 56k/10k → GP27, Winch 56k/10k → GP28 | All ×ratio to ≤3.18 V at the Boat Pico ADC |
+| Drive output | J4/J5 (XT90, VESC L/R), J6 (XT60, tow-ESC stub) | |
 | VESC comms | J2 ("CAN chain", 7-pin) → Pico UART0 GP12/13 | |
-| Winch | J8 (4S power), J9 (PWM, GP14) | |
+| Winch | J8 (M18 power), J9 (PWM, GP14) | |
 | Sensors | J7 (GPS+compass), J10 (IMU), J11/J13 (DHT11), J12 (LED), J15/J16 (hull leak) | |
 
 ### No HC-12 on the boat PCB
@@ -109,15 +113,16 @@ together. Quick orientation only:
 
 - **Boat Pico:** GP0/GP1 dead. GP4/5 UART1 (GPS M10Q + Pod, shared 9600). GP8/9 I²C0 (BNO085 @ 0x4A).
   GP10 status NeoPixel. GP12/13 UART0 (VESC master, 115200). GP14 winch PWM. GP15 SBUS (PIO).
-  GP16 DHT11. GP17/18 hull leak. GP26 ADC propulsion 12S, GP27 ADC electronics 3S, **GP28 spare**.
+  GP16 DHT11. GP17/18 hull leak. GP26 ADC drive (3× M18), GP27 ADC electronics (M18), GP28 ADC winch (M18).
 - **Pod Pico:** GP0/1 UART to Boat Pico (slip ring). GP17 EC drive, GP20 leak, GP21 bottom contact,
   GP22 pressure, GP26 water-temp NTC, GP27 EC sense, GP28 light.
 
-> ⚠ **Known discrepancy — battery dividers / GP28.** The `Boat_PCB` schematic uses **220k/13k** (12S),
-> **100k/30k** (3S), and **100k/18k** from BT4 (4S winch) to **GP28 ADC2**. The current firmware
-> (`firmware/boat-pico/sensors.py`) instead uses **3.3k/47k** (12S) and **15k/100k** (3S), monitors
-> only those two rails, and leaves **GP28 unread ("spare")**. The PCB's 4S-winch sense circuit is not
-> yet implemented in firmware. Resolving this is out of scope for the docs; it's flagged here.
+> **Battery dividers (M18 three-domain).** Firmware and docs now agree: drive **200k/10k** (×21.0,
+> 63 V → 3.00 V) → GP26, electronics **56k/10k** (×6.6, 21 V → 3.18 V) → GP27, winch **56k/10k**
+> (×6.6) → GP28. All three rails are monitored (`firmware/boat-pico/sensors.py`). This supersedes the
+> old 12S/3S/4S divider values and resolves the previous firmware↔schematic discrepancy. The KiCad
+> schematic still carries the *old* resistor values and needs updating in KiCad Tool to match — see
+> `docs/battery_architecture.md`.
 
 ---
 
@@ -221,23 +226,23 @@ cd dashboard && npm run dev            # React dashboard
 
 ## Power Architecture
 
+Three **fully isolated Milwaukee M18 domains** — no shared ground except a single star point on the
+logic PCB. Full spec (dividers, thresholds, fusing, runtimes) in **`docs/battery_architecture.md`**.
+
 ```
-BT2 (6S) ──┐
-            ├── series ──► 12S drive rail (50.4V) ── J4 → VESC left  (XT90)
-BT3 (6S) ──┘                                       └─ J5 → VESC right (XT90)
-                                                    └─ J6 "6s output" (XT60)
+3× M18 (series) ──► DRIVE rail (54V nom / 63V max) ─[200A ANL]─► PDB ─┬─[100A]─► J4 VESC left  (XT90)
+                                                                      ├─[100A]─► J5 VESC right (XT90)
+                                                                      └─[100A]─► J6 tow-ESC stub (XT60)
 
-BT1 (3S Li-ion) ──► Logic rail (12.6V) → 5V buck → Pi 5 (USB-C)
-                                        → 3.3V → Boat Pico, sensors
+1× M18 ──► ELECTRONICS rail (18V nom) ─[15A]─► 5V UBEC → Pi 5 (USB-C)
+                                             └─► 3.3V → Boat Pico, sensors
 
-BT4 (4S LiPo)   ──► Winch ESC (J8, XT30)
+1× M18 ──► WINCH rail (18V nom) ─[20A]─► MOSFET kill → Winch ESC (J8)
 ```
 
-> ⚠ **Known discrepancy — winch power source.** This project carries both a dedicated **BT4 (4S)**
-> winch pack *and* a **J6 "6s output"** connector, and `docs/system_tree.md` depicts a **6S midpoint
-> tap → winch ESC**. The earlier reference docs claimed "BT4 is dedicated; never tap the 12S
-> midpoint," which conflicts with the midpoint tap shown in `system_tree.md`. The intended winch
-> supply is unresolved — flagged here, not fixed.
+Per-pack overcurrent/short/over-discharge is handled by each M18's REDLINK BMS, so no individual pack
+fuses are needed. There is **no 12S-midpoint tap** — the winch is a dedicated standalone pack, which
+resolves the old midpoint-vs-dedicated ambiguity.
 
 ---
 
@@ -252,15 +257,65 @@ BT4 (4S LiPo)   ──► Winch ESC (J8, XT30)
 | VESC via UART0 (not CAN HAT) | VESC master on GP12/13; slave reached via COMM_FORWARD_CAN |
 | Simulation-first dev | Full stack testable without any hardware |
 | THT passive components | Owner preference for reworkability |
+| 3-domain M18 batteries | Isolated drive/elec/winch packs; hot-swappable, BMS-protected, no balance tracking |
 
 ---
 
 ## Related Docs
 
 - `docs/pin_map.md` — authoritative pin assignments (both Picos + Pi 5 USB)
+- `docs/battery_architecture.md` — authoritative M18 three-domain battery reference
 - `docs/serial-protocol.md` — Pi 5 ↔ Boat Pico protocol (v1.0)
 - `docs/system_tree.md` — Mermaid system/power diagram
 - `docs/pcb_design_notes.md` — Boat_PCB component breakdown
 - `docs/hardware_changes_v1_to_v2.md` — V1 → V2 hardware delta
-- `docs/changelog_and_decisions.md` — locked decisions + active work items
-- `docs/adr/` — architecture decision records (001–005)
+- # ... 2 more
+
+---
+
+## Session start protocol
+
+- Run `/context` on session start to check token usage
+- Run `/compact` when context reaches 70% (do not wait for auto-compact at 95%)
+- Run `/clear` when switching to an unrelated task
+- Use `/effort low` for simple edits and single-file changes
+- Use Plan Mode (Shift+Tab) before any multi-file operation
+
+<!-- code-review-graph MCP tools -->
+## MCP Tools: code-review-graph
+
+**IMPORTANT: This project has a knowledge graph. ALWAYS use the
+code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
+the codebase.** The graph is faster, cheaper (fewer tokens), and gives
+you structural context (callers, dependents, test coverage) that file
+scanning cannot.
+
+### When to use graph tools FIRST
+
+- **Exploring code**: `semantic_search_nodes` or `query_graph` instead of Grep
+- **Understanding impact**: `get_impact_radius` instead of manually tracing imports
+- **Code review**: `detect_changes` + `get_review_context` instead of reading entire files
+- **Finding relationships**: `query_graph` with callers_of/callees_of/imports_of/tests_for
+- **Architecture questions**: `get_architecture_overview` + `list_communities`
+
+Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
+
+### Key Tools
+
+| Tool | Use when |
+| ------ | ---------- |
+| `detect_changes` | Reviewing code changes — gives risk-scored analysis |
+| `get_review_context` | Need source snippets for review — token-efficient |
+| `get_impact_radius` | Understanding blast radius of a change |
+| `get_affected_flows` | Finding which execution paths are impacted |
+| `query_graph` | Tracing callers, callees, imports, tests, dependencies |
+| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `get_architecture_overview` | Understanding high-level codebase structure |
+| `refactor_tool` | Planning renames, finding dead code |
+
+### Workflow
+
+1. The graph auto-updates on file changes (via hooks).
+2. Use `detect_changes` for code review.
+3. Use `get_affected_flows` to understand impact.
+4. Use `query_graph` pattern="tests_for" to check coverage.

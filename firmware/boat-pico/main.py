@@ -21,9 +21,9 @@ Pin map:
   GP16      — unused (was DHT11; not present on the board)
   GP17      — Hull leak left
   GP18      — Hull leak right
-  GP26      — Propulsion battery (12S LiPo) ADC
-  GP27      — Electronics battery (3S Li-ion) ADC
-  GP28      — Winch battery (4S LiPo) ADC (PCB BT4 100k/18k divider, provisional)
+  GP26      — Drive battery (3× M18 series) ADC — 200k/10k divider (×21.0)
+  GP27      — Electronics battery (1× M18) ADC — 56k/10k divider (×6.6)
+  GP28      — Winch battery (1× M18) ADC — 56k/10k divider (×6.6)
 
 ⚠ As-built board divergence: vesc.py (UART0 GP12/13), motor_control.py (winch
   PWM GP14) and sbus.py (SBUS GP15) still claim GP12-15, but on the fabricated
@@ -323,8 +323,8 @@ async def task_env_telemetry():
     """Send periodic environment data to Pi 5.
 
     Carries the open-air SHT41 (#A) + water + bottom, plus the ENV v1.1 appendix:
-    the enclosure SHT41 (#B) and the 3S electronics / 4S winch battery rails (the
-    12S propulsion rail rides in TEL as batt_v)."""
+    the enclosure SHT41 (#B) and the M18 electronics / M18 winch battery rails (the
+    M18 drive rail rides in TEL as batt_v)."""
     while True:
         try:
             serial.send_env(
@@ -560,7 +560,7 @@ async def main():
     print("  !! As-built conflict: SHT41 GP12-15 overlap VESC/winch/SBUS; "
           "those modules are mis-pinned for this board (see docs/pin_map.md)")
     print("  Hull: GP17(L) GP18(R)")
-    print("  Prop batt: GP26 (12S)  Elec batt: GP27 (3S)  Winch batt: GP28 (4S)")
+    print("  Drive batt: GP26 (3xM18)  Elec batt: GP27 (M18)  Winch batt: GP28 (M18)")
     print("  Watchdog: 3000ms heartbeat timeout")
     print("  Pulley L:%.3f R:%.3f" % (
         motor_control.PULLEY_L, motor_control.PULLEY_R))

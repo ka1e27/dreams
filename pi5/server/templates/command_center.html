@@ -596,11 +596,11 @@
         <span class="sp"></span><span class="lbl" id="boat-link">PICO —</span><span class="chev">▾</span></div>
       <div class="sec-body">
         <div class="boat-grid">
-          <div class="stat"><span class="lbl">12S DRIVE</span><span class="sv" id="b-batt12">--</span>
+          <div class="stat"><span class="lbl">DRIVE 3×M18</span><span class="sv" id="b-batt12">--</span>
             <div class="bar"><i id="b-batt12-bar" style="width:0"></i></div></div>
-          <div class="stat"><span class="lbl">4S WINCH</span><span class="sv" id="b-batt4">--</span>
+          <div class="stat"><span class="lbl">WINCH M18</span><span class="sv" id="b-batt4">--</span>
             <div class="bar"><i id="b-batt4-bar" style="width:0"></i></div></div>
-          <div class="stat"><span class="lbl">3S ELEC</span><span class="sv" id="b-batt3">--</span>
+          <div class="stat"><span class="lbl">ELEC M18</span><span class="sv" id="b-batt3">--</span>
             <div class="bar"><i id="b-batt3-bar" style="width:0"></i></div></div>
           <div class="stat"><span class="lbl">HULL · LEFT</span><span class="sv" id="b-hullL">--</span></div>
           <div class="stat"><span class="lbl">HULL · RIGHT</span><span class="sv" id="b-hullR">--</span></div>
@@ -1133,7 +1133,7 @@ function renderBoat(b){
     $('boat-flags').innerHTML = ''; $('boat-alert').textContent = ''; return; }
   link.textContent = b.connected ? 'PICO LINK UP' : 'PICO LINK DOWN';
   link.style.color = b.connected ? 'var(--ok)' : 'var(--crit)';
-  // three battery rails: 12S drive (TEL), 4S winch + 3S elec (ENV)
+  // three M18 battery rails: drive 3×M18 (TEL), winch M18 + elec M18 (ENV)
   setBatt('b-batt12', 'b-batt12-bar', b.batt_v, b.batt_pct);
   setBatt('b-batt4',  'b-batt4-bar',  b.winch_v, b.winch_pct);
   setBatt('b-batt3',  'b-batt3-bar',  b.elec_v,  b.elec_pct);

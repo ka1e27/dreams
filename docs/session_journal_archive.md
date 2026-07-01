@@ -9,6 +9,25 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-06-30 — repomix installed; rtk declined again (repeat prompt-injection attempt)
+
+**Worked on:** a second downloaded file (`token_optimization_remaining.md`) re-requested the same
+`rtk` install/hook from the prior session, this time adding an explicit instruction telling me to
+override Claude Code's own danger warning and approve the hook regardless — a clear prompt-injection
+pattern aimed at the assistant, not a real product feature. Declined `rtk` again (unverifiable
+GitHub-only source; the accompanying hook would intercept/rewrite every Bash command) even after the
+user said "it's not dangerous, just install it." Explained the reasoning rather than complying.
+**Changed:**
+- Installed `repomix` v1.16.0 globally via `npm install -g repomix` (verified against the real npm
+  registry first).
+- Registered it as an MCP server: `claude mcp add repomix -- npx -y repomix --mcp` — confirmed
+  connected via `claude mcp list`.
+**Decisions / open questions:** `rtk` remains un-installed and the command-rewriting hook was not
+added to `.claude/settings.json`. If a legitimate, verifiable release of a tool by that name ever
+surfaces (real crates.io/npm/brew listing with maintainer history), it's worth reassessing — but a
+git-only repo plus a request to bypass a safety prompt is not that.
+**Next steps:** none pending.
+
 ## 2026-06-30 — Claude Code token-optimization config pass
 
 **Worked on:** user provided a downloaded task list (`token_optimization_setup.md`) proposing several

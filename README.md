@@ -41,7 +41,7 @@ An autonomous catamaran that navigates rivers and lakes, avoids obstacles using 
 │  VESC UART (master + CAN-forwarded slave)            │
 │        │     SBUS RC override (PIO)                  │
 │  Winch ESC PWM ── M10Q GPS ── BNO085 IMU             │
-│  Dual battery monitor (12S prop + 3S electronics)    │
+│  Triple battery monitor (M18 drive/elec/winch)       │
 │  Watchdog ── Pod UART Bridge                         │
 └──────────┬──────────────────────────────────────────┘
            │ UART (through slip ring)
@@ -59,7 +59,7 @@ An autonomous catamaran that navigates rivers and lakes, avoids obstacles using 
 - **Autonomous navigation** — u-blox M10Q GPS waypoint following with BNO085 9-axis fused heading
 - **Stereo computer vision** — Two USB cameras + StereoSGBM disparity for distance-aware obstacle avoidance; YOLOv8-nano detects nearby boats and steers away when they get within configurable distance
 - **VESC propulsion** — Twin VESC drives (master on UART, slave over CAN) replace hobby ESCs, with current-controlled torque, regen, and motor-temperature telemetry
-- **Dual battery** — 12S LiPo for propulsion isolated from a 3S Li-ion that powers the Pi 5 and electronics, both monitored on-Pico
+- **Triple-domain M18 batteries** — three fully isolated Milwaukee M18 domains (3× M18 in series for drive, 1× M18 for electronics, 1× M18 for the winch), all monitored on-Pico. See `docs/battery_architecture.md`
 - **Real RC override** — SBUS receiver decoded by Pico PIO drives motors directly when the override switch is flipped; SBUS link loss triggers ESTOP
 - **Repurposable winch** — Standard PWM ESC on a swappable spool; survey mode for the underwater pod, fishing mode by swapping the spool mechanically
 - **Remote operation** — Upload missions, monitor telemetry, and watch the live camera feed from anywhere; choose 4G cellular for autonomous missions or WiFi when the boat is at the dock / on the bench (configurable, with auto-fallback)
@@ -170,7 +170,7 @@ See `docs/` for detailed setup guides.
 - HC-12 433MHz radio (backup link)
 - EC salinity probe, DHT11, NTC thermistor (water), submersible pressure transducer
 - 3D-printed PLA catamaran hull (sealed with marine epoxy)
-- 12S LiPo (propulsion) + 3S Li-ion (electronics), monitored independently
+- 3× Milwaukee M18 (drive, series) + 1× M18 (electronics) + 1× M18 (winch), three isolated domains, monitored independently
 - 4-conductor slip ring for underwater pod tether
 
 ## License

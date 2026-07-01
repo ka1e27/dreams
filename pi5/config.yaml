@@ -64,18 +64,25 @@ pod:
   timeout_ms: 10000
 
 battery:
-  # Propulsion battery — 12S LiPo
-  prop:
-    full_v: 50.4
-    empty_v: 39.6
-    warn_v: 42.0
-    critical_v: 39.6
-  # Electronics battery — 3S Li-ion
+  # Three fully isolated Milwaukee M18 domains — see docs/battery_architecture.md.
+  # Drive battery — 3× M18 in series (54 V nominal / 63 V full / 45 V cutoff)
+  drive:
+    full_v: 63.0
+    empty_v: 45.0
+    warn_v: 51.0
+    critical_v: 48.0
+  # Electronics battery — 1× M18 standalone (18 V nominal / 21 V full)
   elec:
-    full_v: 12.6
-    empty_v: 9.0
-    warn_v: 9.9
-    critical_v: 9.6
+    full_v: 21.0
+    empty_v: 15.0
+    warn_v: 17.0
+    critical_v: 16.0
+  # Winch battery — 1× M18 standalone (18 V nominal / 21 V full)
+  winch:
+    full_v: 21.0
+    empty_v: 15.0
+    warn_v: 17.0
+    critical_v: 16.0
 
 network:
   # Connection mode for cloud uploads + remote access:

@@ -1,4 +1,4 @@
-"""Onboard hull sensors — dual battery, air temp/humidity (SHT41 ×2), hull leak.
+"""Onboard hull sensors — triple battery, air temp/humidity (SHT41 ×2), hull leak.
 
 Motor temperatures used to live here as NTC thermistors on GP27/GP28; that
 job moved to the VESCs (queried over UART by `vesc.py`). The freed ADCs
@@ -22,13 +22,17 @@ firmware's winch/SBUS assignments (see the warning below).
   GP12-15 before the temp sensors can run without a pin clash. See
   docs/pin_map.md → "As-built board divergence".
 
+Battery architecture — three fully isolated Milwaukee M18 domains (see
+docs/battery_architecture.md). ADCs are on this Boat Pico (RP2040, 3.3 V), not
+the Pi 5.
+
 Pin assignments:
-  - Propulsion battery (12S LiPo) ADC: GP26 (ADC0)
-      — voltage divider sized so 50.4 V → ≤ 3.3 V at the Pico pin
-  - Electronics battery (3S Li-ion) ADC: GP27 (ADC1)
-      — uses the legacy 15 / (15+100) divider; 12.6 V → 1.64 V
-  - Winch battery (4S LiPo) ADC: GP28 (ADC2)
-      — PCB BT4 divider 100k/18k (≈0.1525); 16.8 V → 2.56 V (provisional)
+  - Drive battery (3× M18 series, 54 V nom / 63 V max) ADC: GP26 (ADC0)
+      — divider 200k/10k → ×21.0; 63 V → 3.00 V at the Pico pin
+  - Electronics battery (1× M18, 18 V nom / 21 V max) ADC: GP27 (ADC1)
+      — divider 56k/10k → ×6.6; 21 V → 3.18 V
+  - Winch battery (1× M18, 18 V nom / 21 V max) ADC: GP28 (ADC2)
+      — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]  — open air
   - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]  — electronics enclosure
   - Hull leak left:  GP17
@@ -37,38 +41,33 @@ Pin assignments:
 from machine import Pin, ADC, SoftI2C
 import sht41
 
-# ---- Propulsion battery (12S LiPo) ----
-# Divider: 3.3 kΩ low / 47 kΩ high → ratio ≈ 1/15.24 (50.4 V → 3.31 V)
-P_RATIO = 3.3 / 50.3
-INV_P_RATIO = 1.0 / P_RATIO
-P_FULL = 50.4   # 4.20 V × 12
-P_EMPTY = 39.6  # 3.30 V × 12 LVC
-P_WARN = 42.0   # 3.50 V × 12
-P_CRIT = 39.6
+# ---- Drive battery (3× M18 series, 54 V nominal) ----
+# Divider 200k high / 10k low → reconstruct ×(200+10)/10 = 21.0. 63 V → 3.00 V.
+# `prop_*` names are kept for wire/protocol compatibility (TEL carries batt_v).
+INV_P_RATIO = 21.0
+P_FULL = 63.0   # 21 V × 3 (full)
+P_EMPTY = 45.0  # 15 V × 3 (cutoff → % floor)
+P_WARN = 51.0   # 17 V × 3
+P_CRIT = 48.0   # 16 V × 3 → return to home
 P_RANGE = P_FULL - P_EMPTY
 
-# ---- Electronics battery (3S Li-ion) ----
-# Reuse legacy 15 / (15+100) divider. 12.6 V → 1.64 V.
-E_RATIO = 15.0 / 115.0
-INV_E_RATIO = 1.0 / E_RATIO
-E_FULL = 12.6   # 4.20 V × 3
-E_EMPTY = 9.0   # 3.00 V × 3
-E_WARN = 9.9    # 3.30 V × 3
-E_CRIT = 9.6    # 3.20 V × 3
+# ---- Electronics battery (1× M18) ----
+# Divider 56k high / 10k low → reconstruct ×(56+10)/10 = 6.6. 21 V → 3.18 V.
+INV_E_RATIO = 6.6
+E_FULL = 21.0   # full
+E_EMPTY = 15.0  # cutoff → % floor
+E_WARN = 17.0
+E_CRIT = 16.0   # → alert operator
 E_RANGE = E_FULL - E_EMPTY
 
-# ---- Winch battery (4S LiPo) ----
-# PCB divider (BT4): R8 100k high / R10 18k low → ratio 18/118 ≈ 0.1525.
-# 16.8 V → 2.56 V at GP28. This uses the *schematic* divider value; the prop/elec
-# rails deliberately use different dividers in firmware (see the known divider
-# discrepancy in CLAUDE.md), so treat the 4S reading as provisional until bench-
-# calibrated against the as-built board.
-W_RATIO = 18.0 / 118.0
-INV_W_RATIO = 1.0 / W_RATIO
-W_FULL = 16.8   # 4.20 V × 4
-W_EMPTY = 12.0  # 3.00 V × 4
-W_WARN = 13.2   # 3.30 V × 4
-W_CRIT = 12.8   # 3.20 V × 4
+# ---- Winch battery (1× M18) ----
+# Divider 56k high / 10k low → reconstruct ×6.6, identical to the elec domain.
+# Now a dedicated standalone M18 pack — no more 4S LiPo / 12S midpoint tap.
+INV_W_RATIO = 6.6
+W_FULL = 21.0   # full
+W_EMPTY = 15.0  # cutoff → % floor
+W_WARN = 17.0
+W_CRIT = 16.0   # → disable winch
 W_RANGE = W_FULL - W_EMPTY
 
 # ---- Air temp/humidity (two SHT41 on separate SoftI2C buses) ----
@@ -92,7 +91,7 @@ prop_batt_v = 0.0
 prop_batt_pct = 0
 elec_batt_v = 0.0
 elec_batt_pct = 0
-winch_batt_v = 0.0    # 4S winch pack (GP28 ADC2)
+winch_batt_v = 0.0    # M18 winch pack (GP28 ADC2)
 winch_batt_pct = 0
 air_temp = 0.0        # SHT41 #A (J11) — open air
 air_humidity = 0.0
@@ -149,7 +148,7 @@ def _read_battery_voltage(adc, inv_ratio):
 
 
 def read_prop_battery():
-    """Read propulsion (12S LiPo) battery voltage and percentage."""
+    """Read drive (3× M18 series) battery voltage and percentage."""
     global prop_batt_v, prop_batt_pct
     try:
         prop_batt_v = _read_battery_voltage(_prop_adc, INV_P_RATIO)
@@ -160,7 +159,7 @@ def read_prop_battery():
 
 
 def read_elec_battery():
-    """Read electronics (3S Li-ion) battery voltage and percentage."""
+    """Read electronics (1× M18) battery voltage and percentage."""
     global elec_batt_v, elec_batt_pct
     try:
         elec_batt_v = _read_battery_voltage(_elec_adc, INV_E_RATIO)
@@ -171,7 +170,7 @@ def read_elec_battery():
 
 
 def read_winch_battery():
-    """Read winch (4S LiPo) battery voltage and percentage from GP28."""
+    """Read winch (1× M18) battery voltage and percentage from GP28."""
     global winch_batt_v, winch_batt_pct
     try:
         winch_batt_v = _read_battery_voltage(_winch_adc, INV_W_RATIO)
@@ -221,12 +220,12 @@ def read_all_slow():
 # ---- Battery state predicates ----
 
 def is_prop_critical():
-    """Propulsion battery below LVC. Guard against ADC = 0 (sensor unplugged)."""
+    """Drive battery below cutoff. Guard against ADC = 0 (sensor unplugged)."""
     return prop_batt_v > 5.0 and prop_batt_v <= P_CRIT
 
 
 def is_prop_low():
-    """Propulsion battery below warning level."""
+    """Drive battery below warning level."""
     return prop_batt_v > 5.0 and prop_batt_v <= P_WARN
 
 

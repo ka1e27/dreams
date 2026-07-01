@@ -5,14 +5,14 @@ function healthClass(flag) {
 }
 
 function propBattClass(v) {
-  if (v <= 39.6) return 'danger'
-  if (v <= 42.0) return 'warn'
+  if (v <= 48.0) return 'danger'
+  if (v <= 51.0) return 'warn'
   return 'ok'
 }
 
 function elecBattClass(v) {
-  if (v <= 9.6) return 'danger'
-  if (v <= 9.9) return 'warn'
+  if (v <= 16.0) return 'danger'
+  if (v <= 17.0) return 'warn'
   return 'ok'
 }
 
@@ -86,13 +86,13 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
         <div className="card-header">Power & Hull</div>
         <div className="card-body">
           <div className="data-row">
-            <span className="data-label">Propulsion (12S)</span>
+            <span className="data-label">Drive (3× M18)</span>
             <span className={`data-value ${propBattClass(propV)}`}>
               {propV.toFixed(1)}V ({propPct}%)
             </span>
           </div>
           <div className="data-row">
-            <span className="data-label">Electronics (3S)</span>
+            <span className="data-label">Electronics (M18)</span>
             <span className={`data-value ${elecBattClass(elecV)}`}>
               {elecV.toFixed(1)}V ({elecPct}%)
             </span>

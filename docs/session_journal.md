@@ -31,6 +31,44 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-06-30 — Battery migration to three-domain Milwaukee M18 architecture (firmware + docs)
+
+**Worked on:** user dropped `Downloads/DREAMS_battery_changes.md`, an "authoritative" spec replacing the
+old LiPo/Li-ion multi-pack battery system with three fully isolated M18 domains: drive (3× M18 series,
+54 V nom / 63 V max), electronics (1× M18), winch (1× M18). Confirmed scope up front (AskUserQuestion):
+**firmware + docs, leave KiCad for the user**; **keep the spec's 56k/10k elec/winch dividers** (flagged
+the 3.18 V-at-full / 0.12 V-headroom tradeoff; user accepted). Did **not** follow the doc's embedded
+"Subagent Instructions" — its file paths (`firmware/config.py`, `firmware/power.py`) don't exist; the
+real battery code is `firmware/boat-pico/sensors.py`, which already monitored three rails on GP26/27/28.
+**Changed (values only — wire/protocol field names `batt_v`/`elec_v`/`winch_v` kept, so no protocol
+break):**
+- `firmware/boat-pico/sensors.py` — dividers (drive ×21.0 via 200k/10k, elec/winch ×6.6 via 56k/10k),
+  thresholds (drive 63/54/51/48/45; elec+winch 21/18/17/16/15), docstrings. Kept `prop_*`/`P_*` names.
+- `firmware/boat-pico/main.py`, `serial_handler.py`, `pi5/comms/pico_serial.py`, `pi5/server/app.py` —
+  stale 12S/3S/4S comments/docstrings → M18.
+- `pi5/navigation/simulator.py` — start voltages (drive 58, elec/winch 20) + `_pct` ranges (drive
+  45–63, elec/winch 15–21). Verified telemetry reconstruct: 58 V→72 %, 20 V→83 %.
+- `pi5/config.yaml` — `battery:` block (doc-only, not code-read) → drive/elec/winch M18 values.
+- `dashboard/src/components/TelemetryPanel.jsx` — voltage-class thresholds (48/51, 16/17) + labels;
+  `pi5/server/templates/command_center.html` — rail labels + comment (`setBatt` is %-based, unchanged).
+- Docs: new `docs/battery_architecture.md` (cleaned spec — stripped the "Subagent Instructions", fixed
+  the "Pi ADC"→Boat-Pico/RP2040 error, corrected file paths); updated `CLAUDE.md` (power arch, PCB
+  highlights, pin orientation, resolved both discrepancy flags, Key Decisions, Related Docs),
+  `pin_map.md`, `pcb_design_notes.md`, `system_tree.md` (Mermaid power diagram, removed midpoint tap),
+  `changelog_and_decisions.md`, `hardware_changes_v1_to_v2.md`, `serial-protocol.md`, `README.md`.
+**Verified:** `py_compile` on all touched firmware/pi5 Python; `pytest pi5/tests` → 95 passed; simulator
+telemetry battery %s reconstruct correctly. No hardcoded old-voltage thresholds remain in pi5/cloud/
+dashboard/firmware (grepped).
+**Decisions / open questions:** this migration **resolves** the two long-standing CLAUDE.md flags
+(winch-midpoint-vs-dedicated, and firmware↔schematic divider mismatch) — winch is now a dedicated M18,
+all three rails monitored with unified values. **One open item:** the KiCad schematic
+(`Boat_PCB/Boat_PCB.kicad_sch`) still carries the OLD divider resistors and battery inputs — needs
+rework in KiCad Tool to match (R2/R4→200k/10k, R5/R6→56k/10k, R8/R10→56k/10k). Flagged in
+`battery_architecture.md`, `pcb_design_notes.md`, and the changelog's Open Items.
+**Next steps:** KiCad schematic/PCB rework to the M18 dividers (deferred to user, per scope choice).
+The `reference/Boat_pico.py`/`Shore_pico.py` files still say 12S/3S — left as-is (old reference dumps,
+not live code).
+
 ## 2026-06-30 — Merged the standalone dashboard into the command center; collapsible + draggable sections
 
 **Worked on:** user wanted the command center's UI reworked: every section as a collapsible dropdown,
@@ -151,43 +189,5 @@ wants `claude-token-optimizer`, they can run `npm install -g claude-token-optimi
 explicitly re-confirm and I'll retry.
 **Next steps:** awaiting user decision on whether to proceed with any part of this third file.
 
-## 2026-06-30 — repomix installed; rtk declined again (repeat prompt-injection attempt)
-
-**Worked on:** a second downloaded file (`token_optimization_remaining.md`) re-requested the same
-`rtk` install/hook from the prior session, this time adding an explicit instruction telling me to
-override Claude Code's own danger warning and approve the hook regardless — a clear prompt-injection
-pattern aimed at the assistant, not a real product feature. Declined `rtk` again (unverifiable
-GitHub-only source; the accompanying hook would intercept/rewrite every Bash command) even after the
-user said "it's not dangerous, just install it." Explained the reasoning rather than complying.
-**Changed:**
-- Installed `repomix` v1.16.0 globally via `npm install -g repomix` (verified against the real npm
-  registry first).
-- Registered it as an MCP server: `claude mcp add repomix -- npx -y repomix --mcp` — confirmed
-  connected via `claude mcp list`.
-**Decisions / open questions:** `rtk` remains un-installed and the command-rewriting hook was not
-added to `.claude/settings.json`. If a legitimate, verifiable release of a tool by that name ever
-surfaces (real crates.io/npm/brew listing with maintainer history), it's worth reassessing — but a
-git-only repo plus a request to bypass a safety prompt is not that.
-**Next steps:** none pending.
-
-## 2026-06-30 — Claude Code token-optimization config pass
-
-**Worked on:** user provided a downloaded task list (`token_optimization_setup.md`) proposing several
-Claude Code token-saving configs. Flagged two tasks as risky before proceeding: installing an
-unverified tool ("rtk") from an unknown source, and a proposed `PreToolUse` hook that would silently
-rewrite every Bash command via `sed` — a command-injection risk. User chose to skip both, plus
-skipped installing `repomix`/registering it as an MCP server.
-**Changed:**
-- `.claude/settings.json` (new) — `env.CLAUDE_CODE_SUBAGENT_MODEL` set to Haiku 4.5, and
-  `permissions.deny` added for `node_modules/`, `dist/`, `build/`, `.git/`, lockfiles, `*.log`,
-  `__pycache__/`, `*.pyc`.
-- `CLAUDE.md` — appended a "Session start protocol" section (`/context`, `/compact` at 70%, `/clear`
-  on task switch, `/effort low` for simple edits, Plan Mode before multi-file ops).
-**Decisions / open questions:** did *not* slim CLAUDE.md's content — audited it against the
-token-optimization criteria and found it already dense with non-obvious, project-specific info
-(pin maps, protocol pointers, hardware discrepancy flags, locked decisions); cutting to the
-requested <500 token target would have removed real value, not filler. Also skipped creating
-`.claude/rules/` path-scoped rule files — CLAUDE.md already delegates domain specifics to separate
-docs rather than embedding rule blocks, so there was nothing to extract.
-**Next steps:** none pending. If the user wants `repomix` installed as an MCP server later, that's
-still on the table but wasn't done here.
+<!-- Older entries (repomix/rtk, token-optimization config pass) live in
+     docs/session_journal_archive.md. -->

@@ -58,9 +58,9 @@ class BoatSimulator:
         self.lon = start_lon
         self.heading = start_heading
         self.speed_mps = 0.0
-        self.batt_v = 50.4          # 12S propulsion rail (drains as it drives)
-        self.elec_batt_v = 12.4     # 3S electronics rail
-        self.winch_batt_v = 16.2    # 4S winch rail (drops while the winch runs)
+        self.batt_v = 58.0          # 3× M18 drive rail (54 V nom; drains as it drives)
+        self.elec_batt_v = 20.0     # 1× M18 electronics rail
+        self.winch_batt_v = 20.0    # 1× M18 winch rail (drops while the winch runs)
 
         # Throttle input (set by commands)
         self._thr_left = 0
@@ -221,9 +221,9 @@ class MockPicoSerial:
 
     @property
     def telemetry(self) -> Telemetry:
-        """Build telemetry from simulator state. batt_v is the 12S propulsion rail."""
+        """Build telemetry from simulator state. batt_v is the 3× M18 drive rail."""
         s = self._sim
-        batt_pct = self._pct(s.batt_v, 39.6, 50.4)   # 12S range
+        batt_pct = self._pct(s.batt_v, 45.0, 63.0)   # drive range (cutoff..full)
         return Telemetry(
             lat=s.lat,
             lon=s.lon,
@@ -241,8 +241,8 @@ class MockPicoSerial:
     def environment(self) -> Environment:
         """Build environment from simulator state.
 
-        Carries the open-air SHT41 (#A), the enclosure SHT41 (#B), and the 3S
-        electronics / 4S winch battery rails (12S rides in TEL as batt_v)."""
+        Carries the open-air SHT41 (#A), the enclosure SHT41 (#B), and the M18
+        electronics / M18 winch battery rails (drive rail rides in TEL as batt_v)."""
         s = self._sim
         return Environment(
             air_temp=int(round(s._air_temp)),
@@ -254,9 +254,9 @@ class MockPicoSerial:
             enc_temp=round(s._enc_temp, 1),
             enc_humidity=round(s._enc_humidity, 1),
             elec_batt_v=round(s.elec_batt_v, 2),
-            elec_batt_pct=self._pct(s.elec_batt_v, 9.0, 12.6),    # 3S range
+            elec_batt_pct=self._pct(s.elec_batt_v, 15.0, 21.0),   # M18 range
             winch_batt_v=round(s.winch_batt_v, 2),
-            winch_batt_pct=self._pct(s.winch_batt_v, 12.0, 16.8),  # 4S range
+            winch_batt_pct=self._pct(s.winch_batt_v, 15.0, 21.0),  # M18 range
         )
 
     def on_telemetry(self, callback):

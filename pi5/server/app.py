@@ -690,9 +690,9 @@ def _boat_health() -> dict:
         "connected": bool(getattr(_pico, "connected", False)),
         "lat": t.lat, "lon": t.lon,
         "heading": t.heading, "speed_knots": t.speed_knots,
-        # Three battery rails: 12S propulsion (from TEL), 3S electronics + 4S
-        # winch (from ENV v1.1). hull_left/right decoded from the TEL hull code.
-        "batt_v": t.batt_v, "batt_pct": t.batt_pct,            # 12S propulsion
+        # Three M18 battery rails: drive (from TEL), electronics + winch
+        # (from ENV v1.1). hull_left/right decoded from the TEL hull code.
+        "batt_v": t.batt_v, "batt_pct": t.batt_pct,            # 3× M18 drive
         "elec_v": getattr(e, "elec_batt_v", 0.0), "elec_pct": getattr(e, "elec_batt_pct", 0),
         "winch_v": getattr(e, "winch_batt_v", 0.0), "winch_pct": getattr(e, "winch_batt_pct", 0),
         "hull": t.hull,

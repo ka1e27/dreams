@@ -63,9 +63,9 @@ Source-of-truth for each row:
 | GP16 | — | **Unused** (was DHT11; not on board) | — | — | — | — | — |
 | GP17 | IN (pull-up) | Hull leak switch (port) | Conductive contact | DI · active-low | JST-PH 2-pin | `machine.Pin` | `sensors.init` → `Pin(17, IN, PULL_UP)` |
 | GP18 | IN (pull-up) | Hull leak switch (starboard) | Conductive contact | DI · active-low | JST-PH 2-pin | `machine.Pin` | `sensors.init` → `Pin(18, IN, PULL_UP)` |
-| GP26 | ADC0 | Propulsion battery sense | 12S LiPo via 3.3 / 47 kΩ divider | Analog · 0–3.3 V | Solder to balance lead | `machine.ADC` | `sensors.init` → `ADC(26)` (`P_RATIO`) |
-| GP27 | ADC1 | Electronics battery sense | 3S Li-ion via 15 / 100 kΩ divider | Analog · 0–3.3 V | Solder to balance lead | `machine.ADC` | `sensors.init` → `ADC(27)` (`E_RATIO`) |
-| GP28 | ADC2 | **Spare** | — | — | — | — | — |
+| GP26 | ADC0 | Drive battery sense | 3× M18 series (54 V nom) via 200 k / 10 kΩ divider (×21.0) | Analog · 0–3.3 V | Adapter tap | `machine.ADC` | `sensors.init` → `ADC(26)` (`INV_P_RATIO`) |
+| GP27 | ADC1 | Electronics battery sense | 1× M18 (18 V nom) via 56 k / 10 kΩ divider (×6.6) | Analog · 0–3.3 V | Adapter tap | `machine.ADC` | `sensors.init` → `ADC(27)` (`INV_E_RATIO`) |
+| GP28 | ADC2 | Winch battery sense | 1× M18 (18 V nom) via 56 k / 10 kΩ divider (×6.6) | Analog · 0–3.3 V | Adapter tap | `machine.ADC` | `sensors.init` → `ADC(28)` (`INV_W_RATIO`) |
 
 ### Boat Pico — buses summary
 
@@ -131,7 +131,7 @@ gpiozero/lgpio is absent (laptop / simulator), so this never affects the sim.
 | GPIO8  | 24 | SLEEP  | active-LOW (0 = zero-current sleep, 1 = awake) |
 | — (or `reset_pin`) | — | **RESET** | active-LOW, **must be HIGH to step**; jumper to SLEEP (default) or drive from a Pi GPIO |
 | 3V3 (pin 1/17) | — | VIO | A4988 logic supply |
-| GND | — | GND | common with the 3S electronics-pack ground (A4988 VM = 12.6 V) |
+| GND | — | GND | common with the M18 electronics-pack ground (A4988 VM ≈ 18 V) |
 
 > ⚠ **RESET (must be HIGH to move).** The A4988 has *two* active-low control pins,
 > SLEEP **and** RESET, and both must be high before any STEP pulse takes effect — a
@@ -178,7 +178,7 @@ the sole GPIO consumer). The 40-pin header is otherwise unused except as a
 | USB-A (2) | Left USB camera | `pi5/cv/camera.py` (`cv2.VideoCapture(0)`) | 640×480 @ 10 fps |
 | USB-A (3) | Right USB camera | `pi5/cv/camera.py` (`cv2.VideoCapture(1)`) | Stereo pair, 120 mm baseline |
 | USB-A (4) | SIM7600G-H 4G HAT (or USB-TTL HC-12) | OS-level (`/dev/ttyUSB*`) | Cellular bring-up handled outside this codebase |
-| USB-C | Power input — 5 V from logic-domain buck | n/a | Sourced from the 3S Li-ion via the buck array |
+| USB-C | Power input — 5 V from logic-domain UBEC | n/a | Sourced from the 1× M18 electronics pack via the 5 V UBEC |
 | Internal | WiFi (Pi 5 onboard) | OS-level via NetworkManager / `nmcli` | Configured by `pi5/comms/network.py` when `network.mode` is `wifi` or `auto` |
 
 > The boat's actual GPIO/peripheral wiring lives entirely on the Picos.

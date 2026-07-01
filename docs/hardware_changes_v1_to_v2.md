@@ -8,9 +8,9 @@
 | Drive motors | Bilge pump thrusters | 2× brushless outrunners, IP-rated, one per hull |
 | ESCs | None | 2× VESC-based ESCs |
 | ESC comms | PWM from Pico GPIO | UART0 (GP12/13) → VESC master; slave via CAN-forward |
-| Battery (drive) | 3S/4S LiPo | 2× 6S LiPo in series = 12S (BT2 + BT3) |
-| Battery (electronics) | Same pack | Separate 3S Li-ion (BT1) |
-| Battery (winch) | 5V servo rail | Dedicated 4S LiPo (BT4) — see winch-supply note below |
+| Battery (drive) | 3S/4S LiPo | 3× Milwaukee M18 in series (54 V nom) — see battery note below |
+| Battery (electronics) | Same pack | Separate 1× M18 pack |
+| Battery (winch) | 5V servo rail | Dedicated 1× M18 pack (no drive-midpoint tap) |
 | Winch motor | Hobby servo | Brushless + planetary gearbox, PWM from GP14 |
 | Radio (primary) | HC-12 433MHz | **SIM7600G-H 4G cellular** (+ Pi 5 WiFi at the dock) |
 | Radio (backup) | — | HC-12 retained as an optional USB-TTL dongle on the Pi 5 |
@@ -69,26 +69,31 @@ No CSI cameras, no Pi Camera, no camera HAT. The Pi 5 40-pin header is unused.
 
 ---
 
-## Battery System: Isolated Packs
+## Battery System: Three Isolated M18 Domains
 
-| Pack | Ref | Connector | Rail |
-|------|-----|-----------|------|
-| 6S LiPo A | BT2 | XT60 | 12S drive (in series with BT3) |
-| 6S LiPo B | BT3 | XT60 | 12S drive (in series with BT2) |
-| 3S Li-ion | BT1 | XT60 | Electronics (Pi 5, Picos, sensors) |
-| 4S LiPo | BT4 | XT30 | Winch — see note below |
+The current design uses three fully isolated Milwaukee M18 domains (no shared ground except the
+logic-PCB star point). This supersedes the earlier LiPo/Li-ion multi-pack design. Full spec in
+**`docs/battery_architecture.md`**.
 
-### Battery monitoring — PCB vs firmware (known discrepancy)
-- **PCB (`Boat_PCB`):** divider taps 12S via R2/R4 (220k/13k → GP26), 3S via R5/R6 (100k/30k → GP27),
-  and **4S winch via R8/R10 (100k/18k → GP28 ADC2)**.
-- **Firmware (`firmware/boat-pico/sensors.py`):** monitors only the 12S (divider 3.3k/47k, GP26) and
-  3S (divider 15k/100k, GP27) rails. **GP28 is left as spare** — the 4S winch sense circuit on the
-  PCB is not read in code, and the divider values differ from the PCB. Unreconciled; flagged here.
+| Domain | Packs | Voltage (nom/max) | Rail |
+|--------|-------|-------------------|------|
+| Drive | 3× M18 in series | 54 V / 63 V | Both VESCs + brushless motors |
+| Electronics | 1× M18 | 18 V / 21 V | Pi 5, Picos, GPS, compass, radio, camera |
+| Winch | 1× M18 | 18 V / 21 V | Winch ESC + 2006 motor |
 
-### Winch supply (known discrepancy)
-The reference notes claimed "the 12S midpoint (25.2V) is never used; BT4 is a fully separate pack."
-However, the PCB also carries a **J6 "6s output"** connector and `docs/system_tree.md` depicts a
-**6S midpoint tap → winch ESC**. Whether the winch runs from BT4 or a 6S midpoint tap is unresolved.
+### Battery monitoring (firmware + docs migrated)
+All three rails are monitored on the Boat Pico ADCs:
+- Drive **200k/10k** (×21.0, 63 V → 3.00 V) → GP26
+- Electronics **56k/10k** (×6.6, 21 V → 3.18 V) → GP27
+- Winch **56k/10k** (×6.6) → GP28
+
+`firmware/boat-pico/sensors.py`, the Pi 5 simulator, and the dashboards use these values. The
+**KiCad schematic still carries the old divider resistors** and must be reworked to match — this is
+the only remaining open item from the migration.
+
+### Winch supply — resolved
+The winch is now a **dedicated standalone M18 pack**. The old ambiguity between a dedicated 4S pack
+and a 12S/6S-midpoint tap is gone; there is no midpoint tap in this design.
 
 ---
 

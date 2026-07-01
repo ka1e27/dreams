@@ -12,25 +12,25 @@ flowchart TB
     %% =========================================================
     %% POWER DOMAINS
     %% =========================================================
-    subgraph PowerProp["⚡ 12S LiPo — Propulsion Power Domain (50.4 V nom)"]
+    subgraph PowerProp["⚡ Drive Domain — 3× M18 series (54 V nom / 63 V max)"]
         direction LR
-        BATT12["12S LiPo<br/>50.4 V · 12000 mAh"]
-        BATT12 -->|"XT90 + fuse"| VESCM
-        BATT12 -->|"XT60"| VESCS
+        BATT12["3× M18 series<br/>54 V nom"]
+        BATT12 -->|"200A ANL → XT90"| VESCM
+        BATT12 -->|"100A ANL → XT90"| VESCS
     end
 
-    subgraph Power6S["⚡ 6S Midpoint Tap (25.2 V nom)"]
+    subgraph Power6S["⚡ Winch Domain — 1× M18 (18 V nom)"]
         direction LR
-        TAP6S[("6S Balance-Lead Tap<br/>cell-6 / cell-7 junction")]
-        TAP6S -->|"XT30"| WESC
+        TAP6S[("1× M18 winch pack<br/>dedicated, isolated")]
+        TAP6S -->|"20A blade → MOSFET kill"| WESC
     end
 
-    subgraph PowerLogic["⚡ 3S Li-ion — Logic Power Domain (12.6 V nom)"]
+    subgraph PowerLogic["⚡ Electronics Domain — 1× M18 (18 V nom)"]
         direction LR
-        BATT3["3S Li-ion<br/>12.6 V · 5000 mAh"]
-        BATT3 -->|"5 V buck"| PI5
-        BATT3 -->|"3.3 V buck"| BPI
-        BATT3 -->|"5 V buck"| HC12
+        BATT3["1× M18<br/>18 V nom"]
+        BATT3 -->|"15A blade → 5 V UBEC"| PI5
+        BATT3 -->|"3.3 V"| BPI
+        BATT3 -->|"5 V"| HC12
         BATT3 -->|"5 V"| RCRX
         BATT3 -.->|"5 V"| SIM
         BATT3 -.->|"slip ring 5 V"| PPI
@@ -62,8 +62,9 @@ flowchart TB
         DHT["DHT11<br/>air temp / RH"]
         HULL_L["Hull leak L<br/>contact, active-low"]
         HULL_R["Hull leak R<br/>contact, active-low"]
-        BMON_P["12S divider<br/>3.3 / 47 kΩ"]
-        BMON_E["3S divider<br/>15 / 100 kΩ"]
+        BMON_P["Drive divider<br/>200k / 10k (×21)"]
+        BMON_E["Elec divider<br/>56k / 10k (×6.6)"]
+        BMON_W["Winch divider<br/>56k / 10k (×6.6)"]
     end
 
     BPI ==>|"UART1 PH-4<br/>GP4/5 @ 9600"| GPS
@@ -72,8 +73,10 @@ flowchart TB
     BPI -->|"GPIO GP18 PH-2"| HULL_R
     BPI -->|"ADC0 GP26"| BMON_P
     BPI -->|"ADC1 GP27"| BMON_E
+    BPI -->|"ADC2 GP28"| BMON_W
     BMON_P -.->|"sense"| BATT12
     BMON_E -.->|"sense"| BATT3
+    BMON_W -.->|"sense"| TAP6S
 
     %% =========================================================
     %% RC OVERRIDE
@@ -184,12 +187,13 @@ flowchart TB
 
 | Domain | Source | Nominal | Loads |
 |---|---|---|---|
-| **12S Propulsion** | 12S LiPo | 50.4 V | VESC master, VESC slave, both brushless motors |
-| **6S Midpoint Tap** | Cell-6/7 balance-lead junction of the 12S | 25.2 V | Winch ESC (chosen so a hobby-grade ESC sees a sane voltage instead of the full 12S) |
-| **3S Logic** | 3S Li-ion (isolated from propulsion) | 12.6 V | Pi 5 (5 V buck), both Picos (3.3 V buck), HC-12, SBUS RX, SIM7600 HAT, pod via slip-ring |
+| **Drive** | 3× M18 in series | 54 V nom (63 V max) | VESC master, VESC slave, both brushless motors |
+| **Winch** | 1× M18 standalone (dedicated, isolated) | 18 V nom | Winch ESC → 2006 motor, via a MOSFET kill switch |
+| **Electronics** | 1× M18 standalone (isolated from drive) | 18 V nom | Pi 5 (5 V UBEC), both Picos (3.3 V), HC-12, SBUS RX, SIM7600 HAT, pod via slip-ring |
 
-Isolating logic onto its own pack stops motor brownouts and switching noise
-from corrupting the Pi 5's USB host or browning out the BNO085 mid-rotation.
+Three fully isolated M18 domains (no shared ground except the logic-PCB star point) stop motor
+brownouts and switching noise from corrupting the Pi 5's USB host or browning out the BNO085
+mid-rotation, and give the winch its own supply instead of tapping the drive midpoint.
 
 ## Edge legend
 

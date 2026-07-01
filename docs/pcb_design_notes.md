@@ -15,11 +15,19 @@ Source of truth: `Boat_PCB/Boat_PCB.kicad_sch`.
 ## Board Overview
 
 A carrier/breakout board hosting the Boat Pico (RP2040), with:
-- Battery power inputs (3S, 12S via 2×6S, 4S)
+- Battery power inputs (as fabricated: 3S, 12S via 2×6S, 4S) — **migrating to three isolated
+  M18 domains**, see `docs/battery_architecture.md`
 - Per-pack fusing
 - Voltage-divider circuits for ADC battery monitoring
 - Peripheral connectors for the Boat Pico's sensors and motors
 - No Pi 5 on this board — the Pi 5 connects via USB only
+
+> **⚠ Migration in progress (2026-06-30).** The board tables below describe the **as-fabricated**
+> board. The project has moved to the M18 three-domain battery architecture
+> (`docs/battery_architecture.md`); firmware and the dashboards already reflect it. The KiCad
+> schematic and the battery/divider components on this board still need reworking to match — the
+> **target** divider values are drive **200k/10k** → GP26, elec **56k/10k** → GP27, winch
+> **56k/10k** → GP28.
 
 ---
 
@@ -76,18 +84,26 @@ BT2 + BT3 in series = 12S drive rail.
 | R7 | 1k | 4S ADC series filter resistor |
 | R9 | 1k | Leak sense pull-up |
 
-### Voltage-Divider Calculations (as drawn on the PCB)
+### Voltage-Divider Calculations
+
+**As drawn on the fabricated PCB (pre-M18 rework):**
 | Rail | R_top/R_bot | Ratio | Max input | ADC max |
 |------|-------------|-------|-----------|---------|
 | 12S | R2/R4 (220k/13k) | 17.92 | 50.4V | 2.81V |
 | 3S | R5/R6 (100k/30k) | 4.33 | 12.6V | 2.91V |
 | 4S winch | R8/R10 (100k/18k) | 6.56 | 16.8V | 2.56V |
 
-> ⚠ **Firmware uses different dividers.** `firmware/boat-pico/sensors.py` is coded for **3.3k/47k**
-> (12S, GP26) and **15k/100k** (3S, GP27), and leaves **GP28 unread (spare)** — so the PCB's 4S winch
-> sense (R8/R10 → GP28) is not implemented in code, and the 12S/3S divider values above do not match
-> the firmware. This mismatch is unresolved; it is documented in
-> `docs/hardware_changes_v1_to_v2.md` and `docs/changelog_and_decisions.md`.
+**Target — M18 three-domain (what firmware now expects; rework the board to these):**
+| Domain | R_top/R_bot | Reconstruct × | Max input | ADC at full |
+|--------|-------------|---------------|-----------|-------------|
+| Drive (3× M18) | R2/R4 (200k/10k) | 21.0 | 63V | 3.00V → GP26 |
+| Electronics (M18) | R5/R6 (56k/10k) | 6.6 | 21V | 3.18V → GP27 |
+| Winch (M18) | R8/R10 (56k/10k) | 6.6 | 21V | 3.18V → GP28 |
+
+> **Firmware and docs now agree on the target values above** (`firmware/boat-pico/sensors.py`:
+> `INV_P_RATIO=21.0`, `INV_E_RATIO=INV_W_RATIO=6.6`; all three rails monitored). The as-drawn board
+> still carries the old resistors — swap R2/R4/R5/R6/R8/R10 to the target values during the M18
+> rework. See `docs/battery_architecture.md`.
 
 All sense taps: after fuse, before bulk cap. Divider grounds meet at a star point near Pico GND.
 

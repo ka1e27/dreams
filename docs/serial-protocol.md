@@ -430,16 +430,16 @@ $ENV,0,<air_t>,<air_h>,<water_t>,<water_ec>,<water_light>,<bottom>[,<enc_t>,<enc
 the six below are appended by current firmware and are backward compatible — a
 parser that only knows v1.0 stops at `bottom`, and v1.0 firmware simply omits
 them. They carry the second SHT41 (electronics enclosure) and the two battery
-rails *not* in TEL (the 12S propulsion rail stays in TEL as `batt_v`).
+rails *not* in TEL (the M18 drive rail stays in TEL as `batt_v`).
 
 | Field | Type | Description |
 |-------|------|-------------|
 | enc_t | float | Electronics-enclosure temperature (°C, SHT41 #B on J13; -999.0 = none) |
 | enc_h | float | Electronics-enclosure humidity (%, SHT41 #B; -1.0 = none) |
-| elec_v | float | 3S electronics battery voltage |
-| elec_pct | int | 3S electronics battery percentage (0–100) |
-| winch_v | float | 4S winch battery voltage (GP28 ADC; provisional divider — see CLAUDE.md) |
-| winch_pct | int | 4S winch battery percentage (0–100) |
+| elec_v | float | Electronics battery voltage (1× M18) |
+| elec_pct | int | Electronics battery percentage (0–100) |
+| winch_v | float | Winch battery voltage (1× M18, GP28 ADC) |
+| winch_pct | int | Winch battery percentage (0–100) |
 
 **Examples:**
 ```
