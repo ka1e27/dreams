@@ -1,0 +1,8 @@
+docs/session_journal_archive.md
+docs/serial-protocol.md
+docs/pin_map.md
+docs/pcb_design_notes.md
+.github/code-review-graph.instruction.md
+
+Boat_PCB/*.zip
+Boat_PCB/Boat_PCB V2/
