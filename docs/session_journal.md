@@ -31,6 +31,65 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-06-30 — Merged the standalone dashboard into the command center; collapsible + draggable sections
+
+**Worked on:** user wanted the command center's UI reworked: every section as a collapsible dropdown,
+the old plain dashboard (`/`) retired and its data folded into the command center, a dedicated map
+section showing the boat, and a way to drag sections around to customize the layout.
+**Changed:**
+- `pi5/server/templates/command_center.html` — full rewrite. Restructured into a 12-col CSS grid of
+  `.section` cards (map, telemetry & mission, camera, health, boat health, radar, commands, pico
+  terminal), each with a collapsible `.sec-hd` header. Added a Leaflet map section (boat marker/track/
+  waypoints/compass, ported from the old dashboard) and a "Telemetry & Mission" dropdown holding the
+  rest of the old dashboard's data (position, throttle, environment, mission, winch depth, navigation,
+  sim/cruise/winch sliders) — now wired to `/ws/telemetry`, which the command center didn't previously
+  use. Added a CUSTOMIZE toggle enabling native HTML5 drag-and-drop section reordering, plus a RESET
+  LAYOUT button; order and collapsed-state both persist to `localStorage` (`dc_order_v1`,
+  `dc_collapsed_v1`).
+- `pi5/server/app.py` — `/` now serves `command_center.html` directly; `/command` is a 307 redirect to
+  `/` for backward compatibility; removed the unused `_STATIC_DIR` constant.
+- Deleted `pi5/server/static/index.html` (the old standalone dashboard) and the now-empty `static/` dir.
+- `run_hardware.py` — updated the startup docstring/printed URL (previously said dashboard-at-`/` +
+  command-center-at-`/command`; now just one merged command center at `/`).
+**Bugs caught during verification:** `.map-wrap{flex:1}` collapsed to 0 height — inside a
+`display:flex;flex-direction:column` chain with no ancestor height, `flex:1`'s implicit
+`flex-basis:0%` beats an explicit `height:480px` unless there's room to grow into, and there wasn't.
+Fixed by dropping `flex:1` and keeping the fixed height. Same risk pattern already avoided elsewhere
+(`.cam-wrap` has an explicit `min-height`, `.pico-inner`'s grid-template-rows uses `minmax(360px,1fr)`
+not `minmax(0,1fr)`).
+**Verified:** ran `run_sim.py`, drove the live page with Playwright (installed for this session) —
+zero console/page errors, map renders at 912×480 with tiles + live boat marker, `/ws/telemetry` data
+flows into the new telemetry section, collapse/expand toggles and persists, drag-reorder (via
+dispatched `DragEvent`s — Playwright's synthetic mouse drag doesn't trigger native HTML5 DnD, so this
+was the correct way to test the JS logic itself) reorders sections and survives a reload, RESET LAYOUT
+restores the default order. A follow-up review subagent independently checked `app.py` routing,
+duplicate IDs, other `flex:1`-collapse risks, and stale `/command`/`static/index.html` references
+across tests and docs — came back clean except the `run_hardware.py` URL string, which is now fixed.
+**Decisions / open questions:** none open. `/command` kept as a redirect rather than removed outright,
+in case anything external (bookmarks, scripts) still hits it.
+**Follow-up (same session):** user asked for a specific default arrangement — camera+system health on
+top, map+telemetry/mission under that, commands (left) + boat health (right) under that. Reordered the
+`.section` blocks in `command_center.html` to that DOM order and gave `commands`/`boat` a 6/6
+`--span` split (previously full-width `--span:12`) so they sit side by side like the other paired rows.
+Re-verified with Playwright: bounding-box coordinates confirm the three rows stack correctly
+(camera/health at y≈77, map/telemetry at y≈704, commands/boat at y≈1301), zero console errors.
+CUSTOMIZE/drag-reorder and RESET LAYOUT are unaffected — this only changed the *default* order they
+reset to.
+**Follow-up 2 (same session):** paired sections (camera/health, map/telemetry, commands/boat) had
+mismatched heights, leaving visible gaps. Changed `.dash-grid` from `align-items:start` to `stretch` so
+paired sections match their row's tallest sibling, with `.section.collapsed{align-self:start}` so a
+collapsed card doesn't get stretched into an oversized empty box. Made `.sec-body`, `.health`,
+`.tele-body`, and `.map-wrap` use `flex:1` to actually use that stretched height (safe now — the grid
+stretch gives `.section` a real definite height, so this doesn't hit the earlier flex-collapse bug).
+Also added three more command groups to fill the now-taller Commands panel with genuinely useful,
+already-backed actions: CAMERA (swap view, toggle detect), RADAR BAR (center/scan/stop shortcuts), and
+LINK (network/pod/full-status toasts pulling from the existing `/api/network`, `/api/pod/history`,
+`/api/status` endpoints, which had no buttons anywhere before). Re-verified with Playwright: paired
+sections now match height exactly (e.g. camera/health both 615px, commands/boat both 280px), new
+buttons work, zero console/page errors.
+**Next steps:** none pending. If a future session touches the command center again, note the
+flex-column-collapse pitfall above before adding new `flex:1` children.
+
 ## 2026-06-30 — Token-bloat audit of markdown/context files, cleanup applied
 
 **Worked on:** user asked for a subagent audit of all markdown files in the repo (CLAUDE.md, AGENTS.md,
@@ -132,26 +191,3 @@ requested <500 token target would have removed real value, not filler. Also skip
 docs rather than embedding rule blocks, so there was nothing to extract.
 **Next steps:** none pending. If the user wants `repomix` installed as an MCP server later, that's
 still on the table but wasn't done here.
-
-## 2026-06-09 — Right camera never opened: wrong /dev/video index in config (metadata node)
-
-**Worked on:** user reported only one USB camera port works in the code though the Pi sees both
-(`v4l2-ctl --list-devices`: cam A = `/dev/video2,3` on `usb-xhci-hcd.0-1`; cam B = `/dev/video0,1` on
-`usb-xhci-hcd.1-1`).
-**Root cause:** each UVC camera exposes **two** `/dev/video*` nodes — an EVEN one for image capture and
-the next ODD one for **metadata only** (opens fine, `cap.read()` yields no frames). So the capture
-indices are **0 and 2**; `video1`/`video3` are metadata. `pi5/config.yaml` had `right_device: 1` =
-cam B's *metadata* node → it "opened" but never delivered a frame, tripped `_READ_FAIL_LIMIT`, got
-released, never recovered. Left (video0) worked → "only one port works."
-**Why the prior fix didn't take:** commit `6bf61d3` ("camera id change") fixed the **`CameraConfig`
-default** `right_device` 1→2 in `camera.py`, but `run_hardware.py` reads the value from
-`config.yaml`, which still said `1`. Config overrides the code default, so runtime was still broken.
-**Changed:** `pi5/config.yaml` — `camera.right_device: 1 → 2` + a comment explaining the even=capture /
-odd=metadata UVC node split and that the capture indices here are 0 and 2.
-**Notes:** the two cameras are on **separate USB controllers**, so dual uncompressed YUY2/YUYV @
-640×480 won't contend for bandwidth — current `fourcc: "YUY2"` is fine. Auto-reconnect still keys on
-the fixed index (2); a replug that re-enumerates to a different node won't be found (known caveat).
-**Verified:** edit only (Windows, no camera). Real two-camera open is Pi-only.
-**Next steps:** uncommitted (offer; staged PCB files are unrelated, leave out). On the Pi: restart
-`run_hardware.py`, confirm **two** `Camera N opened:` log lines (0 and 2) and the SOURCE ◄LEFT/RIGHT►
-toggle shows the right view. `v4l2-ctl -d /dev/video1 --all` confirms it's a Metadata Capture node.

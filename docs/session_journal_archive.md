@@ -9,6 +9,28 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-06-30 — Claude Code token-optimization config pass
+
+**Worked on:** user provided a downloaded task list (`token_optimization_setup.md`) proposing several
+Claude Code token-saving configs. Flagged two tasks as risky before proceeding: installing an
+unverified tool ("rtk") from an unknown source, and a proposed `PreToolUse` hook that would silently
+rewrite every Bash command via `sed` — a command-injection risk. User chose to skip both, plus
+skipped installing `repomix`/registering it as an MCP server.
+**Changed:**
+- `.claude/settings.json` (new) — `env.CLAUDE_CODE_SUBAGENT_MODEL` set to Haiku 4.5, and
+  `permissions.deny` added for `node_modules/`, `dist/`, `build/`, `.git/`, lockfiles, `*.log`,
+  `__pycache__/`, `*.pyc`.
+- `CLAUDE.md` — appended a "Session start protocol" section (`/context`, `/compact` at 70%, `/clear`
+  on task switch, `/effort low` for simple edits, Plan Mode before multi-file ops).
+**Decisions / open questions:** did *not* slim CLAUDE.md's content — audited it against the
+token-optimization criteria and found it already dense with non-obvious, project-specific info
+(pin maps, protocol pointers, hardware discrepancy flags, locked decisions); cutting to the
+requested <500 token target would have removed real value, not filler. Also skipped creating
+`.claude/rules/` path-scoped rule files — CLAUDE.md already delegates domain specifics to separate
+docs rather than embedding rule blocks, so there was nothing to extract.
+**Next steps:** none pending. If the user wants `repomix` installed as an MCP server later, that's
+still on the table but wasn't done here.
+
 ## 2026-06-09 — Right camera never opened: wrong /dev/video index in config (metadata node)
 
 **Worked on:** user reported only one USB camera port works in the code though the Pi sees both

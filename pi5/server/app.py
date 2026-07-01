@@ -32,7 +32,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from . import auth
 from .models import (
@@ -103,20 +103,19 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
 
 app = FastAPI(title="Autonomous Boat API", version="1.0.0")
 
-_STATIC_DIR = Path(__file__).parent / "static"
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 @app.get("/", include_in_schema=False)
 async def root():
-    """Serve the dashboard UI."""
-    return FileResponse(_STATIC_DIR / "index.html")
+    """Serve the command center — the single UI (map, telemetry, camera, health, controls)."""
+    return FileResponse(_TEMPLATES_DIR / "command_center.html")
 
 
 @app.get("/command", include_in_schema=False)
 async def command_center():
-    """Serve the naval-HUD command center (camera + Pi health + Pico terminal)."""
-    return FileResponse(_TEMPLATES_DIR / "command_center.html")
+    """Legacy path — the command center is now served at /."""
+    return RedirectResponse(url="/")
 
 # Rate limiting — 60 req/min default, 10/min for sensitive endpoints
 app.add_middleware(RateLimitMiddleware, default_rpm=60, burst_rpm=120)

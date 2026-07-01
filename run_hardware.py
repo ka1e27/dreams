@@ -3,8 +3,9 @@
 This is the hardware counterpart to run_sim.py. It wires a *real*:
   * PicoSerial  — USB CDC link to the Boat Pico (/dev/ttyACM0), with heartbeat
   * CameraProducer — USB camera(s); left required, right optional (stereo)
-into the FastAPI app, then serves the dashboard (/) and command center
-(/command). Use this on the Pi; use run_sim.py on a laptop with no hardware.
+into the FastAPI app, then serves the command center (/) — map, telemetry,
+camera, health, and controls in one page. Use this on the Pi; use
+run_sim.py on a laptop with no hardware.
 
     python run_hardware.py
 
@@ -213,7 +214,7 @@ def main() -> None:
     host = server_cfg.get("host", "0.0.0.0")
     sport = server_cfg.get("port", 8000)
     print(f"\n  Boat (HARDWARE) serving on http://{host}:{sport}")
-    print(f"  Command center at         http://<pi-ip>:{sport}/command\n")
+    print(f"  Command center at         http://<pi-ip>:{sport}/\n")
     uvicorn.run(app, host=host, port=sport)
 
 
