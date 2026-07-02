@@ -31,6 +31,23 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-01 — Committed and pushed align-first steering, waypoint planner, and M18 PCB rework
+
+**Worked on:** housekeeping session — reviewed the pending working-tree changes (from the three prior
+sessions logged below: align-first navigator, waypoint planner page, M18 battery migration) and the
+untracked files, staged the intended project files, and committed + pushed to `main`.
+**Changed:** no source changes. Committed (`e21ea2a`): `.gitignore`, `Boat_PCB/*` (kicad_pcb/pro/sch +
+new `.kicad_dru` files + new `Boat_PCB_V1.*` KiCad project), `docs/session_journal*.md`,
+`pi5/navigation/navigator.py`, `pi5/server/app.py`, `pi5/server/templates/command_center.html`,
+`pi5/server/templates/waypoint_planner.html` (new), `pi5/tests/test_navigator.py`.
+**Decisions / open questions:** left several untracked paths out of the commit as unrelated to boat
+software work: `.claude/` hooks & settings, `.cursor/`, `.gemini/`, `.kiro/`, `.qoder/`,
+`.opencode.json`, `.mcp.json`, `.github/code-review-graph.instruction.md`, and the PCB backup zips /
+`Boat_PCB V2/` folder. These remain untracked in the working tree — flag if any should actually be
+committed or added to `.gitignore`.
+**Next steps:** none pending from this session; KiCad M18 divider rework itself was already done in
+a prior session (now pushed).
+
 ## 2026-07-01 — Align-first steering: boat points at the waypoint before driving (no more orbiting)
 
 **Worked on:** in the sim the boat turned too slowly to aim at the next waypoint, so it arced/orbited
@@ -192,26 +209,5 @@ buttons work, zero console/page errors.
 **Next steps:** none pending. If a future session touches the command center again, note the
 flex-column-collapse pitfall above before adding new `flex:1` children.
 
-## 2026-06-30 — Token-bloat audit of markdown/context files, cleanup applied
-
-**Worked on:** user asked for a subagent audit of all markdown files in the repo (CLAUDE.md, AGENTS.md,
-GEMINI.md, QODER.md, .cursorrules, .windsurfrules, docs/*, .claude/skills/, etc.) to find redundant or
-oversized content that could be trimmed, deduped, or moved into `.claudeignore` to save tokens. The
-audit subagent found `AGENTS.md`/`GEMINI.md`/`QODER.md`/`.cursorrules`/`.windsurfrules` were
-byte-identical 38-39-line stubs (just the code-review-graph MCP snippet, never customized per tool),
-plus stale `CLAUDE.md.bak`/`.claude/settings.json.bak`, plus Boat_PCB zip files and a duplicate
-`Boat_PCB V2/` folder bloating the repo. Presented findings and got explicit approval before acting.
-**Changed:**
-- Deleted (all untracked, no git history lost): `AGENTS.md`, `GEMINI.md`, `QODER.md`, `.cursorrules`,
-  `.windsurfrules`, `CLAUDE.md.bak`, `.claude/settings.json.bak`.
-- `.claudeignore` — deduped (had `docs/session_journal_archive.md` listed twice) and added
-  `.github/code-review-graph.instruction.md` and `Boat_PCB/*.zip` / `Boat_PCB/Boat_PCB V2/` so those
-  stay on disk but aren't auto-loaded into context.
-**Decisions / open questions:** left the Boat_PCB zip files and duplicate `Boat_PCB V2/` folder on disk
-(ignored, not deleted) since they're binary artifacts that couldn't be verified by content — user chose
-`.claudeignore` over outright deletion for those. `.claudeignore` itself is still untracked in git;
-user hasn't yet said whether to `git add` it.
-**Next steps:** none pending on this thread. If asked later, offer to stage/commit `.claudeignore`.
-
-<!-- Older entries (third-downloaded-file audit, repomix/rtk, token-optimization config pass) live
-     in docs/session_journal_archive.md. -->
+<!-- Older entries (token-bloat audit, third-downloaded-file audit, repomix/rtk, token-optimization
+     config pass) live in docs/session_journal_archive.md. -->

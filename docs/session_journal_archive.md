@@ -9,6 +9,27 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-06-30 — Token-bloat audit of markdown/context files, cleanup applied
+
+**Worked on:** user asked for a subagent audit of all markdown files in the repo (CLAUDE.md, AGENTS.md,
+GEMINI.md, QODER.md, .cursorrules, .windsurfrules, docs/*, .claude/skills/, etc.) to find redundant or
+oversized content that could be trimmed, deduped, or moved into `.claudeignore` to save tokens. The
+audit subagent found `AGENTS.md`/`GEMINI.md`/`QODER.md`/`.cursorrules`/`.windsurfrules` were
+byte-identical 38-39-line stubs (just the code-review-graph MCP snippet, never customized per tool),
+plus stale `CLAUDE.md.bak`/`.claude/settings.json.bak`, plus Boat_PCB zip files and a duplicate
+`Boat_PCB V2/` folder bloating the repo. Presented findings and got explicit approval before acting.
+**Changed:**
+- Deleted (all untracked, no git history lost): `AGENTS.md`, `GEMINI.md`, `QODER.md`, `.cursorrules`,
+  `.windsurfrules`, `CLAUDE.md.bak`, `.claude/settings.json.bak`.
+- `.claudeignore` — deduped (had `docs/session_journal_archive.md` listed twice) and added
+  `.github/code-review-graph.instruction.md` and `Boat_PCB/*.zip` / `Boat_PCB/Boat_PCB V2/` so those
+  stay on disk but aren't auto-loaded into context.
+**Decisions / open questions:** left the Boat_PCB zip files and duplicate `Boat_PCB V2/` folder on disk
+(ignored, not deleted) since they're binary artifacts that couldn't be verified by content — user chose
+`.claudeignore` over outright deletion for those. `.claudeignore` itself is still untracked in git;
+user hasn't yet said whether to `git add` it.
+**Next steps:** none pending on this thread. If asked later, offer to stage/commit `.claudeignore`.
+
 ## 2026-06-30 — Session journal restructured to a 5-entry cap + archive
 
 **Worked on:** the journal file had grown to ~35k tokens (30+ historical entries back to 2026-06-01),
