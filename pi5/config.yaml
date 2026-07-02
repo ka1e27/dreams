@@ -127,7 +127,7 @@ camera:
   # to pi5/server/camera_devices.json and overrides these on the next start.
   left_device: 0
   right_device: 2
-  baseline_m: 0.12
+  baseline_m: 0.32
   calibration_path: "pi5/cv/calibration.npz"
   # Capture settings (CameraProducer). Changing these needs a restart.
   # ---- Arducam 8MP IMX219 (fixed focus) notes ----
@@ -139,9 +139,12 @@ camera:
   # IMX219 binned modes that hit a high frame rate: 640x480, 1280x720 @ 30+,
   # 1640x1232 @ 30. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` to see the
   # exact modes/formats your module advertises, and set width/height/fps to one.
-  width: 640
-  height: 480
+  width: 1920
+  height: 1080
   fps: 30            # capture rate; the camera must support it at this res+format
+  # NOTE: uncompressed YUY2 at 1080p30 needs ~1 Gbit/s per camera — USB 3.0
+  # port/hub required for both cameras simultaneously. If frames stall or fps
+  # drops, switch fourcc to "MJPG" below (compressed, far lighter over USB).
   # Pixel format (FourCC) requested from the camera:
   #   "YUY2"  — uncompressed 4:2:2 (V4L2 calls it YUYV; the code maps YUY2→YUYV
   #             on Linux). No JPEG decode cost and it dodges the camera's MJPG

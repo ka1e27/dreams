@@ -384,6 +384,7 @@
           <span class="cs"><span class="lbl">SOURCE</span>
             <button class="srcbtn active" id="camLeft" onclick="setCam('left')">◀ LEFT</button>
             <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
+            <button class="srcbtn" id="camDisparity" onclick="setCam('disparity')" title="live stereo depth colormap (needs pi5/cv/calibration.npz + right camera)">◈ DEPTH</button>
           </span>
           <span class="cs"><span class="lbl">DEV L</span>
             <select id="devLeft" class="imgsel" title="which connected camera is the LEFT eye"></select>
@@ -798,21 +799,23 @@ async function getApi(path){
 
 // ---- camera ---------------------------------------------------------------
 const cam = $('cam');
-let camView = 'left';        // 'left' | 'right'
+let camView = 'left';        // 'left' | 'right' | 'disparity'
 let rightPresent = false;    // set from /api/camera
 let devMap = { left: null, right: null };  // device indices, from /api/camera(/devices)
 function camSrc(view){ return '/video?cam=' + view + (KEY ? '&key=' + encodeURIComponent(KEY) : ''); }
 function setCam(view){
-  if (view === 'right' && !rightPresent){ toast('No right camera connected', false); return; }
+  if ((view === 'right' || view === 'disparity') && !rightPresent){ toast('No right camera connected', false); return; }
   camView = view;
   cam.src = camSrc(view);
   $('camLeft').classList.toggle('active', view === 'left');
   $('camRight').classList.toggle('active', view === 'right');
-  $('cam-meta').textContent = (view === 'right' ? 'RIGHT' : 'LEFT') + ' · MJPEG';
+  $('camDisparity').classList.toggle('active', view === 'disparity');
+  $('cam-meta').textContent = view.toUpperCase() + ' · MJPEG';
   const idx = view === 'right' ? devMap.right : devMap.left;
-  $('cam-tag').textContent = 'CAM-' + (idx == null ? '?' : idx) + ' / ' + view.toUpperCase();
+  $('cam-tag').textContent = view === 'disparity' ? 'DEPTH' :
+    'CAM-' + (idx == null ? '?' : idx) + ' / ' + view.toUpperCase();
   // detection overlay (boxes + tracking reticle) is only drawn on the left view
-  $('cam-det').style.display = view === 'right' ? 'none' : 'block';
+  $('cam-det').style.display = view === 'left' ? 'block' : 'none';
 }
 setCam('left');
 cam.onerror = () => { setDot('dot-cam', false); $('nosignal').classList.add('show'); };
@@ -1456,7 +1459,8 @@ async function loadCameraControls(){
     const rb = $('camRight');
     rb.disabled = !rightPresent;
     rb.title = rightPresent ? 'right camera' : 'no right camera connected';
-    if (!rightPresent && camView === 'right') setCam('left');
+    $('camDisparity').disabled = !rightPresent;
+    if (!rightPresent && (camView === 'right' || camView === 'disparity')) setCam('left');
     if (!c.camera_present) $('cam-det').textContent = 'NO CAM';
     else if (!c.model_loaded) $('cam-det').textContent = 'DET off (no model)';
   }catch(e){}
@@ -1515,7 +1519,8 @@ async function applyDevices(){
     const ok = !!j.left_open;
     toast('Cameras: LEFT=' + j.left + (j.left_open ? '' : ' (not responding)')
         + (j.right == null ? ' · no right' : ' RIGHT=' + j.right + (j.right_open ? '' : ' (not responding)')), ok);
-    setCam(j.right_open || camView !== 'right' ? camView : 'left');  // reload stream
+    const needsRight = camView === 'right' || camView === 'disparity';
+    setCam(j.right_open || !needsRight ? camView : 'left');  // reload stream
     loadCameraControls();
     loadDevices();
   }catch(e){ toast('Failed to set cameras', false); }

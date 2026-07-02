@@ -23,6 +23,10 @@ import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .stereo import StereoDepth
 
 logger = logging.getLogger(__name__)
 
@@ -53,16 +57,20 @@ class DetectionConfig:
 class DetectionOverlay:
     """Runs YOLO on the camera producer and exposes boxes + controls."""
 
-    def __init__(self, camera, cfg: DetectionConfig | None = None) -> None:
+    def __init__(self, camera, cfg: DetectionConfig | None = None,
+                 stereo: "StereoDepth | None" = None) -> None:
         self._camera = camera
         self._cfg = cfg or DetectionConfig()
+        self._stereo = stereo       # cv.stereo.StereoDepth, or None (no distance column)
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._model = None          # ultralytics YOLO (.pt path)
         self._onnx = None           # onnx_detector.OnnxYolo (.onnx path)
         self._names: dict | list = {}
-        self._boxes: list[tuple] = []          # (x1,y1,x2,y2,label,conf,highlight)
-        self._detections: list[dict] = []      # [{label, confidence}] for the UI
+        # (x1,y1,x2,y2,label,conf,highlight,distance_m|None) — distance_m is only
+        # populated when a stereo pair + calibration are available.
+        self._boxes: list[tuple] = []
+        self._detections: list[dict] = []      # [{label, confidence, distance_m}] for the UI
         self._primary: tuple | None = None     # the box we mark as "tracked"
         self._fps: float = 0.0
         self.enabled: bool = self._cfg.enabled
@@ -156,9 +164,11 @@ class DetectionOverlay:
         if not p:
             return None
         x1, y1, x2, y2, label, conf = p[0], p[1], p[2], p[3], p[4], p[5]
+        distance_m = p[7] if len(p) > 7 else None
         return {
             "label": label,
             "confidence": round(float(conf), 3),
+            "distance_m": round(distance_m, 1) if distance_m is not None else None,
             "cx": (x1 + x2) // 2,
             "cy": (y1 + y2) // 2,
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
@@ -233,7 +243,8 @@ class DetectionOverlay:
                 now = time.monotonic()
                 if last_run and now - last_run < interval:
                     continue  # rate-capped — drop this frame, keep the queue drained
-                boxes, dets, primary = await loop.run_in_executor(None, self._infer, frame.left)
+                boxes, dets, primary = await loop.run_in_executor(
+                    None, self._infer, frame.left, frame.right)
                 self._boxes, self._detections, self._primary = boxes, dets, primary
                 if last_run:
                     dt = time.monotonic() - last_run
@@ -268,12 +279,24 @@ class DetectionOverlay:
             out.append((x1, y1, x2, y2, label, conf))
         return out
 
-    def _infer(self, frame_bgr) -> tuple[list[tuple], list[dict], tuple | None]:
+    def _infer(self, frame_bgr, right_bgr=None) -> tuple[list[tuple], list[dict], tuple | None]:
         try:
             raw = self._raw_detect(frame_bgr)
         except Exception as e:  # noqa: BLE001
             logger.error("overlay inference error: %s", e)
             return [], [], None
+
+        # Distance column: one stereo disparity pass per inference (not per
+        # box) when a stereo pair + calibration are available. Skipped
+        # entirely if there's no right camera or no calibration.npz loaded.
+        depth = None
+        if self._stereo is not None and right_bgr is not None and raw:
+            try:
+                _, depth = self._stereo.compute(frame_bgr, right_bgr)
+            except Exception as e:  # noqa: BLE001 — boxes still draw, just no distance
+                logger.debug("distance compute failed: %s", e)
+                depth = None
+
         boxes: list[tuple] = []
         dets: list[dict] = []
         primary: tuple | None = None
@@ -287,9 +310,15 @@ class DetectionOverlay:
             # Highlight the configured classes; when a specific track class is
             # chosen, highlight it too so the picked target is always visible.
             is_hl = label in highlight or (track_cls != "" and label == track_cls)
-            entry = (x1, y1, x2, y2, label, conf, is_hl)
+            distance_m = (self._stereo.median_depth_in_bbox(depth, x1, y1, x2, y2)
+                         if depth is not None else None)
+            entry = (x1, y1, x2, y2, label, conf, is_hl, distance_m)
             boxes.append(entry)
-            dets.append({"label": label, "confidence": round(conf, 3)})
+            dets.append({
+                "label": label,
+                "confidence": round(conf, 3),
+                "distance_m": round(distance_m, 1) if distance_m is not None else None,
+            })
             # The tracked object: if the operator picked a class, lock onto the
             # highest-confidence box of THAT class; otherwise fall back to the
             # highest-confidence highlight-class box (what radar_tracker uses).
@@ -308,10 +337,13 @@ class DetectionOverlay:
         h = frame.shape[0]
         base = max(1, round(h / 480))
         fs = max(0.45, h / 720 * 0.6)
-        for x1, y1, x2, y2, label, conf, hl in boxes:
+        for box in boxes:
+            x1, y1, x2, y2, label, conf, hl = box[0], box[1], box[2], box[3], box[4], box[5], box[6]
+            distance_m = box[7] if len(box) > 7 else None
             color = _COLOR_HIGHLIGHT if hl else _COLOR_NORMAL
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, base + 1 if hl else base)
-            text = "%s %.0f%%" % (label, conf * 100)
+            text = ("%s %.0f%% %.1fm" % (label, conf * 100, distance_m)
+                    if distance_m is not None else "%s %.0f%%" % (label, conf * 100))
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, fs, 1)
             cv2.rectangle(frame, (x1, y1 - th - 6), (x1 + tw + 4, y1), color, -1)
             cv2.putText(frame, text, (x1 + 2, y1 - 4),

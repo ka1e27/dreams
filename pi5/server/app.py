@@ -964,17 +964,44 @@ def _mjpeg_part(jpeg: bytes) -> bytes:
             + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n")
 
 
+_stereo_depth = None        # cv.stereo.StereoDepth, lazy-loaded on first disparity request
+_stereo_load_failed = False  # sticky — don't retry loading calibration every frame
+
+
+def _get_stereo_depth():
+    """Lazily load pi5/cv/calibration.npz and build a StereoDepth once, shared
+    by every /video?cam=disparity viewer. Returns None if no calibration file
+    is present (disparity view then falls back to left in the caller)."""
+    global _stereo_depth, _stereo_load_failed
+    if _stereo_depth is not None or _stereo_load_failed:
+        return _stereo_depth
+    try:
+        from ..cv.stereo import StereoDepth, load_calibration
+        calib = load_calibration("pi5/cv/calibration.npz")
+        if calib is None:
+            _stereo_load_failed = True
+            return None
+        _stereo_depth = StereoDepth(calib)
+    except Exception as e:  # noqa: BLE001 — disparity view just isn't available
+        logger.warning("Disparity view unavailable: %s", e)
+        _stereo_load_failed = True
+    return _stereo_depth
+
+
 async def _mjpeg_stream(view: str = "left"):
-    """Yield an MJPEG stream for the selected camera ("left" or "right").
+    """Yield an MJPEG stream for the selected camera ("left", "right", or
+    "disparity").
 
     Placeholder frames when no producer is running. Publishes at most
-    _stream_fps_cap frames/s and draws the detection overlay's latest boxes on
-    each frame — on BOTH the left and right views. Detection runs on its own
-    task against the LEFT frame; the same boxes (and tracking reticle) are drawn
-    on the right view too, offset by the stereo disparity (there's no second
-    inference — the Pi is inference-bound). If "right" is requested but no right
-    camera is present we fall back to the left frame. Stream FPS and detect FPS
-    stay independent.
+    _stream_fps_cap frames/s. Detection overlay boxes (computed from the LEFT
+    frame only — no second inference, the Pi is inference-bound) are drawn on
+    the left view ONLY: on the right view the same box coordinates would sit
+    offset by the stereo disparity (parallax from the ~320mm baseline), which
+    reads as "misaligned" rather than useful, so the right view is shown clean.
+    "disparity" renders a live depth colormap via StereoDepth (falls back to
+    left if no calibration is loaded or no right camera is present). If
+    "right"/"disparity" is requested but no right camera is present we fall
+    back to the left frame. Stream FPS and detect FPS stay independent.
     """
     global _cam_fps
     if _camera is None:
@@ -983,6 +1010,7 @@ async def _mjpeg_stream(view: str = "left"):
             await asyncio.sleep(1.0)
 
     import cv2  # producer is running, so opencv is installed
+    import numpy as np
     loop = asyncio.get_running_loop()
     queue = _camera.subscribe()
     last_pub = 0.0
@@ -998,17 +1026,29 @@ async def _mjpeg_stream(view: str = "left"):
             cap = _stream_fps_cap
             if cap and last_pub and (now - last_pub) < (1.0 / cap) * 0.9:
                 continue
-            # Pick the requested view; right falls back to left if absent.
-            show_right = view == "right" and frame.right is not None
-            img = frame.right if show_right else frame.left
-            # Draw the detection overlay's boxes on whichever view is shown — both
-            # left and right. Boxes are computed from the LEFT frame (no second
-            # inference; the Pi is inference-bound), so on the right view they sit
-            # at the same pixel coords, offset by the stereo disparity. Always
-            # draw on a copy — never mutate the shared producer frame.
-            if _overlay is not None and _overlay.enabled:
-                img = img.copy()
-                _overlay.draw(img)
+
+            if view == "disparity" and frame.right is not None:
+                stereo = await loop.run_in_executor(None, _get_stereo_depth)
+            else:
+                stereo = None
+
+            if stereo is not None:
+                disp, _ = await loop.run_in_executor(
+                    None, stereo.compute, frame.left, frame.right)
+                disp_norm = cv2.normalize(disp, None, 0, 255, cv2.NORM_MINMAX,
+                                          dtype=cv2.CV_8U)
+                disp_norm = np.nan_to_num(disp_norm).astype(np.uint8)
+                img = cv2.applyColorMap(disp_norm, cv2.COLORMAP_TURBO)
+            else:
+                # Pick the requested view; right/disparity fall back to left if absent.
+                show_right = view in ("right", "disparity") and frame.right is not None
+                img = frame.right if show_right else frame.left
+                # Detection boxes only make sense on the left view they were
+                # computed from — drawing them on the right view puts them at
+                # the wrong pixel position (parallax offset), so skip there.
+                if not show_right and _overlay is not None and _overlay.enabled:
+                    img = img.copy()
+                    _overlay.draw(img)
             # JPEG encode is blocking and CPU-heavy at 1080p; run it off the
             # event loop so it overlaps the next capture instead of serializing
             # with it. cv2 releases the GIL during imencode, so this parallelizes.
@@ -1035,14 +1075,16 @@ async def _mjpeg_stream(view: str = "left"):
 async def video(request: Request):
     """MJPEG camera stream. Auth via ?key=<api_key>.
 
-    Select the view with ?cam=left|right (default left). The detection overlay
-    boxes are drawn on both views (computed from the left frame); right falls
-    back to left if no right camera is present.
+    Select the view with ?cam=left|right|disparity (default left). Detection
+    overlay boxes are drawn on the left view only (they're computed from the
+    left frame, so on the right view they'd sit at the wrong pixel position).
+    "disparity" renders a live depth colormap (needs pi5/cv/calibration.npz and
+    a right camera; falls back to left otherwise).
     """
     if not _http_key_ok(request):
         return Response(status_code=403, content="Invalid or missing API key")
     view = request.query_params.get("cam", "left")
-    if view not in ("left", "right"):
+    if view not in ("left", "right", "disparity"):
         view = "left"
     return StreamingResponse(
         _mjpeg_stream(view),

@@ -57,6 +57,12 @@ ml/validation_samples/
 pi5/cv/models/*.onnx
 pi5/cv/models/*.pt
 !pi5/cv/models/*.json
+/yolov8n.pt
+
+# Stereo calibration is rig-specific (baseline, camera intrinsics) — regenerate
+# per-boat with pi5/scripts/calibrate_stereo.py, don't commit someone's laptop
+# webcam calibration.
+pi5/cv/calibration.npz
 # Added by code-review-graph
 .code-review-graph/
 pi5/server/saved_paths.json

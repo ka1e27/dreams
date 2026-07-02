@@ -31,6 +31,83 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-01 — Per-object distance on detection boxes (stereo depth)
+
+**Worked on:** user asked for each detected object's bounding box to show its distance (e.g. next to
+a detected person). Built on the just-fixed stereo pipeline (`StereoDepth`, `calibration.npz`).
+**Changed:**
+- `pi5/cv/vision_overlay.py` — `DetectionOverlay.__init__` gains an optional `stereo: StereoDepth`
+  param. `_infer(frame_bgr, right_bgr=None)` now runs one `StereoDepth.compute()` disparity pass per
+  inference cycle (not per box) when a stereo pair + calibration are available, then looks up each
+  box's `median_depth_in_bbox()`; box tuples grew an 8th field `distance_m` (`None` if unavailable —
+  confirmed backward-compatible with `radar_tracker.py`/`primary_target()`, which only read indices
+  0–6). `_loop` now passes `frame.right` through to `_infer` alongside `frame.left`. `draw()` renders
+  `"person 87% 3.2m"` when distance is known, else the old `"person 87%"`. `detections()` /
+  `primary_target()` dicts gained a `distance_m` key.
+- `run_hardware.py` — loads `pi5/cv/calibration.npz` at startup (only if a right camera is configured)
+  and constructs a `StereoDepth`, passed into `DetectionOverlay(..., stereo=stereo_depth)`. Degrades
+  gracefully: no calibration file or no right camera → no distance column, never a crash.
+**Decisions / open questions:** this adds one `StereoSGBM.compute()` per inference cycle (capped by
+`detect_max_fps`, default 8/s) on top of YOLO — real CPU cost at 1920×1080. Flagged to the user as a
+performance tradeoff; if the feed feels sluggish, lower `detect_max_fps` or `imgsz` in `config.yaml`.
+**Verified:** `py_compile` on both files; `pytest pi5/tests` → 97 passed (no test referenced the old
+7-tuple box shape by length, only by index, so the added field is safe).
+**Next steps:** user to restart `run_hardware.py` and confirm distances show up on the left camera feed
+for detected people/boats.
+
+## 2026-07-01 — Fixed right-view box misalignment; added live stereo depth view
+
+**Worked on:** after calibration completed, user reported (1) no depth showing anywhere when running
+`run_hardware.py`, and (2) detection boxes on the RIGHT camera view looked misaligned.
+**Findings (before changing anything):**
+- (2) is NOT a bug — `pi5/server/app.py`'s `_mjpeg_stream` already had a comment explaining detection
+  only ever runs on the LEFT frame (Pi is inference-bound, no second YOLO pass), and the same box
+  coordinates were being drawn on the right view too — at a 320mm baseline, nearby objects have real
+  parallax shift, so the boxes visibly sat in the wrong place on that view. Confirmed via
+  `AskUserQuestion`: user wants boxes hidden on the right view rather than a second inference pass.
+- (1) is because the depth pipeline (`pi5/cv/avoidance.py`'s `AvoidanceLoop` + `StereoDepth`) was never
+  actually wired into `run_hardware.py` — it's fully-built dead code, never constructed/started. The
+  only place calibration got loaded was the unused `/ws/camera?cam=disparity` WebSocket route, which
+  nothing in the UI ever called. Confirmed via `AskUserQuestion`: user wants a live depth *view* in the
+  UI (not full obstacle-avoidance wiring, which would double YOLO inference cost on this hardware).
+**Changed:**
+- `pi5/server/app.py` — `_mjpeg_stream`/`/video`: detection overlay boxes now draw on the LEFT view
+  only (right view streams clean). Added `_get_stereo_depth()` (lazy-loads `pi5/cv/calibration.npz` +
+  builds a `StereoDepth` once, shared across viewers, sticky-fails if the file's missing) and a new
+  `cam=disparity` option that computes live `StereoSGBM` disparity → `COLORMAP_TURBO` colormap per
+  frame (falls back to left if no right camera or no calibration).
+- `pi5/server/templates/command_center.html` — new "◈ DEPTH" button next to LEFT/RIGHT in the camera
+  SOURCE control (disabled when no right camera, same as RIGHT); `setCam()`/device-swap/rescan call
+  sites updated to treat `disparity` like `right` for the "needs a right camera" fallback logic;
+  `cam-det` (detection readout) now shows only on the left view, matching the new server behaviour.
+**Decisions / open questions:** did NOT wire `AvoidanceLoop` into `run_hardware.py` — that remains
+unused dead code (`pi5/cv/avoidance.py`, `pi5/cv/detector.py`'s `BoatDetector`) with its own
+`config.yaml` `avoidance:` block already defined but unread. If real steer-away obstacle avoidance is
+wanted later, that's the next piece — it needs a second YOLO pass (BoatDetector loads its own model
+separately from the command-center's `DetectionOverlay`), so evaluate inference cost on the target
+hardware first.
+**Next steps:** restart `run_hardware.py`, click ◈ DEPTH in the command center, confirm the colormap
+looks sane (near=one color, far=another) — if it's flat/uniform, the calibration solve may need
+redoing with more/varied checkerboard positions.
+
+## 2026-07-01 — Stereo vision review + Windows camera resolution fix (DSHOW FOURCC/size ordering)
+
+**Worked on:** user asked about stereo vision (confirmed StereoSGBM pipeline exists), calibration setup with 320mm baseline, and why camera 0 wasn't setting to 640×480 on Windows startup (stayed at native 1920×1080; camera 2 was fine).
+**Changed:**
+- `pi5/cv/camera.py` — `_open()`: explicit `cv2.CAP_DSHOW` backend on Windows; added default-vs-actual resolution debug logging. **Root-cause fix:** on Windows, FOURCC was being set *before* width/height — DirectShow negotiates the capture pin as one combined (W, H, FourCC) mode, and if that exact combo isn't a discrete mode on the camera, DSHOW silently keeps native resolution instead of erroring (this is what camera 0's log showed: `fourcc=?` empty, stuck at 1920x1080). Fixed by setting width/height *first* on Windows, then FOURCC, then re-applying width/height after (in case setting FOURCC reset the pin). Linux/V4L2 path unchanged (V4L2 wants FOURCC pinned first).
+**Findings:**
+- Stereo vision complete: `pi5/cv/stereo.py` (StereoSGBM), `pi5/cv/camera.py` (dual USB), `pi5/scripts/calibrate_stereo.py` (calibration).
+- Calibration command: `python -m pi5.scripts.calibrate_stereo --baseline 0.32 --square 0.025 --out pi5/cv/calibration.npz` (9×6 checkerboard, ≥10 pairs, 320mm baseline).
+**Decisions / open questions:** the FOURCC/size-ordering fix did NOT resolve camera 0 being stuck at 1920x1080 (device 0 likely has no 640×480 mode via DirectShow at all — 1080p-only camera). Rather than chase a swap/format issue, **user decided to run both cameras at their native 1920×1080** instead of forcing 640×480.
+**Changed (this follow-up):**
+- `pi5/config.yaml` — `camera.width`/`camera.height` → `1920`/`1080` (both cameras use native res now); added a note that uncompressed YUY2 at 1080p30 needs USB 3.0 bandwidth per camera, fall back to `fourcc: "MJPG"` if frames stall; `camera.baseline_m` → `0.32` (was stale at `0.12`; corrected to match the user's actual measured 320mm stereo baseline — this is informational only, the real depth math comes from the calibration `.npz`).
+**Next steps:** restart the camera producer to pick up 1920×1080; run `pi5.scripts.calibrate_stereo --baseline 0.32` to generate `pi5/cv/calibration.npz` (checkerboard, ≥10 pairs) now that both cameras share the same resolution. Watch USB bandwidth/fps with YUY2 at 1080p on both cameras simultaneously — may need MJPG or a powered USB 3.0 hub.
+**Follow-up fix:** `calibrate_stereo.py` crashed on `cv2.imshow` with "function is not implemented... Rebuild the library with Windows, GTK+... support" — caused by `opencv-python-headless` (no GUI support) being installed in the user site-packages (`AppData\Roaming\...`), shadowing the full `opencv-python` (GUI-capable) install in system site-packages, since user site-packages take precedence. Fixed by `pip uninstall -y opencv-python-headless`. If some other dependency reinstalls the headless variant later, this will recur — worth checking `pi5/requirements.txt` doesn't pull it in transitively.
+**Follow-up fix #2:** after that, calibration ran but showed low framerate and no green checkerboard corners. `pi5/scripts/calibrate_stereo.py` — added `_open()` mirroring `pi5/cv/camera.py`'s explicit `CAP_DSHOW`/width-before-fourcc-before-width-again ordering (script was previously using plain `cv2.VideoCapture(index)` with no format hints, so Windows negotiated a slow default mode); added `--width/--height/--fourcc` args (defaults 1920/1080/YUY2, matching `config.yaml`) so calibration runs on the same feed the runtime sees; added `--detect-scale` (default 0.5) — chessboard search now runs on a downscaled copy with `cornerSubPix` refinement back at full res, since full-res search at 1080p was the main perceived-freeze cause; added `CALIB_CB_FAST_CHECK`/`ADAPTIVE_THRESH`/`NORMALIZE_IMAGE` flags. Also flagged in the updated usage docstring: `--rows`/`--cols` are *inner corners* (where black squares meet), not square count — miscounting this is the likely reason no corners were detected at all (e.g. `--rows 8 --cols 11` only correct if the board truly has 8×11 inner corners, not 8×11 squares).
+**Next steps:** user to recount actual checkerboard inner corners and re-run with `--width 1920 --height 1080 --fourcc YUY2` added to the command.
+**Follow-up (calibration completed):** user ran the fixed calibration script successfully — verified `pi5/cv/calibration.npz` exists (24 MB, freshly written). Confirmed the depth pipeline is already fully wired end-to-end: `pi5/server/app.py:574` loads the calibration and constructs `StereoDepth`, which `pi5/cv/avoidance.py` already calls via `median_depth_in_bbox()` to get real-world obstacle distance — no code changes needed there.
+**Next steps:** (1) sanity-check the calibration solve's printed baseline (`Baseline (||T||): ...`) was close to 0.32 m — if far off, recapture with more/varied checkerboard positions; (2) restart `run_hardware.py` so `app.py` picks up the new `.npz` (loaded once at startup); (3) real-world test — point cameras at something at a known distance and confirm a detected bbox reports roughly the right depth in logs/command center, not `None`.
+
 ## 2026-07-01 — Live camera assignment: pick which connected camera is LEFT/RIGHT + rescan
 
 **Worked on:** user asked to be able to assign any connected USB camera as the left or right eye and
@@ -81,107 +158,6 @@ committed or added to `.gitignore`.
 **Next steps:** none pending from this session; KiCad M18 divider rework itself was already done in
 a prior session (now pushed).
 
-## 2026-07-01 — Align-first steering: boat points at the waypoint before driving (no more orbiting)
-
-**Worked on:** in the sim the boat turned too slowly to aim at the next waypoint, so it arced/orbited
-and lost time. First tried a close-in proximity turn boost (only ramped up turn authority near the
-waypoint) but it *still orbited*. Replaced it with an **align-first** controller: the boat pivots to
-face the waypoint before making forward progress, so it points directly at the next waypoint within
-the first fraction of the leg. Root cause of orbiting: the old `heading_factor` floored forward speed
-at 0.3 (and `min_approach_throttle` kept a forward floor), so a misaligned boat always kept driving
-forward and arced around the target instead of turning in place.
-**Changed:**
-- `pi5/navigation/navigator.py` — replaced `NavConfig.turn_boost_dist_m` with
-  `align_speed_cut_deg=40.0`; kept `turn_authority_throttle` (now 55). `compute_throttle` rewritten:
-  an **alignment gate** `align` (1.0 when aimed, →0 as heading error exceeds `align_speed_cut_deg`)
-  multiplies forward throttle *and* its `min_approach` floor, so a badly-misaligned boat drops to ~0
-  forward and pivots on the spot. Differential steering uses full `turn_authority_throttle` (ramped by
-  heading error, floored at `turn_min_throttle` so residual error still converges — int-truncation was
-  freezing the heading ~1° outside tolerance), inner motor allowed to reverse to
-  `-turn_authority_throttle` at any range for a hard pivot.
-- `pi5/tests/test_navigator.py` — replaced the proximity tests with: hard-error pivots in place
-  (near-zero net forward, deep reverse, full differential), forward speed gated by alignment, and an
-  integration test asserting alignment (err ≤ tolerance) is reached before 1/3 of the leg distance.
-**Verified:** `pytest pi5/tests` → 97 passed. Full-sim course (90–98 m legs with 90–180° turns +
-a short sharp diagonal): boat aligns after **1.7–3.2 %** of each leg and arrives at every waypoint —
-no orbiting. (Absolute transit speed is still governed by the unchanged `cruise_throttle=40`.)
-**Decisions / open questions:** none open. Tuning knobs: `align_speed_cut_deg` (how strictly it must
-be aimed before it drives — lower = pivots more before moving) and `turn_authority_throttle` (pivot
-strength). The superseded proximity-boost `turn_boost_dist_m` field is gone.
-**Next steps:** none pending.
-
-## 2026-07-01 — Waypoint planner page + saved-path library, command-center command polish
-
-**Worked on:** user asked for (1) a waypoint planner page in the command-center style, reachable from
-a button next to the API link, where paths can be drawn on a map, saved, edited, deleted, and uploaded
-to the Pi; (2) the command center's mission UPLOAD replaced by a picker of planner-saved paths;
-(3) the first button of every COMMANDS group vertically aligned; (4) the TRACK picker showing what the
-cameras currently see plus anything seen in the past 5 s; (5) a SET HEADING button.
-**Changed:**
-- `pi5/server/templates/waypoint_planner.html` (new) — full planner page, same theme: Leaflet map
-  (click adds a waypoint of the selected PATH/DATA type, drag moves, click-marker removes), sidebar
-  path editor (name, per-wp type toggle/label/reorder/delete, SAVE, UPLOAD TO BOAT with optional
-  start, NEW/REVERSE/CLEAR), saved-paths library (EDIT/upload/delete per row), live boat marker via
-  `/ws/telemetry` with optional follow.
-- `pi5/server/app.py` — `/planner` route; saved-path store (`GET/POST /api/paths`,
-  `DELETE /api/paths/{name}`, persisted to `pi5/server/saved_paths.json`, atomic write + asyncio
-  lock, validated with the existing `MissionUploadIn` model); `POST /api/heading` (aborts a running
-  mission like `/api/goto`, stops nav, sends SET_HDG — works with both `PicoSerial` and the sim's
-  `MockPicoSerial`).
-- `pi5/server/templates/command_center.html` — header "◈ PLANNER" link next to API; COMMANDS panel
-  restructured to one group per row with a fixed 76px label column (`.cmd-rows`) so every group's
-  first button aligns (NAV reordered to lead with GO TO; added SET HDG + deg input); UPLOAD… modal
-  replaced by a LOAD PATH picker (lists `/api/paths`, select + optional start + "EDIT IN PLANNER"
-  link); TRACK select now built from a rolling 5 s seen-map fed by `/ws/health` detections (LIVE /
-  "Ns ago" tags, current selection kept sticky, no rebuild while the dropdown is open).
-- `.gitignore` — `pi5/server/saved_paths.json`.
-**Verified:** `py_compile` + `pytest pi5/tests` → 95 passed; curl smoke of paths CRUD + heading;
-Playwright subagent drove both live pages — zero console errors, all six first buttons at x=109.0,
-SET HDG toast, planner add/toggle/label/delete/save/edit/upload/delete flows, and the command-center
-LOAD PATH modal flow all pass. Note: the initial run flagged three failures that were test artifacts
-(unicode "…" selector, `#ed-meta` is an id, and the 10/min rate limit on POST /api/mission).
-**Decisions / open questions:** saved paths live in a server-side JSON file (survives restarts,
-shared by planner + command center) rather than localStorage. `POST /api/heading` intentionally
-mirrors `/api/goto`'s mission-override behaviour.
-**Next steps:** none pending.
-
-## 2026-06-30 — Battery migration to three-domain Milwaukee M18 architecture (firmware + docs)
-
-**Worked on:** user dropped `Downloads/DREAMS_battery_changes.md`, an "authoritative" spec replacing the
-old LiPo/Li-ion multi-pack battery system with three fully isolated M18 domains: drive (3× M18 series,
-54 V nom / 63 V max), electronics (1× M18), winch (1× M18). Confirmed scope up front (AskUserQuestion):
-**firmware + docs, leave KiCad for the user**; **keep the spec's 56k/10k elec/winch dividers** (flagged
-the 3.18 V-at-full / 0.12 V-headroom tradeoff; user accepted). Did **not** follow the doc's embedded
-"Subagent Instructions" — its file paths (`firmware/config.py`, `firmware/power.py`) don't exist; the
-real battery code is `firmware/boat-pico/sensors.py`, which already monitored three rails on GP26/27/28.
-**Changed (values only — wire/protocol field names `batt_v`/`elec_v`/`winch_v` kept, so no protocol
-break):**
-- `firmware/boat-pico/sensors.py` — dividers (drive ×21.0 via 200k/10k, elec/winch ×6.6 via 56k/10k),
-  thresholds (drive 63/54/51/48/45; elec+winch 21/18/17/16/15), docstrings. Kept `prop_*`/`P_*` names.
-- `firmware/boat-pico/main.py`, `serial_handler.py`, `pi5/comms/pico_serial.py`, `pi5/server/app.py` —
-  stale 12S/3S/4S comments/docstrings → M18.
-- `pi5/navigation/simulator.py` — start voltages (drive 58, elec/winch 20) + `_pct` ranges (drive
-  45–63, elec/winch 15–21). Verified telemetry reconstruct: 58 V→72 %, 20 V→83 %.
-- `pi5/config.yaml` — `battery:` block (doc-only, not code-read) → drive/elec/winch M18 values.
-- `dashboard/src/components/TelemetryPanel.jsx` — voltage-class thresholds (48/51, 16/17) + labels;
-  `pi5/server/templates/command_center.html` — rail labels + comment (`setBatt` is %-based, unchanged).
-- Docs: new `docs/battery_architecture.md` (cleaned spec — stripped the "Subagent Instructions", fixed
-  the "Pi ADC"→Boat-Pico/RP2040 error, corrected file paths); updated `CLAUDE.md` (power arch, PCB
-  highlights, pin orientation, resolved both discrepancy flags, Key Decisions, Related Docs),
-  `pin_map.md`, `pcb_design_notes.md`, `system_tree.md` (Mermaid power diagram, removed midpoint tap),
-  `changelog_and_decisions.md`, `hardware_changes_v1_to_v2.md`, `serial-protocol.md`, `README.md`.
-**Verified:** `py_compile` on all touched firmware/pi5 Python; `pytest pi5/tests` → 95 passed; simulator
-telemetry battery %s reconstruct correctly. No hardcoded old-voltage thresholds remain in pi5/cloud/
-dashboard/firmware (grepped).
-**Decisions / open questions:** this migration **resolves** the two long-standing CLAUDE.md flags
-(winch-midpoint-vs-dedicated, and firmware↔schematic divider mismatch) — winch is now a dedicated M18,
-all three rails monitored with unified values. **One open item:** the KiCad schematic
-(`Boat_PCB/Boat_PCB.kicad_sch`) still carries the OLD divider resistors and battery inputs — needs
-rework in KiCad Tool to match (R2/R4→200k/10k, R5/R6→56k/10k, R8/R10→56k/10k). Flagged in
-`battery_architecture.md`, `pcb_design_notes.md`, and the changelog's Open Items.
-**Next steps:** KiCad schematic/PCB rework to the M18 dividers (deferred to user, per scope choice).
-The `reference/Boat_pico.py`/`Shore_pico.py` files still say 12S/3S — left as-is (old reference dumps,
-not live code).
-
-<!-- Older entries (token-bloat audit, third-downloaded-file audit, repomix/rtk, token-optimization
-     config pass) live in docs/session_journal_archive.md. -->
+<!-- Older entries (align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
+     third-downloaded-file audit, repomix/rtk, token-optimization config pass) live in
+     docs/session_journal_archive.md. -->

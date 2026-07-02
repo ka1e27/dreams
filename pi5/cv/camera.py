@@ -179,10 +179,11 @@ class CameraProducer:
         # sensor like the IMX219 stuck in its native 8MP mode — and 3280x2464
         # over USB is only ~5 fps. Forcing V4L2 makes the format switch apply, so
         # the camera actually drops to the requested (binned, fast) mode.
+        # On Windows, DirectShow is similarly unreliable — use CAP_DSHOW explicitly.
         if sys.platform.startswith("linux"):
             cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
         else:
-            cap = cv2.VideoCapture(device)
+            cap = cv2.VideoCapture(device, cv2.CAP_DSHOW)
         if not cap.isOpened():
             raise RuntimeError(f"camera {device} failed to open")
         # Request the pixel format (FourCC) before resolution/fps. MJPG is
@@ -194,22 +195,56 @@ class CameraProducer:
         fourcc = self._cfg.fourcc.strip()
         if sys.platform.startswith("linux") and fourcc.upper() == "YUY2":
             fourcc = "YUYV"  # V4L2's label for the identical 4:2:2 format
-        if fourcc:
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc[:4]))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
-        cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
+        # Read defaults before setting (for debugging)
+        default_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        default_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        default_fps = cap.get(cv2.CAP_PROP_FPS)
+
+        if sys.platform.startswith("linux"):
+            # V4L2 wants the pixel format pinned before resolution/fps.
+            if fourcc:
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc[:4]))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
+            cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
+        else:
+            # DirectShow negotiates the capture pin as one WxHxFourCC mode. If
+            # FOURCC is set first and the camera has no discrete mode for that
+            # exact combination, DSHOW silently keeps the native resolution
+            # instead of erroring — so set width/height FIRST here, then let
+            # the format follow (and re-apply size after, in case setting
+            # FOURCC reset the pin back to native).
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
+            cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
+            if fourcc:
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc[:4]))
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
         try:
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # keep only the freshest frame
         except Exception:  # noqa: BLE001 — not all backends support it
             pass
+
+        # On Windows, DirectShow needs a few frames to stabilize resolution settings
+        if not sys.platform.startswith("linux"):
+            for _ in range(5):
+                try:
+                    cap.grab()
+                except Exception:  # noqa: BLE001
+                    pass
+
         actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = cap.get(cv2.CAP_PROP_FPS)
         actual_fourcc = _fourcc_to_str(cap.get(cv2.CAP_PROP_FOURCC))
-        logger.info("Camera %d opened: %dx%d @ %.0f fps (fourcc=%s, requested %s)",
-                    device, actual_w, actual_h, actual_fps,
-                    actual_fourcc or "?", fourcc or "default")
+        logger.info(
+            "Camera %d opened: %dx%d @ %.0f fps (fourcc=%s, requested %s) "
+            "[defaults were %dx%d @ %.0f fps]",
+            device, actual_w, actual_h, actual_fps,
+            actual_fourcc or "?", fourcc or "default",
+            default_w, default_h, default_fps
+        )
         # If the camera negotiated a much lower fps (or a different resolution)
         # than asked it ignored the mode set. For MJPG that's usually a heavy
         # native mode (the classic IMX219 "stuck at full 8MP ≈ 5 fps"); for

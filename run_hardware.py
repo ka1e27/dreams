@@ -98,6 +98,25 @@ def main() -> None:
         reconnect_interval_s=cam_cfg.get("reconnect_interval_s", 2.0),
     ))
 
+    # Stereo distance for the detection overlay — adds "Xm" to each detected
+    # object's label. Optional: only active if a right camera is configured
+    # AND pi5/cv/calibration.npz exists (run pi5/scripts/calibrate_stereo.py
+    # to generate it). Missing either just leaves distance off, no crash.
+    stereo_depth = None
+    if right_dev is not None:
+        try:
+            from pi5.cv.stereo import StereoDepth, load_calibration
+            calib_path = cam_cfg.get("calibration_path", "pi5/cv/calibration.npz")
+            calib = load_calibration(calib_path)
+            if calib is not None:
+                stereo_depth = StereoDepth(calib)
+                logger.info("Stereo distance enabled (calibration: %s)", calib_path)
+            else:
+                logger.info("No stereo calibration at %s — detection boxes show no distance",
+                            calib_path)
+        except Exception as e:  # noqa: BLE001 — distance is a nice-to-have, never block startup
+            logger.warning("Stereo distance unavailable: %s", e)
+
     # Live YOLO detection overlay on the /video feed (configurable model).
     det_cfg = cam_cfg.get("detection", {})
     overlay = DetectionOverlay(camera, DetectionConfig(
@@ -109,7 +128,7 @@ def main() -> None:
         target_classes=det_cfg.get("target_classes") or [],
         highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
         track_class=det_cfg.get("track_class", "") or "",
-    ))
+    ), stereo=stereo_depth)
 
     # Radar-bar pan stepper on the Pi 5 GPIO header (the only Pi 5 GPIO use in
     # the project). Runs in mock mode if gpiozero/lgpio is missing or the pins
