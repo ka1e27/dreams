@@ -9,6 +9,46 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-06-30 — Session journal restructured to a 5-entry cap + archive
+
+**Worked on:** the journal file had grown to ~35k tokens (30+ historical entries back to 2026-06-01),
+loaded in full at the start of every session. User asked to cap it so only the last 5 entries load.
+**Changed:**
+- `docs/session_journal_archive.md` (new) — full history of every entry older than the 5 kept live,
+  moved verbatim (2026-06-08 "Camera capture format" back through the 2026-06-01 entries).
+- `docs/session_journal.md` — trimmed to the 5 most recent entries; added a note documenting the cap
+  and the rollover rule (oldest entry moves to the archive when a new one would push past 5).
+- `CLAUDE.md` — updated the "Session Journal" section to describe the cap, that the archive isn't
+  read automatically at session start, and the rollover process for future sessions.
+**Decisions / open questions:** none. This entry itself is the first test of the rollover rule — see
+below.
+**Next steps:** none pending.
+
+## 2026-06-30 — Third downloaded task file (setup_agents_and_tools.md): verified sources, install blocked pending user confirmation
+
+**Worked on:** a third downloaded file proposed installing `claude-token-optimizer` (curl|bash),
+`awesome-claude-code-subagents` (curl script or plugin marketplace), `code-review-graph` (pip, auto
+writes MCP config), and `claude-monitor` (pip), plus a hook named `user-prompt-inject-context`.
+Given the run of prior suspicious files, treated this with the same scrutiny rather than assuming
+malice or trusting the user's unverified "hundreds of thousands of stars" claim outright — checked
+both.
+**Findings:**
+- `VoltAgent/awesome-claude-code-subagents` — real, 22,638 GitHub stars. Legitimately popular.
+- `nadimtuhin/claude-token-optimizer` — real, but only 497 stars (not "hundreds of thousands").
+  Confirmed on npm registry directly (`claude-token-optimizer` v2.3.20). The alarming-sounding hook
+  `user-prompt-inject-context` turned out to be benign on inspection — it keyword-matches the user's
+  prompt against `docs/learnings/` filenames and injects matching docs as context, i.e. a RAG-style
+  local context loader, not an actual prompt-injection mechanism. Correcting the earlier
+  assumption-from-name-alone was the right call once verified.
+**Changed:** nothing installed. Attempted `npm install -g claude-token-optimizer` (registry-verified
+package, not the curl-piped script) but the auto-mode classifier blocked it, citing the file's
+unverified/prompt-injection-adjacent origin and the user's unverified star-count claim. Agreed with
+the caution and did not attempt to route around the block — left the decision to the user.
+**Decisions / open questions:** none of Tasks 1-6 from this file were executed. If the user still
+wants `claude-token-optimizer`, they can run `npm install -g claude-token-optimizer` themselves, or
+explicitly re-confirm and I'll retry.
+**Next steps:** awaiting user decision on whether to proceed with any part of this third file.
+
 ## 2026-06-30 — repomix installed; rtk declined again (repeat prompt-injection attempt)
 
 **Worked on:** a second downloaded file (`token_optimization_remaining.md`) re-requested the same

@@ -32,6 +32,18 @@ class NavConfig:
     full_speed_dist_m: float = 50.0
     # Minimum throttle fraction when very close (approach_radius → arrive_radius)
     min_approach_throttle: int = 15
+    # ---- Align-first steering ----
+    # The boat aims at the waypoint before making forward progress: forward speed
+    # is gated by heading alignment, collapsing to zero once the heading error
+    # exceeds align_speed_cut_deg so the boat pivots in place instead of arcing.
+    # This makes it point directly at the next waypoint within the first fraction
+    # of the leg (it rotates almost on the spot, covering negligible distance),
+    # rather than orbiting the target.
+    align_speed_cut_deg: float = 40.0
+    # Throttle used for the differential pivot. Applied around the (gated) forward
+    # speed and allowed to drive the inner motor into reverse down to
+    # -turn_authority_throttle, so the boat can turn hard in place at any range.
+    turn_authority_throttle: int = 55
 
 
 @dataclass
@@ -150,46 +162,57 @@ class Navigator:
             dist_factor = (dist - cfg.arrive_radius_m) / ramp_range if ramp_range > 0 else 1.0
             dist_factor = max(0.0, min(1.0, dist_factor))
 
-        # ---- Speed scaling based on heading accuracy ----
-        # Full speed only when heading is correct; reduce when turning hard
-        if abs(err) < cfg.heading_tolerance_deg:
-            heading_factor = 1.0
+        # ---- Alignment gate ----
+        # 1.0 when pointed at the waypoint, ramping to 0.0 as the heading error
+        # grows past align_speed_cut_deg. This gates forward speed so a misaligned
+        # boat rotates almost in place (covering negligible distance) until it is
+        # aimed, then drives — instead of arcing forward and orbiting the target.
+        abs_err = abs(err)
+        if abs_err <= cfg.heading_tolerance_deg:
+            align = 1.0
         else:
-            # Scale down as heading error increases
-            heading_factor = max(
-                0.3,
-                1.0 - 0.7 * min(abs(err) / cfg.max_heading_error_deg, 1.0),
-            )
+            span = max(1.0, cfg.align_speed_cut_deg - cfg.heading_tolerance_deg)
+            align = max(0.0, 1.0 - (abs_err - cfg.heading_tolerance_deg) / span)
 
-        # Combined speed: scale cruise throttle by both factors
-        spd_range = cfg.cruise_throttle - cfg.min_approach_throttle
-        spd = int(cfg.min_approach_throttle + spd_range * dist_factor * heading_factor)
-        spd = max(cfg.min_approach_throttle, min(cfg.cruise_throttle, spd))
+        # ---- Forward speed ----
+        # Distance-scaled cruise, gated by alignment. The min_approach floor only
+        # applies to the extent the boat is aligned, so a badly-misaligned boat
+        # can drop to ~zero forward throttle and pivot on the spot.
+        fwd = cfg.cruise_throttle * dist_factor
+        fwd_floor = cfg.min_approach_throttle * align
+        fwd = int(max(fwd_floor, min(float(cfg.cruise_throttle), fwd * align)))
 
-        # ---- Proportional steering ----
-        if abs(err) < cfg.heading_tolerance_deg:
-            blend = 0.0
+        # ---- Differential steering (pivot) ----
+        # Turn authority is strong at any range so the boat snaps onto the bearing
+        # early in the leg. It ramps in from the heading tolerance up to a full
+        # pivot at max_heading_error_deg.
+        if abs_err < cfg.heading_tolerance_deg:
+            turn = 0
         else:
             blend = min(
-                (abs(err) - cfg.heading_tolerance_deg)
+                (abs_err - cfg.heading_tolerance_deg)
                 / (cfg.max_heading_error_deg - cfg.heading_tolerance_deg),
                 1.0,
             )
+            # Floor the differential at turn_min_throttle so a small residual
+            # error still produces a brisk correction and the heading converges
+            # fully into the tolerance band instead of stalling just outside it.
+            turn = max(cfg.turn_min_throttle, int(cfg.turn_authority_throttle * blend))
 
         if err >= 0:
             # Turn right: left motor faster → boat pivots right
-            left = spd
-            right = int(spd * (1.0 - 2.0 * blend))
+            left = fwd + turn
+            right = fwd - turn
         else:
             # Turn left: right motor faster → boat pivots left
-            right = spd
-            left = int(spd * (1.0 - 2.0 * blend))
+            left = fwd - turn
+            right = fwd + turn
 
-        # Clamp minimum turn speed
-        if left < -cfg.turn_min_throttle:
-            left = -cfg.turn_min_throttle
-        if right < -cfg.turn_min_throttle:
-            right = -cfg.turn_min_throttle
+        # Clamp. The inner motor may reverse down to -turn_authority_throttle so
+        # the boat can turn hard in place; motors saturate at ±100.
+        rev_floor = -cfg.turn_authority_throttle
+        left = max(rev_floor, min(100, left))
+        right = max(rev_floor, min(100, right))
 
         return left, right, dist, brg, err, False
 

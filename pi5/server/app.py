@@ -8,6 +8,10 @@ Endpoints:
   GET  /api/mission         Current mission state
   GET  /api/missions        List loaded missions
   POST /api/mission         Upload and optionally start a mission
+  GET  /api/paths           List saved waypoint-planner paths
+  POST /api/paths           Save (create/overwrite) a path
+  DELETE /api/paths/{name}  Delete a saved path
+  POST /api/heading         Hold a compass heading (SET_HDG)
   POST /api/mission/start   Start loaded mission
   POST /api/mission/pause   Pause mission
   POST /api/mission/resume  Resume mission
@@ -116,6 +120,12 @@ async def root():
 async def command_center():
     """Legacy path — the command center is now served at /."""
     return RedirectResponse(url="/")
+
+
+@app.get("/planner", include_in_schema=False)
+async def waypoint_planner():
+    """Serve the waypoint planner — create, edit, save and upload paths."""
+    return FileResponse(_TEMPLATES_DIR / "waypoint_planner.html")
 
 # Rate limiting — 60 req/min default, 10/min for sensitive endpoints
 app.add_middleware(RateLimitMiddleware, default_rpm=60, burst_rpm=120)
@@ -319,6 +329,88 @@ async def get_mission_waypoints(_: str = Depends(auth.require_api_key)):
         {"lat": wp.lat, "lon": wp.lon, "type": wp.wp_type.name.lower(), "label": wp.label}
         for wp in _mission.waypoints
     ]
+
+
+# ---- Saved paths (waypoint planner library) ----
+# Paths created in /planner are persisted to a JSON file so they survive
+# restarts and can be picked from the command center's LOAD PATH dialog.
+
+_PATHS_FILE = Path(__file__).parent / "saved_paths.json"
+_paths_lock = asyncio.Lock()
+
+
+def _read_paths() -> dict:
+    """Load the saved-paths file → {name: {name, waypoints, updated}}."""
+    try:
+        import json
+        with open(_PATHS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_paths(paths: dict) -> None:
+    import json
+    tmp = _PATHS_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(paths, indent=1), encoding="utf-8")
+    tmp.replace(_PATHS_FILE)
+
+
+@app.get("/api/paths")
+async def list_paths(_: str = Depends(auth.require_api_key)):
+    """List saved waypoint-planner paths (newest first)."""
+    paths = list(_read_paths().values())
+    paths.sort(key=lambda p: p.get("updated", 0), reverse=True)
+    return paths
+
+
+@app.post("/api/paths")
+async def save_path(
+    payload: MissionUploadIn,
+    _: str = Depends(auth.require_api_key),
+):
+    """Save (create or overwrite by name) a waypoint-planner path."""
+    async with _paths_lock:
+        paths = _read_paths()
+        paths[payload.name] = {
+            "name": payload.name,
+            "waypoints": [wp.model_dump() for wp in payload.waypoints],
+            "updated": time.time(),
+        }
+        _write_paths(paths)
+    return {"status": "saved", "name": payload.name,
+            "count": len(payload.waypoints)}
+
+
+@app.delete("/api/paths/{name}")
+async def delete_path(name: str, _: str = Depends(auth.require_api_key)):
+    """Delete a saved path by name."""
+    async with _paths_lock:
+        paths = _read_paths()
+        if name not in paths:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="No such path")
+        del paths[name]
+        _write_paths(paths)
+    return {"status": "deleted", "name": name}
+
+
+@app.post("/api/heading")
+async def set_heading(
+    payload: dict,
+    _: str = Depends(auth.require_api_key),
+):
+    """Hold a compass heading (SET_HDG). Overrides mission/nav like /api/goto."""
+    hdg = payload.get("heading")
+    if hdg is None or not (0 <= float(hdg) <= 360):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="heading must be 0–360")
+    if _mission.state.running:
+        _mission.abort("SET_HDG_OVERRIDE")
+    _navigator.stop_nav()
+    await _pico.set_heading(float(hdg) % 360)
+    return {"status": "heading_set", "heading": float(hdg) % 360}
 
 
 @app.post("/api/sim/speed")

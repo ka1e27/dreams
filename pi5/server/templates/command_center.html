@@ -183,6 +183,11 @@
   .cmd-in{width:96px;background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
     border-radius:5px;padding:7px 9px;font-family:var(--mono);font-size:12px;outline:none}
   .cmd-in:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  /* commands panel: one group per row with a fixed-width label column so the
+     first button of every group lines up vertically */
+  .cmd-rows{flex-direction:column;align-items:stretch;gap:10px}
+  .cmd-rows .cmd-group{flex-wrap:wrap}
+  .cmd-rows .cmd-glabel{width:76px;flex-shrink:0;margin-right:0}
   /* ---- radar bar / stepper ---- */
   .radar-inner{display:grid;grid-template-columns:170px 1fr;gap:16px;padding:12px 14px;align-items:center}
   .rose-wrap{display:flex;align-items:center;justify-content:center}
@@ -327,6 +332,13 @@
   .modal textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
   .modal label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:10px}
+  .path-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;
+    cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)}
+  .path-row:hover{background:rgba(0,212,255,.05)}
+  .path-row.sel{background:rgba(0,212,255,.1);box-shadow:inset 2px 0 0 var(--cyan)}
+  .path-row .pn{color:#eaf6fb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .path-row .pc{color:var(--muted);font-size:10px;flex-shrink:0}
+  .path-empty{padding:12px;color:var(--muted);font-size:11px;text-align:center}
 </style>
 </head>
 <body>
@@ -342,7 +354,7 @@
       <span class="sub">AUTONOMOUS SURVEY · CATAMARAN</span>
     </div>
     <div style="display:flex;align-items:center;gap:14px">
-      <span class="links"><a href="/docs">API</a></span>
+      <span class="links"><a href="/docs">API</a><a href="/planner">◈ PLANNER</a></span>
       <button class="cbtn ghost2" id="customizeBtn" onclick="toggleCustomize()">✎ CUSTOMIZE</button>
       <button class="cbtn ghost2" onclick="resetLayout()">⟳ RESET LAYOUT</button>
       <span class="lbl">PI5</span><span id="dot-health" class="dot"></span>
@@ -542,13 +554,12 @@
       <div class="sec-hd"><span class="drag-handle">⠿</span><span>⌘ COMMANDS</span>
         <span class="sp"></span><span class="lbl">one-click → /api</span><span class="chev">▾</span></div>
       <div class="sec-body">
-        <div class="cmd-bar">
+        <div class="cmd-bar cmd-rows">
           <div class="cmd-group">
             <span class="cmd-glabel">SAFETY</span>
             <button class="cbtn danger" onclick="cmd('estop','E-STOP engaged')">E-STOP</button>
             <button class="cbtn" onclick="cmd('resume','E-stop cleared')">CLEAR E-STOP</button>
           </div>
-          <span class="cmd-div"></span>
           <div class="cmd-group">
             <span class="cmd-glabel">MISSION</span>
             <button class="cbtn" onclick="cmd('mission/start','Mission started')">START</button>
@@ -556,30 +567,28 @@
             <button class="cbtn" onclick="cmd('mission/resume','Mission resumed')">RESUME</button>
             <button class="cbtn warn" onclick="cmd('mission/skip','Skipping site')">SKIP SITE</button>
             <button class="cbtn danger" onclick="cmd('mission/abort','Mission aborted')">ABORT</button>
-            <button class="cbtn" onclick="openModal('mUpload')">UPLOAD…</button>
+            <button class="cbtn" onclick="openUploadModal()">LOAD PATH…</button>
           </div>
-          <span class="cmd-div"></span>
           <div class="cmd-group">
             <span class="cmd-glabel">NAV</span>
+            <button class="cbtn" onclick="sendGoto()">GO TO</button>
             <input id="gotoLat" class="cmd-in" type="number" step="any" placeholder="lat">
             <input id="gotoLon" class="cmd-in" type="number" step="any" placeholder="lon">
-            <button class="cbtn" onclick="sendGoto()">GO TO</button>
+            <button class="cbtn" onclick="sendHeading()">SET HDG</button>
+            <input id="setHdg" class="cmd-in" type="number" step="any" min="0" max="360" placeholder="deg" style="width:70px">
             <button class="cbtn" onclick="cmd('rth','Returning home')">RTH</button>
           </div>
-          <span class="cmd-div"></span>
           <div class="cmd-group">
             <span class="cmd-glabel">CAMERA</span>
             <button class="cbtn" onclick="swapCam()">⇄ SWAP VIEW</button>
             <button class="cbtn" onclick="toggleDetect()">◉ TOGGLE DETECT</button>
           </div>
-          <span class="cmd-div"></span>
           <div class="cmd-group">
             <span class="cmd-glabel">RADAR BAR</span>
             <button class="cbtn" onclick="stepperCmd('CENTER','Centering radar bar')">CENTER</button>
             <button class="cbtn" onclick="stepperCmd('SCAN','Scanning')">SCAN</button>
             <button class="cbtn warn" onclick="stepperCmd('STOP','Holding position')">STOP</button>
           </div>
-          <span class="cmd-div"></span>
           <div class="cmd-group">
             <span class="cmd-glabel">LINK</span>
             <button class="cbtn" onclick="checkNetwork()">NETWORK</button>
@@ -723,17 +732,16 @@
   </div>
 </div>
 
-<!-- Upload Mission modal -->
+<!-- Load Path modal — paths come from the waypoint planner (/planner) -->
 <div class="modal-bg" id="mUpload">
   <div class="modal">
-    <h3>UPLOAD MISSION</h3>
-    <input id="mName" type="text" placeholder="mission name (e.g. Survey Run 1)">
-    <textarea id="mWps" spellcheck="false" placeholder='[
-  {"lat": 51.5069, "lon": -0.0712, "type": "data", "label": "Site A"},
-  {"lat": 51.5072, "lon": -0.0708, "type": "path", "label": "Turn"}
-]'></textarea>
+    <h3>LOAD PATH → BOAT</h3>
+    <div id="pathList" style="max-height:260px;overflow-y:auto;margin-bottom:10px;
+      border:1px solid var(--amber-dim);border-radius:5px"></div>
     <label class="chk"><input type="checkbox" id="mStart" checked> start immediately</label>
     <div class="modal-actions">
+      <button class="cbtn ghost2" onclick="location.href='/planner'">✎ EDIT IN PLANNER</button>
+      <span style="flex:1"></span>
       <button class="cbtn" onclick="closeModal('mUpload')">CANCEL</button>
       <button class="cbtn" onclick="sendMission()">UPLOAD</button>
     </div>
@@ -1060,6 +1068,8 @@ function renderHealth(h){
     $('cam-det').textContent = 'DET ' + h.detect_fps.toFixed(1) + ' fps · '
       + (uniq.length ? uniq.slice(0,4).join(', ') : 'clear');
   }
+  // feed the TRACK picker: remember what the cameras see (kept 5 s)
+  noteDetections(h.detections);
   // object tracking — the overlay marks one primary target (lock reticle drawn
   // on both views); show a matching badge here regardless of the active view.
   const ct = $('cam-track');
@@ -1336,14 +1346,43 @@ async function checkStatus(){
 }
 function openModal(id){ $(id).classList.add('show'); }
 function closeModal(id){ $(id).classList.remove('show'); }
+async function sendHeading(){
+  const h = parseFloat($('setHdg').value);
+  if (isNaN(h) || h < 0 || h > 360){ toast('enter a heading 0–360°', false); return; }
+  try{ await postApi('heading', {heading: h}); toast('✓ Holding heading ' + Math.round(h) + '°', true); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+// ---- saved-path picker (paths are created/edited in /planner) --------------
+let savedPaths = [], selPath = null;
+async function openUploadModal(){
+  openModal('mUpload');
+  const box = $('pathList');
+  box.innerHTML = '<div class="path-empty">loading…</div>';
+  try{ savedPaths = await getApi('paths'); }
+  catch(e){ box.innerHTML = '<div class="path-empty">✗ ' + e.message + '</div>'; return; }
+  if (!savedPaths.length){
+    box.innerHTML = '<div class="path-empty">No saved paths yet — create one in the ◈ PLANNER.</div>';
+    selPath = null; return;
+  }
+  if (!savedPaths.some(p => p.name === selPath)) selPath = savedPaths[0].name;
+  box.innerHTML = savedPaths.map(p =>
+    `<div class="path-row${p.name === selPath ? ' sel' : ''}" onclick="pickPath('${p.name.replace(/'/g, "\\'")}')">
+       <span class="pn"></span><span class="pc">${p.waypoints.length} wp</span></div>`).join('');
+  // names via textContent — never trust them as HTML
+  box.querySelectorAll('.path-row .pn').forEach((el, i) => { el.textContent = savedPaths[i].name; });
+}
+function pickPath(name){
+  selPath = name;
+  $('pathList').querySelectorAll('.path-row').forEach((el, i) =>
+    el.classList.toggle('sel', savedPaths[i].name === name));
+}
 async function sendMission(){
-  const name = $('mName').value.trim();
-  if (!name){ toast('enter a mission name', false); return; }
-  let wps; try{ wps = JSON.parse($('mWps').value); }catch(e){ toast('waypoints: invalid JSON', false); return; }
+  const p = savedPaths.find(x => x.name === selPath);
+  if (!p){ toast('pick a saved path (or create one in the planner)', false); return; }
   const start = $('mStart').checked;
   try{
-    await postApi('mission?start=' + start, {name, waypoints: wps});
-    toast(start ? '✓ Mission uploaded & started' : '✓ Mission uploaded', true);
+    await postApi('mission?start=' + start, {name: p.name, waypoints: p.waypoints});
+    toast(start ? '✓ Path uploaded & started' : '✓ Path uploaded', true);
     closeModal('mUpload');
     following = true;
     loadWaypoints();
@@ -1363,28 +1402,41 @@ function postCamera(body){
       body: JSON.stringify(body) }).catch(()=>{});
   }, 150);
 }
-// Seed classes so the picker is usable before a model loads (covers the COCO
-// fallback + the maritime model labels). The loaded model's real classes, when
-// present, take over. AUTO = let the overlay pick the best highlighted target.
-const DEFAULT_TRACK_CLASSES = ['boat','person','vessel','kayak','buoy','dock','debris'];
-function populateTrackClasses(classes, current){
-  const sel = $('trackClass');
-  const list = (classes && classes.length) ? classes.slice() : DEFAULT_TRACK_CLASSES.slice();
-  const cur = current || '';
-  if (cur && !list.includes(cur)) list.push(cur);   // keep an out-of-list choice visible
-  // skip a rebuild if nothing changed (avoids clobbering an open dropdown)
-  const want = 'AUTO|' + list.join('|');
-  if (sel.dataset.sig === want){ sel.value = cur; return; }
-  sel.dataset.sig = want;
-  sel.innerHTML = '<option value="">AUTO</option>'
-    + list.map(n => `<option value="${n}">${n}</option>`).join('');
-  sel.value = cur;
+// TRACK picker: a live list of what the cameras see right now plus anything
+// seen in the last 5 s (fed from /ws/health detections). AUTO = let the
+// overlay pick the best highlighted target.
+const seenTracks = new Map();   // label -> last-seen ms
+let trackCurrent = '';
+function noteDetections(dets){
+  const now = Date.now();
+  (dets || []).forEach(d => seenTracks.set(d.label, now));
 }
+function rebuildTrackList(){
+  const sel = $('trackClass');
+  if (document.activeElement === sel) return;   // don't clobber an open dropdown
+  const now = Date.now();
+  seenTracks.forEach((t, k) => { if (now - t > 5000) seenTracks.delete(k); });
+  const rows = [...seenTracks.entries()].sort((a, b) => b[1] - a[1]);
+  let opts = '<option value="">AUTO</option>';
+  rows.forEach(([label, t]) => {
+    const age = now - t;
+    const tag = age < 1500 ? 'LIVE' : Math.round(age / 1000) + 's ago';
+    opts += `<option value="${label}">${label} · ${tag}</option>`;
+  });
+  if (trackCurrent && !seenTracks.has(trackCurrent))
+    opts += `<option value="${trackCurrent}">${trackCurrent} · not in view</option>`;
+  if (sel.dataset.sig === opts){ sel.value = trackCurrent; return; }
+  sel.dataset.sig = opts;
+  sel.innerHTML = opts;
+  sel.value = trackCurrent;
+}
+setInterval(rebuildTrackList, 1000);
 async function loadCameraControls(){
   try{
     const c = await (await fetch('/api/camera', { headers: apiHeaders() })).json();
     $('detOn').checked = !!c.detection_enabled;
-    populateTrackClasses(c.classes, c.track_class);
+    trackCurrent = c.track_class || '';
+    rebuildTrackList();
     if (c.detect_max_fps != null){ $('detFps').value = c.detect_max_fps; $('detFpsV').textContent = c.detect_max_fps; }
     if (c.conf != null){ $('conf').value = c.conf; $('confV').textContent = Number(c.conf).toFixed(2); }
     if (c.jpeg_quality != null){ $('jq').value = c.jpeg_quality; $('jqV').textContent = c.jpeg_quality; }
@@ -1402,6 +1454,7 @@ async function loadCameraControls(){
 $('detOn').addEventListener('change', () => postCamera({ detection_enabled: $('detOn').checked }));
 $('trackClass').addEventListener('change', () => {
   const v = $('trackClass').value;
+  trackCurrent = v;
   postCamera({ track_class: v });
   toast(v ? ('◎ Tracking ' + v) : '◎ Tracking AUTO (best target)', true);
 });

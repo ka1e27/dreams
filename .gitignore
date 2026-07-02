@@ -57,3 +57,6 @@ ml/validation_samples/
 pi5/cv/models/*.onnx
 pi5/cv/models/*.pt
 !pi5/cv/models/*.json
+# Added by code-review-graph
+.code-review-graph/
+pi5/server/saved_paths.json

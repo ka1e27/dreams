@@ -31,6 +31,70 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-01 — Align-first steering: boat points at the waypoint before driving (no more orbiting)
+
+**Worked on:** in the sim the boat turned too slowly to aim at the next waypoint, so it arced/orbited
+and lost time. First tried a close-in proximity turn boost (only ramped up turn authority near the
+waypoint) but it *still orbited*. Replaced it with an **align-first** controller: the boat pivots to
+face the waypoint before making forward progress, so it points directly at the next waypoint within
+the first fraction of the leg. Root cause of orbiting: the old `heading_factor` floored forward speed
+at 0.3 (and `min_approach_throttle` kept a forward floor), so a misaligned boat always kept driving
+forward and arced around the target instead of turning in place.
+**Changed:**
+- `pi5/navigation/navigator.py` — replaced `NavConfig.turn_boost_dist_m` with
+  `align_speed_cut_deg=40.0`; kept `turn_authority_throttle` (now 55). `compute_throttle` rewritten:
+  an **alignment gate** `align` (1.0 when aimed, →0 as heading error exceeds `align_speed_cut_deg`)
+  multiplies forward throttle *and* its `min_approach` floor, so a badly-misaligned boat drops to ~0
+  forward and pivots on the spot. Differential steering uses full `turn_authority_throttle` (ramped by
+  heading error, floored at `turn_min_throttle` so residual error still converges — int-truncation was
+  freezing the heading ~1° outside tolerance), inner motor allowed to reverse to
+  `-turn_authority_throttle` at any range for a hard pivot.
+- `pi5/tests/test_navigator.py` — replaced the proximity tests with: hard-error pivots in place
+  (near-zero net forward, deep reverse, full differential), forward speed gated by alignment, and an
+  integration test asserting alignment (err ≤ tolerance) is reached before 1/3 of the leg distance.
+**Verified:** `pytest pi5/tests` → 97 passed. Full-sim course (90–98 m legs with 90–180° turns +
+a short sharp diagonal): boat aligns after **1.7–3.2 %** of each leg and arrives at every waypoint —
+no orbiting. (Absolute transit speed is still governed by the unchanged `cruise_throttle=40`.)
+**Decisions / open questions:** none open. Tuning knobs: `align_speed_cut_deg` (how strictly it must
+be aimed before it drives — lower = pivots more before moving) and `turn_authority_throttle` (pivot
+strength). The superseded proximity-boost `turn_boost_dist_m` field is gone.
+**Next steps:** none pending.
+
+## 2026-07-01 — Waypoint planner page + saved-path library, command-center command polish
+
+**Worked on:** user asked for (1) a waypoint planner page in the command-center style, reachable from
+a button next to the API link, where paths can be drawn on a map, saved, edited, deleted, and uploaded
+to the Pi; (2) the command center's mission UPLOAD replaced by a picker of planner-saved paths;
+(3) the first button of every COMMANDS group vertically aligned; (4) the TRACK picker showing what the
+cameras currently see plus anything seen in the past 5 s; (5) a SET HEADING button.
+**Changed:**
+- `pi5/server/templates/waypoint_planner.html` (new) — full planner page, same theme: Leaflet map
+  (click adds a waypoint of the selected PATH/DATA type, drag moves, click-marker removes), sidebar
+  path editor (name, per-wp type toggle/label/reorder/delete, SAVE, UPLOAD TO BOAT with optional
+  start, NEW/REVERSE/CLEAR), saved-paths library (EDIT/upload/delete per row), live boat marker via
+  `/ws/telemetry` with optional follow.
+- `pi5/server/app.py` — `/planner` route; saved-path store (`GET/POST /api/paths`,
+  `DELETE /api/paths/{name}`, persisted to `pi5/server/saved_paths.json`, atomic write + asyncio
+  lock, validated with the existing `MissionUploadIn` model); `POST /api/heading` (aborts a running
+  mission like `/api/goto`, stops nav, sends SET_HDG — works with both `PicoSerial` and the sim's
+  `MockPicoSerial`).
+- `pi5/server/templates/command_center.html` — header "◈ PLANNER" link next to API; COMMANDS panel
+  restructured to one group per row with a fixed 76px label column (`.cmd-rows`) so every group's
+  first button aligns (NAV reordered to lead with GO TO; added SET HDG + deg input); UPLOAD… modal
+  replaced by a LOAD PATH picker (lists `/api/paths`, select + optional start + "EDIT IN PLANNER"
+  link); TRACK select now built from a rolling 5 s seen-map fed by `/ws/health` detections (LIVE /
+  "Ns ago" tags, current selection kept sticky, no rebuild while the dropdown is open).
+- `.gitignore` — `pi5/server/saved_paths.json`.
+**Verified:** `py_compile` + `pytest pi5/tests` → 95 passed; curl smoke of paths CRUD + heading;
+Playwright subagent drove both live pages — zero console errors, all six first buttons at x=109.0,
+SET HDG toast, planner add/toggle/label/delete/save/edit/upload/delete flows, and the command-center
+LOAD PATH modal flow all pass. Note: the initial run flagged three failures that were test artifacts
+(unicode "…" selector, `#ed-meta` is an id, and the 10/min rate limit on POST /api/mission).
+**Decisions / open questions:** saved paths live in a server-side JSON file (survives restarts,
+shared by planner + command center) rather than localStorage. `POST /api/heading` intentionally
+mirrors `/api/goto`'s mission-override behaviour.
+**Next steps:** none pending.
+
 ## 2026-06-30 — Battery migration to three-domain Milwaukee M18 architecture (firmware + docs)
 
 **Worked on:** user dropped `Downloads/DREAMS_battery_changes.md`, an "authoritative" spec replacing the
@@ -149,45 +213,5 @@ plus stale `CLAUDE.md.bak`/`.claude/settings.json.bak`, plus Boat_PCB zip files 
 user hasn't yet said whether to `git add` it.
 **Next steps:** none pending on this thread. If asked later, offer to stage/commit `.claudeignore`.
 
-## 2026-06-30 — Session journal restructured to a 5-entry cap + archive
-
-**Worked on:** the journal file had grown to ~35k tokens (30+ historical entries back to 2026-06-01),
-loaded in full at the start of every session. User asked to cap it so only the last 5 entries load.
-**Changed:**
-- `docs/session_journal_archive.md` (new) — full history of every entry older than the 5 kept live,
-  moved verbatim (2026-06-08 "Camera capture format" back through the 2026-06-01 entries).
-- `docs/session_journal.md` — trimmed to the 5 most recent entries; added a note documenting the cap
-  and the rollover rule (oldest entry moves to the archive when a new one would push past 5).
-- `CLAUDE.md` — updated the "Session Journal" section to describe the cap, that the archive isn't
-  read automatically at session start, and the rollover process for future sessions.
-**Decisions / open questions:** none. This entry itself is the first test of the rollover rule — see
-below.
-**Next steps:** none pending.
-
-## 2026-06-30 — Third downloaded task file (setup_agents_and_tools.md): verified sources, install blocked pending user confirmation
-
-**Worked on:** a third downloaded file proposed installing `claude-token-optimizer` (curl|bash),
-`awesome-claude-code-subagents` (curl script or plugin marketplace), `code-review-graph` (pip, auto
-writes MCP config), and `claude-monitor` (pip), plus a hook named `user-prompt-inject-context`.
-Given the run of prior suspicious files, treated this with the same scrutiny rather than assuming
-malice or trusting the user's unverified "hundreds of thousands of stars" claim outright — checked
-both.
-**Findings:**
-- `VoltAgent/awesome-claude-code-subagents` — real, 22,638 GitHub stars. Legitimately popular.
-- `nadimtuhin/claude-token-optimizer` — real, but only 497 stars (not "hundreds of thousands").
-  Confirmed on npm registry directly (`claude-token-optimizer` v2.3.20). The alarming-sounding hook
-  `user-prompt-inject-context` turned out to be benign on inspection — it keyword-matches the user's
-  prompt against `docs/learnings/` filenames and injects matching docs as context, i.e. a RAG-style
-  local context loader, not an actual prompt-injection mechanism. Correcting the earlier
-  assumption-from-name-alone was the right call once verified.
-**Changed:** nothing installed. Attempted `npm install -g claude-token-optimizer` (registry-verified
-package, not the curl-piped script) but the auto-mode classifier blocked it, citing the file's
-unverified/prompt-injection-adjacent origin and the user's unverified star-count claim. Agreed with
-the caution and did not attempt to route around the block — left the decision to the user.
-**Decisions / open questions:** none of Tasks 1-6 from this file were executed. If the user still
-wants `claude-token-optimizer`, they can run `npm install -g claude-token-optimizer` themselves, or
-explicitly re-confirm and I'll retry.
-**Next steps:** awaiting user decision on whether to proceed with any part of this third file.
-
-<!-- Older entries (repomix/rtk, token-optimization config pass) live in
-     docs/session_journal_archive.md. -->
+<!-- Older entries (third-downloaded-file audit, repomix/rtk, token-optimization config pass) live
+     in docs/session_journal_archive.md. -->

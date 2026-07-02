@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D.R.E.A.M.S — Waypoint Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#0a0d0f; --panel:#0e1316; --panel-2:#11181c;
+    --amber:#ff8c00; --amber-dim:rgba(255,140,0,.35);
+    --cyan:#00d4ff; --grid:rgba(255,140,0,.10);
+    --ok:#3ad37a; --warn:#ffb02e; --crit:#ff3b3b; --muted:#5b6b72;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --display:'Orbitron',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(255,140,0,.06), transparent 60%),
+      var(--bg);
+    color:#cfe3ea; font-family:var(--mono); font-size:13px;
+    background-attachment:fixed;
+  }
+  .grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(var(--grid) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+    background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
+  .app{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;padding:12px;
+    height:100vh;max-width:1700px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+    padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
+    background:linear-gradient(180deg,rgba(255,140,0,.08),transparent);
+    box-shadow:0 0 24px rgba(255,140,0,.08) inset;flex-shrink:0}
+  header h1{font-family:var(--display);font-weight:900;letter-spacing:.18em;
+    margin:0;font-size:20px;color:#fff;text-shadow:0 0 18px var(--amber-dim)}
+  header h1 b{color:var(--amber)}
+  header .sub{color:var(--muted);letter-spacing:.3em;font-size:10px;margin-left:14px}
+  .links a{color:var(--muted);text-decoration:none;margin-left:8px;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;padding:5px 11px;border:1px solid var(--amber-dim);border-radius:5px;transition:.15s}
+  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.06)}
+  .lbl{color:var(--muted);font-size:10px;letter-spacing:.18em}
+  /* ---- layout ---- */
+  .plan-grid{display:grid;grid-template-columns:1fr 400px;gap:12px;flex:1;min-height:0}
+  @media(max-width:1000px){.plan-grid{grid-template-columns:1fr}.side{max-height:50vh}}
+  .panel{border:1px solid var(--amber-dim);border-radius:8px;background:var(--panel);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(255,140,0,.05) inset;
+    display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .pnl-hd{font-family:var(--display);font-weight:700;letter-spacing:.22em;font-size:11px;color:var(--amber);
+    padding:8px 12px;border-bottom:1px solid var(--amber-dim);display:flex;align-items:center;gap:9px;
+    background:rgba(255,140,0,.04);flex-shrink:0}
+  .pnl-hd .sp{flex:1}
+  /* ---- map ---- */
+  .map-wrap{position:relative;flex:1;min-height:300px}
+  #map{position:absolute;inset:0;background:#06090b;cursor:crosshair}
+  .leaflet-container{background:#06090b !important;font-family:var(--mono) !important}
+  .leaflet-control-zoom a{background:var(--panel) !important;color:#cfe3ea !important;border-color:var(--amber-dim) !important}
+  .leaflet-control-zoom a:hover{background:var(--panel-2) !important;color:var(--cyan) !important}
+  .leaflet-control-attribution{background:rgba(6,9,11,.85) !important;color:var(--muted) !important;font-size:9px !important}
+  .leaflet-control-attribution a{color:var(--muted) !important}
+  .map-hint{position:absolute;top:.6rem;left:50px;z-index:500;font-size:11px;color:var(--cyan);
+    background:rgba(6,9,11,.85);padding:.35rem .6rem;border:1px solid var(--amber-dim);letter-spacing:.03em}
+  @keyframes sonar{0%{transform:translate(-50%,-50%) scale(1);opacity:.8}100%{transform:translate(-50%,-50%) scale(4);opacity:0}}
+  .boat-ping{width:16px;height:16px;border-radius:50%;background:var(--cyan);position:relative}
+  .boat-ping::before,.boat-ping::after{content:'';position:absolute;top:50%;left:50%;width:100%;height:100%;
+    border-radius:50%;border:2px solid var(--cyan);transform:translate(-50%,-50%) scale(1);opacity:0;
+    animation:sonar 2s ease-out infinite}
+  .boat-ping::after{animation-delay:1s}
+  .wp-marker{width:22px;height:22px;border-radius:50%;border:2px solid;display:flex;align-items:center;
+    justify-content:center;font-family:var(--mono);font-size:9px;font-weight:700;color:#fff;position:relative;
+    cursor:grab}
+  .wp-marker.data{background:rgba(255,59,59,.35);border-color:var(--crit)}
+  .wp-marker.path{background:rgba(255,176,46,.35);border-color:var(--warn)}
+  .wp-marker.hot{box-shadow:0 0 12px var(--cyan);border-color:var(--cyan)}
+  /* ---- map toolbar ---- */
+  .map-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 12px;
+    border-top:1px solid var(--amber-dim);background:var(--panel-2);flex-shrink:0}
+  /* ---- buttons / inputs ---- */
+  input,select,button{font-family:var(--mono);font-size:12px}
+  input[type=text],input[type=number],select{background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
+    border-radius:5px;padding:7px 9px;outline:none}
+  input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
+  .cbtn{cursor:pointer;background:rgba(255,140,0,.1);color:var(--amber);border:1px solid var(--amber);
+    border-radius:5px;padding:7px 12px;letter-spacing:.1em;font-size:11px;transition:.15s;white-space:nowrap}
+  .cbtn:hover{background:var(--amber);color:#0a0d0f;box-shadow:0 0 14px var(--amber-dim)}
+  .cbtn.danger{color:var(--crit);border-color:var(--crit);background:rgba(255,59,59,.08)}
+  .cbtn.danger:hover{background:var(--crit);color:#fff;box-shadow:0 0 14px rgba(255,59,59,.45)}
+  .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}
+  .cbtn.ghost2:hover{color:var(--cyan);border-color:var(--cyan);background:transparent;box-shadow:none}
+  .cbtn.accent{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.08)}
+  .cbtn.accent:hover{background:var(--cyan);color:#0a0d0f;box-shadow:0 0 14px rgba(0,212,255,.4)}
+  .cbtn.active{background:var(--cyan);color:#0a0d0f;border-color:var(--cyan)}
+  .mini{padding:2px 6px;font-size:10px;border-radius:4px}
+  .tg{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;letter-spacing:.12em;color:var(--amber)}
+  /* ---- sidebar ---- */
+  .side{display:flex;flex-direction:column;gap:12px;min-height:0}
+  .side .panel:first-child{flex:1.4}
+  .side .panel:last-child{flex:1}
+  .ed-body{display:flex;flex-direction:column;gap:8px;padding:10px 12px;flex:1;min-height:0}
+  #pName{width:100%}
+  .wp-list{flex:1;min-height:60px;overflow-y:auto;border:1px solid var(--amber-dim);border-radius:5px;
+    background:#06090b}
+  .wp-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.05);
+    cursor:pointer}
+  .wp-row:hover,.wp-row.hot{background:rgba(0,212,255,.06)}
+  .wp-row .n{width:20px;color:var(--cyan);font-weight:700;font-size:11px;flex-shrink:0;text-align:right}
+  .wp-row .ty{cursor:pointer;font-size:9px;letter-spacing:.08em;padding:2px 7px;border-radius:9px;
+    border:1px solid currentColor;flex-shrink:0;background:transparent}
+  .wp-row .ty.data{color:var(--crit)} .wp-row .ty.path{color:var(--warn)}
+  .wp-row .co{color:var(--muted);font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wp-row input.wlab{width:76px;padding:3px 5px;font-size:10px;flex-shrink:0}
+  .wp-row .op{cursor:pointer;background:transparent;border:none;color:var(--muted);padding:1px 3px;font-size:12px;flex-shrink:0}
+  .wp-row .op:hover{color:var(--cyan)} .wp-row .op.del:hover{color:var(--crit)}
+  .wp-empty{padding:14px;color:var(--muted);font-size:11px;text-align:center;line-height:1.6}
+  .ed-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;cursor:pointer}
+  /* ---- saved paths ---- */
+  .lib-list{flex:1;overflow-y:auto;min-height:60px}
+  .lib-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.05)}
+  .lib-row:hover{background:rgba(0,212,255,.04)}
+  .lib-row.editing{background:rgba(0,212,255,.08);box-shadow:inset 2px 0 0 var(--cyan)}
+  .lib-row .pn{flex:1;color:#eaf6fb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lib-row .pc{color:var(--muted);font-size:10px;flex-shrink:0}
+  .lib-empty{padding:14px;color:var(--muted);font-size:11px;text-align:center;line-height:1.6}
+  /* ---- toast ---- */
+  #toast{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px}
+  .toast{padding:10px 14px;border-radius:6px;border:1px solid;background:#0e1316;letter-spacing:.06em;
+    animation:tin .25s ease;max-width:360px}
+  .toast.ok{border-color:var(--ok);color:var(--ok)} .toast.bad{border-color:var(--crit);color:var(--crit)}
+  @keyframes tin{from{transform:translateY(8px);opacity:0}}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div id="toast"></div>
+
+<div class="app">
+  <header>
+    <div style="display:flex;align-items:baseline">
+      <h1>D.R.E.A.M.<b>S</b> &nbsp;WAYPOINT PLANNER</h1>
+      <span class="sub">PLAN · SAVE · UPLOAD</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="links"><a href="/docs">API</a><a href="/">⌘ COMMAND CENTER</a></span>
+      <span class="lbl">LINK</span><span id="dot-link" class="dot" style="width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--crit);box-shadow:0 0 10px var(--crit);transition:.3s"></span>
+    </div>
+  </header>
+
+  <div class="plan-grid">
+
+    <!-- MAP -->
+    <div class="panel">
+      <div class="pnl-hd"><span>◈ MAP · CLICK TO ADD WAYPOINTS</span><span class="sp"></span>
+        <span class="lbl" id="map-meta">—</span></div>
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-hint" id="mapHint">click map → add waypoint · drag marker → move · click marker → remove</div>
+      </div>
+      <div class="map-bar">
+        <span class="lbl">NEW WP TYPE</span>
+        <button class="cbtn mini active" id="tyPath" onclick="setNewType('path')">PATH</button>
+        <button class="cbtn mini" id="tyData" onclick="setNewType('data')">DATA (sample)</button>
+        <span style="flex:1"></span>
+        <label class="tg"><input type="checkbox" id="followBoat"> FOLLOW BOAT</label>
+        <button class="cbtn mini ghost2" onclick="centerOnBoat()">⌖ BOAT</button>
+        <button class="cbtn mini ghost2" onclick="fitPath()">⤢ FIT PATH</button>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div class="side">
+
+      <!-- PATH EDITOR -->
+      <div class="panel">
+        <div class="pnl-hd"><span>✎ PATH EDITOR</span><span class="sp"></span>
+          <span class="lbl" id="ed-meta">0 WP</span></div>
+        <div class="ed-body">
+          <input id="pName" type="text" placeholder="path name (e.g. Survey Run 1)" maxlength="100">
+          <div class="wp-list" id="wpList"></div>
+          <div class="ed-actions">
+            <button class="cbtn" onclick="savePath()">💾 SAVE</button>
+            <button class="cbtn accent" onclick="uploadPath()">▲ UPLOAD TO BOAT</button>
+            <label class="chk"><input type="checkbox" id="upStart"> start immediately</label>
+          </div>
+          <div class="ed-actions">
+            <button class="cbtn ghost2" onclick="newPath()">✚ NEW</button>
+            <button class="cbtn ghost2" onclick="reversePath()">⇅ REVERSE</button>
+            <button class="cbtn danger" onclick="clearPath()">✕ CLEAR WPS</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SAVED PATHS -->
+      <div class="panel">
+        <div class="pnl-hd"><span>▤ SAVED PATHS</span><span class="sp"></span>
+          <button class="cbtn mini ghost2" onclick="loadLibrary()">⟳</button></div>
+        <div class="lib-list" id="libList"><div class="lib-empty">loading…</div></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ---- auth helpers (same scheme as the command center) ----------------------
+const KEY = new URLSearchParams(location.search).get('key')
+          || localStorage.getItem('boat_key') || '';
+if (KEY) localStorage.setItem('boat_key', KEY);
+function apiHeaders(extra){ const h = Object.assign({}, extra||{}); if (KEY) h['X-API-Key']=KEY; return h; }
+const $ = (id) => document.getElementById(id);
+function toast(msg, ok){
+  const t=document.createElement('div'); t.className='toast '+(ok?'ok':'bad'); t.textContent=msg;
+  $('toast').appendChild(t); setTimeout(()=>t.remove(), 5000);
+}
+async function getApi(path){
+  const r = await fetch('/api/' + path, { headers: apiHeaders() });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function postApi(path, body){
+  const r = await fetch('/api/' + path, { method:'POST',
+    headers: apiHeaders({'Content-Type':'application/json'}),
+    body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok){ const j = await r.json().catch(()=>({}));
+    throw new Error(j.detail || ('HTTP ' + r.status)); }
+  return r.json().catch(()=>({}));
+}
+
+// ---- map -------------------------------------------------------------------
+const map = L.map('map', { zoomControl:true }).setView([51.506726, -0.071438], 16);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://carto.com/">CARTO</a>', maxZoom: 20, subdomains: 'abcd',
+}).addTo(map);
+const boatIcon = L.divIcon({ className:'', html:'<div class="boat-ping"></div>', iconSize:[16,16], iconAnchor:[8,8] });
+const boatMarker = L.marker([51.506726, -0.071438], { icon: boatIcon }).addTo(map);
+const wpLayer = L.layerGroup().addTo(map);
+const pathLine = L.polyline([], { color:'#ffb02e', weight:2, opacity:.8, dashArray:'6 5' }).addTo(map);
+
+// ---- path model -------------------------------------------------------------
+// wps: [{lat, lon, type:'data'|'path', label}]
+let wps = [];
+let newType = 'path';
+let editingName = null;   // saved path currently loaded in the editor
+function setNewType(t){
+  newType = t;
+  $('tyPath').classList.toggle('active', t === 'path');
+  $('tyData').classList.toggle('active', t === 'data');
+}
+map.on('click', (e) => {
+  wps.push({ lat:+e.latlng.lat.toFixed(6), lon:+e.latlng.lng.toFixed(6), type:newType, label:'' });
+  render();
+});
+
+// ---- render: markers + list ------------------------------------------------
+let markers = [];
+function render(){
+  $('ed-meta').textContent = wps.length + ' WP';
+  // map markers
+  wpLayer.clearLayers(); markers = [];
+  wps.forEach((wp, i) => {
+    const icon = L.divIcon({ className:'',
+      html:`<div class="wp-marker ${wp.type}" data-i="${i}">${i+1}</div>`,
+      iconSize:[22,22], iconAnchor:[11,11] });
+    const m = L.marker([wp.lat, wp.lon], { icon, draggable:true }).addTo(wpLayer);
+    m.on('drag', () => {
+      const ll = m.getLatLng();
+      wp.lat = +ll.lat.toFixed(6); wp.lon = +ll.lng.toFixed(6);
+      pathLine.setLatLngs(wps.map(w => [w.lat, w.lon]));
+    });
+    m.on('dragend', render);
+    m.on('click', () => { wps.splice(i, 1); render(); });
+    markers.push(m);
+  });
+  pathLine.setLatLngs(wps.map(w => [w.lat, w.lon]));
+  // list
+  const box = $('wpList');
+  if (!wps.length){
+    box.innerHTML = '<div class="wp-empty">Click the map to drop waypoints.<br>' +
+      'PATH = steer-through point · DATA = stop &amp; sample site.</div>';
+    return;
+  }
+  box.innerHTML = '';
+  wps.forEach((wp, i) => {
+    const row = document.createElement('div'); row.className = 'wp-row';
+    row.innerHTML =
+      `<span class="n">${i+1}</span>` +
+      `<button class="ty ${wp.type}" title="toggle type">${wp.type.toUpperCase()}</button>` +
+      `<input class="wlab" type="text" placeholder="label" maxlength="24">` +
+      `<span class="co">${wp.lat.toFixed(5)}, ${wp.lon.toFixed(5)}</span>` +
+      `<button class="op" title="move up">▲</button>` +
+      `<button class="op" title="move down">▼</button>` +
+      `<button class="op del" title="delete">✕</button>`;
+    const [ty, lab] = [row.querySelector('.ty'), row.querySelector('.wlab')];
+    lab.value = wp.label || '';
+    ty.onclick = () => { wp.type = wp.type === 'path' ? 'data' : 'path'; render(); };
+    lab.oninput = () => { wp.label = lab.value; };
+    const [up, dn, del] = row.querySelectorAll('.op');
+    up.onclick = () => { if (i > 0){ [wps[i-1], wps[i]] = [wps[i], wps[i-1]]; render(); } };
+    dn.onclick = () => { if (i < wps.length-1){ [wps[i+1], wps[i]] = [wps[i], wps[i+1]]; render(); } };
+    del.onclick = () => { wps.splice(i, 1); render(); };
+    row.onmouseenter = () => { const el = markers[i] && markers[i].getElement();
+      if (el){ const inner = el.querySelector('.wp-marker'); if (inner) inner.classList.add('hot'); } };
+    row.onmouseleave = () => { const el = markers[i] && markers[i].getElement();
+      if (el){ const inner = el.querySelector('.wp-marker'); if (inner) inner.classList.remove('hot'); } };
+    box.appendChild(row);
+  });
+}
+
+function fitPath(){
+  if (!wps.length){ toast('no waypoints to fit', false); return; }
+  map.fitBounds(wps.map(w => [w.lat, w.lon]), { padding:[50,50], maxZoom:18 });
+}
+function centerOnBoat(){ map.panTo(boatMarker.getLatLng()); }
+function newPath(){ wps = []; editingName = null; $('pName').value = ''; render(); renderLibrary(); }
+function clearPath(){ wps = []; render(); }
+function reversePath(){ wps.reverse(); render(); }
+
+// ---- save / upload ----------------------------------------------------------
+function currentPayload(){
+  const name = $('pName').value.trim();
+  if (!name){ toast('enter a path name', false); return null; }
+  if (!wps.length){ toast('add at least one waypoint', false); return null; }
+  return { name, waypoints: wps.map((w, i) =>
+    ({ lat:w.lat, lon:w.lon, type:w.type, label:w.label || ('WP' + (i+1)) })) };
+}
+async function savePath(){
+  const p = currentPayload(); if (!p) return;
+  try{
+    await postApi('paths', p);
+    editingName = p.name;
+    toast('✓ Saved "' + p.name + '" (' + p.waypoints.length + ' wp)', true);
+    loadLibrary();
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+async function uploadPath(){
+  const p = currentPayload(); if (!p) return;
+  const start = $('upStart').checked;
+  try{
+    await postApi('paths', p);            // keep the library in sync
+    editingName = p.name;
+    await postApi('mission?start=' + start, p);
+    toast(start ? '✓ Uploaded & started "' + p.name + '"' : '✓ Uploaded "' + p.name + '" to boat', true);
+    loadLibrary();
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+
+// ---- saved-path library ------------------------------------------------------
+let library = [];
+async function loadLibrary(){
+  try{ library = await getApi('paths'); }
+  catch(e){ $('libList').innerHTML = '<div class="lib-empty">✗ ' + e.message + '</div>'; return; }
+  renderLibrary();
+}
+function renderLibrary(){
+  const box = $('libList');
+  if (!library.length){
+    box.innerHTML = '<div class="lib-empty">No saved paths yet.<br>Draw one on the map and hit SAVE.</div>';
+    return;
+  }
+  box.innerHTML = '';
+  library.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'lib-row' + (p.name === editingName ? ' editing' : '');
+    row.innerHTML =
+      `<span class="pn"></span><span class="pc">${p.waypoints.length} wp</span>` +
+      `<button class="cbtn mini" title="load into editor">✎ EDIT</button>` +
+      `<button class="cbtn mini accent" title="upload to boat">▲</button>` +
+      `<button class="cbtn mini danger" title="delete">✕</button>`;
+    row.querySelector('.pn').textContent = p.name;
+    const [edit, up, del] = row.querySelectorAll('button');
+    edit.onclick = () => {
+      wps = p.waypoints.map(w => ({ lat:w.lat, lon:w.lon, type:w.type, label:w.label || '' }));
+      $('pName').value = p.name;
+      editingName = p.name;
+      render(); renderLibrary(); fitPath();
+      toast('✎ Editing "' + p.name + '"', true);
+    };
+    up.onclick = async () => {
+      try{
+        await postApi('mission?start=false', { name:p.name, waypoints:p.waypoints });
+        toast('✓ Uploaded "' + p.name + '" (start it from the command center)', true);
+      }catch(e){ toast('✗ ' + e.message, false); }
+    };
+    del.onclick = async () => {
+      if (!confirm('Delete saved path "' + p.name + '"?')) return;
+      try{
+        const r = await fetch('/api/paths/' + encodeURIComponent(p.name),
+          { method:'DELETE', headers: apiHeaders() });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (editingName === p.name) editingName = null;
+        toast('✓ Deleted "' + p.name + '"', true);
+        loadLibrary();
+      }catch(e){ toast('✗ ' + e.message, false); }
+    };
+    box.appendChild(row);
+  });
+}
+
+// ---- live boat position (telemetry WS, same as the command center) ----------
+const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+function wsUrl(path){
+  let u = `${wsProto}://${location.host}${path}`;
+  if (KEY) u += (path.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(KEY);
+  return u;
+}
+(function telemetry(){
+  let delay = 2000;
+  function go(){
+    const s = new WebSocket(wsUrl('/ws/telemetry'));
+    s.onopen = () => { delay = 2000; $('map-meta').textContent = 'LIVE';
+      $('dot-link').style.background = 'var(--ok)'; $('dot-link').style.boxShadow = '0 0 10px var(--ok)'; };
+    s.onmessage = (e) => {
+      try{
+        const t = JSON.parse(e.data).telemetry;
+        boatMarker.setLatLng([t.lat, t.lon]);
+        if ($('followBoat').checked) map.panTo([t.lat, t.lon]);
+      }catch(err){}
+    };
+    s.onclose = () => { $('map-meta').textContent = 'OFFLINE';
+      $('dot-link').style.background = 'var(--crit)'; $('dot-link').style.boxShadow = '0 0 10px var(--crit)';
+      setTimeout(go, delay); delay = Math.min(delay*2, 30000); };
+    s.onerror = () => { try{ s.close(); }catch(e){} };
+  }
+  go();
+})();
+
+// first paint: center on the boat once telemetry arrives, or the default view
+render();
+loadLibrary();
+</script>
+</body>
+</html>
