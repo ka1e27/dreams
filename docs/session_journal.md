@@ -31,6 +31,39 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-01 — Live camera assignment: pick which connected camera is LEFT/RIGHT + rescan
+
+**Worked on:** user asked to be able to assign any connected USB camera as the left or right eye and
+to refresh the list when new cameras are plugged in. Previously the indices were hardcoded in
+`config.yaml` and changing them needed a restart.
+**Changed:**
+- `pi5/cv/camera.py` — `scan_devices()` (blocking; Linux scans /dev/video* with a grab test that
+  filters UVC metadata-only nodes and reads names from sysfs, elsewhere probes indices 0..7);
+  `CameraConfig.right_device` now nullable (single-camera rig, stereo off);
+  `CameraProducer.set_devices(left, right)` swaps devices live — the swap is queued and applied by
+  the capture loop itself (it owns the VideoCapture handles, so no mid-read races), failed opens fall
+  through to the existing auto-reconnect; plus `device_map` / `active_devices()` accessors.
+- `pi5/server/app.py` — `GET /api/camera/devices` (rescan on every call = the refresh; devices held
+  open are reported in_use, an assigned-but-dead device is still listed) and
+  `POST /api/camera/devices {left, right|null}` (validates, live-swaps, persists to
+  `pi5/server/camera_devices.json` atomically); `_camera_state()` now includes left/right indices.
+- `run_hardware.py` — restores the persisted assignment on startup (overrides config.yaml); also
+  fixed the `right_device` default mismatch (was 1, config.yaml says 2).
+- `pi5/server/templates/command_center.html` — camera bar gains DEV L / DEV R selects (R has NONE),
+  SET (apply + toast with per-camera not-responding status) and ⟳ RESCAN buttons; the CAM-N tag now
+  shows the real assigned device index instead of hardcoded CAM-0/CAM-1.
+- `pi5/config.yaml` comment + `.gitignore` (`camera_devices.json`).
+**Verified:** ruff + 97 pytest pass; real-webcam end-to-end on this laptop: `scan_devices` found 3
+devices, live swap left↔right mid-stream delivered frames from the new devices, single-camera mode
+works; curl of both endpoints (validation, persistence) against a harness server; sim mode returns
+`available:false` / 503 gracefully; Playwright drove the live UI — selects populate, RESCAN toasts,
+SET swaps and enables the RIGHT view button, zero console errors. Note: an earlier stale sim server
+from a previous session was still holding port 8000 serving old code — killed it.
+**Decisions / open questions:** persistence is a server-side JSON next to `saved_paths.json` (same
+atomic-write pattern) rather than rewriting config.yaml, so YAML comments survive. The React
+`dashboard/` app was left untouched — the command center is the UI in active use.
+**Next steps:** none pending.
+
 ## 2026-07-01 — Committed and pushed align-first steering, waypoint planner, and M18 PCB rework
 
 **Worked on:** housekeeping session — reviewed the pending working-tree changes (from the three prior
@@ -149,65 +182,6 @@ rework in KiCad Tool to match (R2/R4→200k/10k, R5/R6→56k/10k, R8/R10→56k/1
 **Next steps:** KiCad schematic/PCB rework to the M18 dividers (deferred to user, per scope choice).
 The `reference/Boat_pico.py`/`Shore_pico.py` files still say 12S/3S — left as-is (old reference dumps,
 not live code).
-
-## 2026-06-30 — Merged the standalone dashboard into the command center; collapsible + draggable sections
-
-**Worked on:** user wanted the command center's UI reworked: every section as a collapsible dropdown,
-the old plain dashboard (`/`) retired and its data folded into the command center, a dedicated map
-section showing the boat, and a way to drag sections around to customize the layout.
-**Changed:**
-- `pi5/server/templates/command_center.html` — full rewrite. Restructured into a 12-col CSS grid of
-  `.section` cards (map, telemetry & mission, camera, health, boat health, radar, commands, pico
-  terminal), each with a collapsible `.sec-hd` header. Added a Leaflet map section (boat marker/track/
-  waypoints/compass, ported from the old dashboard) and a "Telemetry & Mission" dropdown holding the
-  rest of the old dashboard's data (position, throttle, environment, mission, winch depth, navigation,
-  sim/cruise/winch sliders) — now wired to `/ws/telemetry`, which the command center didn't previously
-  use. Added a CUSTOMIZE toggle enabling native HTML5 drag-and-drop section reordering, plus a RESET
-  LAYOUT button; order and collapsed-state both persist to `localStorage` (`dc_order_v1`,
-  `dc_collapsed_v1`).
-- `pi5/server/app.py` — `/` now serves `command_center.html` directly; `/command` is a 307 redirect to
-  `/` for backward compatibility; removed the unused `_STATIC_DIR` constant.
-- Deleted `pi5/server/static/index.html` (the old standalone dashboard) and the now-empty `static/` dir.
-- `run_hardware.py` — updated the startup docstring/printed URL (previously said dashboard-at-`/` +
-  command-center-at-`/command`; now just one merged command center at `/`).
-**Bugs caught during verification:** `.map-wrap{flex:1}` collapsed to 0 height — inside a
-`display:flex;flex-direction:column` chain with no ancestor height, `flex:1`'s implicit
-`flex-basis:0%` beats an explicit `height:480px` unless there's room to grow into, and there wasn't.
-Fixed by dropping `flex:1` and keeping the fixed height. Same risk pattern already avoided elsewhere
-(`.cam-wrap` has an explicit `min-height`, `.pico-inner`'s grid-template-rows uses `minmax(360px,1fr)`
-not `minmax(0,1fr)`).
-**Verified:** ran `run_sim.py`, drove the live page with Playwright (installed for this session) —
-zero console/page errors, map renders at 912×480 with tiles + live boat marker, `/ws/telemetry` data
-flows into the new telemetry section, collapse/expand toggles and persists, drag-reorder (via
-dispatched `DragEvent`s — Playwright's synthetic mouse drag doesn't trigger native HTML5 DnD, so this
-was the correct way to test the JS logic itself) reorders sections and survives a reload, RESET LAYOUT
-restores the default order. A follow-up review subagent independently checked `app.py` routing,
-duplicate IDs, other `flex:1`-collapse risks, and stale `/command`/`static/index.html` references
-across tests and docs — came back clean except the `run_hardware.py` URL string, which is now fixed.
-**Decisions / open questions:** none open. `/command` kept as a redirect rather than removed outright,
-in case anything external (bookmarks, scripts) still hits it.
-**Follow-up (same session):** user asked for a specific default arrangement — camera+system health on
-top, map+telemetry/mission under that, commands (left) + boat health (right) under that. Reordered the
-`.section` blocks in `command_center.html` to that DOM order and gave `commands`/`boat` a 6/6
-`--span` split (previously full-width `--span:12`) so they sit side by side like the other paired rows.
-Re-verified with Playwright: bounding-box coordinates confirm the three rows stack correctly
-(camera/health at y≈77, map/telemetry at y≈704, commands/boat at y≈1301), zero console errors.
-CUSTOMIZE/drag-reorder and RESET LAYOUT are unaffected — this only changed the *default* order they
-reset to.
-**Follow-up 2 (same session):** paired sections (camera/health, map/telemetry, commands/boat) had
-mismatched heights, leaving visible gaps. Changed `.dash-grid` from `align-items:start` to `stretch` so
-paired sections match their row's tallest sibling, with `.section.collapsed{align-self:start}` so a
-collapsed card doesn't get stretched into an oversized empty box. Made `.sec-body`, `.health`,
-`.tele-body`, and `.map-wrap` use `flex:1` to actually use that stretched height (safe now — the grid
-stretch gives `.section` a real definite height, so this doesn't hit the earlier flex-collapse bug).
-Also added three more command groups to fill the now-taller Commands panel with genuinely useful,
-already-backed actions: CAMERA (swap view, toggle detect), RADAR BAR (center/scan/stop shortcuts), and
-LINK (network/pod/full-status toasts pulling from the existing `/api/network`, `/api/pod/history`,
-`/api/status` endpoints, which had no buttons anywhere before). Re-verified with Playwright: paired
-sections now match height exactly (e.g. camera/health both 615px, commands/boat both 280px), new
-buttons work, zero console/page errors.
-**Next steps:** none pending. If a future session touches the command center again, note the
-flex-column-collapse pitfall above before adding new `flex:1` children.
 
 <!-- Older entries (token-bloat audit, third-downloaded-file audit, repomix/rtk, token-optimization
      config pass) live in docs/session_journal_archive.md. -->

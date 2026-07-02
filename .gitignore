@@ -60,3 +60,4 @@ pi5/cv/models/*.pt
 # Added by code-review-graph
 .code-review-graph/
 pi5/server/saved_paths.json
+pi5/server/camera_devices.json

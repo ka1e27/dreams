@@ -122,6 +122,9 @@ camera:
   # frames). Use only the EVEN capture nodes. `v4l2-ctl --list-devices` here
   # shows cam A = video2/3 and cam B = video0/1, so the capture indices are 0
   # and 2 (NOT 1 — video1 is cam B's metadata node and never delivers frames).
+  # These are the DEFAULTS — the command center's camera DEV L/R controls can
+  # reassign left/right live (POST /api/camera/devices); that choice persists
+  # to pi5/server/camera_devices.json and overrides these on the next start.
   left_device: 0
   right_device: 2
   baseline_m: 0.12

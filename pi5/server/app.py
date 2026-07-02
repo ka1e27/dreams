@@ -20,6 +20,8 @@ Endpoints:
   POST /api/estop           Emergency stop
   POST /api/resume          Resume after ESTOP
   POST /api/rth             Return to home
+  GET  /api/camera/devices  Scan attached cameras + left/right assignment
+  POST /api/camera/devices  Assign which camera is left / right (live swap)
   WS   /ws/telemetry        Live telemetry stream
   WS   /ws/camera           Camera MJPEG stream
 """
@@ -1050,9 +1052,12 @@ async def video(request: Request):
 
 def _camera_state() -> dict:
     """Current camera/detection control state for /api/camera and the UI."""
+    devmap = _camera.device_map if _camera is not None else {}
     state = {
         "camera_present": _camera is not None,
         "right_present": bool(getattr(_camera, "has_right", False)) if _camera is not None else False,
+        "left_device": devmap.get("left"),
+        "right_device": devmap.get("right"),
         "jpeg_quality": _jpeg_quality,
         "stream_fps": _stream_fps_cap,
         "stream_fps_actual": round(_cam_fps, 1) if _camera is not None else None,
@@ -1079,7 +1084,8 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
     Accepts any subset of: jpeg_quality (20-95), stream_fps (1-60),
     detection_enabled (bool), detect_max_fps (0.5-30), conf (0.05-0.95),
     imgsz (160-640), track_class (class label to lock onto, "" = auto).
-    Capture resolution / device / camera FPS are set in config.yaml (restart).
+    Capture resolution / camera FPS are set in config.yaml (restart);
+    which device is left/right is set live via POST /api/camera/devices.
     """
     global _jpeg_quality, _stream_fps_cap
     if "jpeg_quality" in payload:
@@ -1101,6 +1107,82 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
         except Exception:  # noqa: BLE001 — never let the UI control 500
             pass
     return _camera_state()
+
+
+# ---- Camera device assignment (which /dev/video* is LEFT / RIGHT) ----
+# The command center's SOURCES controls hit these. Assignments are persisted
+# to a JSON file next to this module so run_hardware.py restores them on
+# restart (they override config.yaml's left_device/right_device).
+
+_CAM_DEVICES_FILE = Path(__file__).parent / "camera_devices.json"
+
+
+@app.get("/api/camera/devices")
+async def list_camera_devices(_: str = Depends(auth.require_api_key)):
+    """Scan for attached capture devices + current left/right assignment.
+
+    Each GET rescans, so this doubles as the "refresh" for newly plugged-in
+    cameras. Devices the producer currently holds open are reported in_use
+    (they aren't re-probed). In simulator mode there is no camera producer
+    and available=false is returned.
+    """
+    if _camera is None:
+        return {"available": False, "devices": [], "left": None, "right": None,
+                "detail": "no camera producer (simulator mode)"}
+    from pi5.cv.camera import scan_devices
+    loop = asyncio.get_running_loop()
+    devices = await loop.run_in_executor(None, scan_devices, _camera.active_devices())
+    devmap = _camera.device_map
+    # An assigned-but-dead device (e.g. unplugged left camera) won't probe —
+    # still list it so the UI can show what's currently assigned.
+    known = {d["index"] for d in devices}
+    for role in ("left", "right"):
+        idx = devmap[role]
+        if idx is not None and idx not in known:
+            devices.append({"index": idx, "name": "(assigned, not responding)",
+                            "in_use": False})
+    devices.sort(key=lambda d: d["index"])
+    return {"available": True, "devices": devices,
+            "left": devmap["left"], "right": devmap["right"],
+            "left_open": devmap["left_open"], "right_open": devmap["right_open"]}
+
+
+@app.post("/api/camera/devices")
+async def set_camera_devices(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Assign capture devices: {"left": <index>, "right": <index>|null}.
+
+    right=null runs single-camera (stereo off). The producer swaps live —
+    no restart — and the choice is persisted so it survives restarts.
+    """
+    from fastapi import HTTPException
+    if _camera is None:
+        raise HTTPException(status_code=503,
+                            detail="No camera producer running (simulator mode)")
+    try:
+        left = int(payload["left"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=400,
+                            detail="'left' (int device index) is required")
+    right_raw = payload.get("right")
+    right = None
+    if right_raw is not None and right_raw != "":
+        try:
+            right = int(right_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="'right' must be an int or null")
+    if right == left:
+        raise HTTPException(status_code=400,
+                            detail="left and right must be different devices")
+    result = await _camera.set_devices(left, right)
+    try:
+        import json
+        tmp = _CAM_DEVICES_FILE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"left_device": left, "right_device": right}),
+                       encoding="utf-8")
+        tmp.replace(_CAM_DEVICES_FILE)
+    except OSError as e:  # noqa: BLE001 — persistence is best-effort
+        logger.warning("Could not persist camera assignment: %s", e)
+    return {"status": "ok", **result}
 
 
 # ---- Radar-bar stepper (Pi 5 GPIO, via RadarTracker) ----

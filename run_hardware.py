@@ -69,9 +69,28 @@ def main() -> None:
     nav = Navigator(pico)
     pod = PodBridge(pico)
     mission = MissionManager(pico, nav, pod)
+    # Left/right device assignment: config.yaml is the default, but a live
+    # reassignment from the command center (POST /api/camera/devices) is
+    # persisted to pi5/server/camera_devices.json and wins on restart.
+    left_dev = cam_cfg.get("left_device", 0)
+    right_dev = cam_cfg.get("right_device", 2)
+    dev_file = Path(__file__).parent / "pi5" / "server" / "camera_devices.json"
+    try:
+        import json
+        saved = json.loads(dev_file.read_text(encoding="utf-8"))
+        left_dev = int(saved["left_device"])
+        rd = saved.get("right_device")
+        right_dev = int(rd) if rd is not None else None
+        logger.info("Camera assignment restored from %s (left=%s right=%s)",
+                    dev_file.name, left_dev, right_dev)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        logger.warning("Ignoring invalid %s: %s", dev_file, e)
+
     camera = CameraProducer(CameraConfig(
-        left_device=cam_cfg.get("left_device", 0),
-        right_device=cam_cfg.get("right_device", 1),
+        left_device=left_dev,
+        right_device=right_dev,
         width=cam_cfg.get("width", 640),
         height=cam_cfg.get("height", 480),
         fps=cam_cfg.get("fps", 30),

@@ -385,6 +385,13 @@
             <button class="srcbtn active" id="camLeft" onclick="setCam('left')">◀ LEFT</button>
             <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
           </span>
+          <span class="cs"><span class="lbl">DEV L</span>
+            <select id="devLeft" class="imgsel" title="which connected camera is the LEFT eye"></select>
+            <span class="lbl">R</span>
+            <select id="devRight" class="imgsel" title="which connected camera is the RIGHT eye (NONE = single camera, stereo off)"></select>
+            <button class="srcbtn" onclick="applyDevices()" title="apply the left/right camera assignment (live swap, persists across restarts)">SET</button>
+            <button class="srcbtn" onclick="loadDevices(true)" title="rescan for newly plugged-in cameras">⟳ RESCAN</button>
+          </span>
           <label class="tg"><input type="checkbox" id="detOn"> DETECT</label>
           <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
             title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
@@ -793,6 +800,7 @@ async function getApi(path){
 const cam = $('cam');
 let camView = 'left';        // 'left' | 'right'
 let rightPresent = false;    // set from /api/camera
+let devMap = { left: null, right: null };  // device indices, from /api/camera(/devices)
 function camSrc(view){ return '/video?cam=' + view + (KEY ? '&key=' + encodeURIComponent(KEY) : ''); }
 function setCam(view){
   if (view === 'right' && !rightPresent){ toast('No right camera connected', false); return; }
@@ -801,7 +809,8 @@ function setCam(view){
   $('camLeft').classList.toggle('active', view === 'left');
   $('camRight').classList.toggle('active', view === 'right');
   $('cam-meta').textContent = (view === 'right' ? 'RIGHT' : 'LEFT') + ' · MJPEG';
-  $('cam-tag').textContent = view === 'right' ? 'CAM-1 / RIGHT' : 'CAM-0 / LEFT';
+  const idx = view === 'right' ? devMap.right : devMap.left;
+  $('cam-tag').textContent = 'CAM-' + (idx == null ? '?' : idx) + ' / ' + view.toUpperCase();
   // detection overlay (boxes + tracking reticle) is only drawn on the left view
   $('cam-det').style.display = view === 'right' ? 'none' : 'block';
 }
@@ -1443,6 +1452,7 @@ async function loadCameraControls(){
     if (c.stream_fps != null){ $('sfps').value = c.stream_fps; $('sfpsV').textContent = c.stream_fps; }
     if (c.imgsz != null){ $('imgsz').value = String(c.imgsz); }
     rightPresent = !!c.right_present;
+    if (c.left_device !== undefined){ devMap = { left: c.left_device, right: c.right_device }; setCam(camView); }
     const rb = $('camRight');
     rb.disabled = !rightPresent;
     rb.title = rightPresent ? 'right camera' : 'no right camera connected';
@@ -1464,6 +1474,53 @@ $('conf').addEventListener('input', () => { $('confV').textContent = Number($('c
 $('jq').addEventListener('input', () => { $('jqV').textContent = $('jq').value; postCamera({ jpeg_quality: parseInt($('jq').value) }); });
 $('sfps').addEventListener('input', () => { $('sfpsV').textContent = $('sfps').value; postCamera({ stream_fps: parseFloat($('sfps').value) }); });
 loadCameraControls();
+
+// ---- camera device assignment (which device is LEFT / RIGHT) --------------
+// GET /api/camera/devices rescans on every call, so ⟳ RESCAN just re-fetches.
+async function loadDevices(manual){
+  const L = $('devLeft'), R = $('devRight');
+  try{
+    const d = await (await fetch('/api/camera/devices', { headers: apiHeaders() })).json();
+    if (!d.available){
+      L.innerHTML = R.innerHTML = '<option value="">N/A</option>';
+      L.disabled = R.disabled = true;
+      if (manual) toast(d.detail || 'No camera producer', false);
+      return;
+    }
+    L.disabled = R.disabled = false;
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    const opts = d.devices.map(dev =>
+      '<option value="' + dev.index + '">' + dev.index + ': ' + esc(dev.name) + '</option>').join('');
+    L.innerHTML = opts || '<option value="">none found</option>';
+    R.innerHTML = '<option value="">NONE</option>' + opts;
+    if (d.left != null) L.value = String(d.left);
+    R.value = d.right == null ? '' : String(d.right);
+    devMap = { left: d.left, right: d.right };
+    if (manual) toast('⟳ Found ' + d.devices.length + ' camera' + (d.devices.length === 1 ? '' : 's'), true);
+  }catch(e){ if (manual) toast('Camera scan failed', false); }
+}
+async function applyDevices(){
+  const lv = $('devLeft').value;
+  if (lv === ''){ toast('No left camera selected', false); return; }
+  const left = parseInt(lv);
+  const right = $('devRight').value === '' ? null : parseInt($('devRight').value);
+  if (right === left){ toast('Left and right must be different cameras', false); return; }
+  try{
+    const r = await fetch('/api/camera/devices', { method:'POST',
+      headers: apiHeaders({'Content-Type':'application/json'}),
+      body: JSON.stringify({ left, right }) });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok){ toast(j.detail || ('Failed to set cameras (HTTP ' + r.status + ')'), false); return; }
+    devMap = { left: j.left, right: j.right };
+    const ok = !!j.left_open;
+    toast('Cameras: LEFT=' + j.left + (j.left_open ? '' : ' (not responding)')
+        + (j.right == null ? ' · no right' : ' RIGHT=' + j.right + (j.right_open ? '' : ' (not responding)')), ok);
+    setCam(j.right_open || camView !== 'right' ? camView : 'left');  // reload stream
+    loadCameraControls();
+    loadDevices();
+  }catch(e){ toast('Failed to set cameras', false); }
+}
+loadDevices();
 
 // ---- radar bar / stepper (POST to /stepper/command) -----------------------
 async function postStepper(command, value){

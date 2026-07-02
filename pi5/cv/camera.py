@@ -28,6 +28,71 @@ _READ_FAIL_LIMIT = 5
 _DOWN_POLL_S = 0.2
 
 
+def _device_name(index: int) -> str:
+    """Human-readable name for a capture device (best effort)."""
+    if sys.platform.startswith("linux"):
+        try:
+            with open(f"/sys/class/video4linux/video{index}/name", encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            pass
+    return f"Camera {index}"
+
+
+def _probe_device(index: int) -> bool:
+    """True if `index` opens AND delivers frames (filters UVC metadata nodes)."""
+    try:
+        if sys.platform.startswith("linux"):
+            cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
+        else:
+            cap = cv2.VideoCapture(index)
+        if not cap.isOpened():
+            return False
+        # Metadata-only /dev/video* nodes open fine but never grab a frame.
+        ok = bool(cap.grab())
+        cap.release()
+        return ok
+    except Exception:  # noqa: BLE001 — a broken device just isn't listed
+        return False
+
+
+def scan_devices(skip: "set[int] | frozenset[int]" = frozenset(),
+                 max_probe: int = 8) -> "list[dict]":
+    """Enumerate attached capture devices. BLOCKING — call via an executor.
+
+    Indices in `skip` are devices the producer currently holds open; they are
+    reported as in_use without probing (opening them a second time would fight
+    the live capture). On Linux the /dev/video* nodes are scanned (metadata-only
+    nodes are filtered out by a grab test); elsewhere indices 0..max_probe-1
+    are probed, stopping after two consecutive misses past the last hit.
+    """
+    skip = set(skip)
+    if sys.platform.startswith("linux"):
+        import glob
+        candidates = sorted(
+            int(p[len("/dev/video"):]) for p in glob.glob("/dev/video[0-9]*"))
+        stop_on_miss = False
+    else:
+        candidates = list(range(max_probe))
+        stop_on_miss = True
+
+    devices: list[dict] = []
+    misses = 0
+    for idx in candidates:
+        if idx in skip:
+            devices.append({"index": idx, "name": _device_name(idx), "in_use": True})
+            misses = 0
+            continue
+        if _probe_device(idx):
+            devices.append({"index": idx, "name": _device_name(idx), "in_use": False})
+            misses = 0
+        elif stop_on_miss:
+            misses += 1
+            if misses >= 2:
+                break
+    return devices
+
+
 def _fourcc_to_str(val: float) -> str:
     """Decode an OpenCV CAP_PROP_FOURCC value into its 4-char code (e.g. 'YUYV')."""
     v = int(val)
@@ -39,7 +104,8 @@ def _fourcc_to_str(val: float) -> str:
 @dataclass
 class CameraConfig:
     left_device: int = 0
-    right_device: int = 2
+    # None = no right camera configured (single-camera rig; stereo stays off).
+    right_device: "int | None" = 2
     width: int = 640
     height: int = 480
     fps: int = 30
@@ -84,6 +150,11 @@ class CameraProducer:
         self._fail: dict[int, int] = {}
         self._last_reopen: dict[int, float] = {}
         self._reconnect_interval = max(0.5, float(cfg.reconnect_interval_s))
+        # Runtime left/right reassignment (set_devices). The capture loop owns
+        # the VideoCapture handles, so swaps are queued here and applied at the
+        # top of a loop iteration — never from another task mid-read.
+        self._pending_devices: "tuple[int, int | None] | None" = None
+        self._devices_applied = asyncio.Event()
 
     def start(self) -> None:
         if self._task is not None:
@@ -91,11 +162,14 @@ class CameraProducer:
         self._cap_l = self._open(self._cfg.left_device)
         # Right is optional — if it fails, stereo features stay off but the
         # left-camera dashboard stream still works.
-        try:
-            self._cap_r = self._open(self._cfg.right_device)
-            self._right_ever_open = True
-        except Exception as e:
-            logger.warning("Right camera unavailable: %s", e)
+        if self._cfg.right_device is not None:
+            try:
+                self._cap_r = self._open(self._cfg.right_device)
+                self._right_ever_open = True
+            except Exception as e:
+                logger.warning("Right camera unavailable: %s", e)
+                self._cap_r = None
+        else:
             self._cap_r = None
         self._task = asyncio.create_task(self._loop())
 
@@ -190,6 +264,74 @@ class CameraProducer:
         """True if a second (right) camera opened — gates the stereo / right view."""
         return self._cap_r is not None
 
+    @property
+    def device_map(self) -> dict:
+        """Current left/right device assignment and whether each is delivering."""
+        return {
+            "left": self._cfg.left_device,
+            "left_open": self._cap_l is not None,
+            "right": self._cfg.right_device,
+            "right_open": self._cap_r is not None,
+        }
+
+    def active_devices(self) -> "set[int]":
+        """Device indices this producer currently holds open (skip when scanning)."""
+        out: set[int] = set()
+        if self._cap_l is not None:
+            out.add(self._cfg.left_device)
+        if self._cap_r is not None and self._cfg.right_device is not None:
+            out.add(self._cfg.right_device)
+        return out
+
+    async def set_devices(self, left: int, right: "int | None") -> dict:
+        """Reassign which capture device is left / right, live.
+
+        The swap is applied by the capture loop itself (it owns the handles):
+        both current captures are released first, then the new indices are
+        opened. right=None runs single-camera (stereo off). A device that
+        fails to open is left to the normal auto-reconnect retry, so plugging
+        it in later recovers without another call. Returns device_map.
+        """
+        if self._task is None or self._task.done():
+            # Loop not running (never started / failed) — apply directly.
+            self._apply_devices(left, right)
+            return self.device_map
+        self._devices_applied.clear()
+        self._pending_devices = (left, right)
+        try:
+            await asyncio.wait_for(self._devices_applied.wait(), timeout=10.0)
+        except asyncio.TimeoutError:
+            logger.warning("set_devices(%s, %s): apply timed out", left, right)
+        return self.device_map
+
+    def _apply_devices(self, left: int, right: "int | None") -> None:
+        """Release current captures and open the new indices. BLOCKING —
+        called from the capture loop via an executor (or directly when the
+        loop isn't running)."""
+        for cap in (self._cap_l, self._cap_r):
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:  # noqa: BLE001
+                    pass
+        self._cap_l = self._cap_r = None
+        self._cfg.left_device = left
+        self._cfg.right_device = right
+        self._fail.clear()
+        self._last_reopen.clear()
+        # Treat a configured right as "seen" so auto-reconnect keeps trying it
+        # even if the first open below fails.
+        self._right_ever_open = right is not None
+        try:
+            self._cap_l = self._open(left)
+        except Exception as e:  # noqa: BLE001 — reconnect loop keeps retrying
+            logger.warning("Left camera %s failed to open: %s", left, e)
+        if right is not None:
+            try:
+                self._cap_r = self._open(right)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Right camera %s failed to open: %s", right, e)
+
     async def _read_or_drop(
         self, loop: asyncio.AbstractEventLoop, cap: "cv2.VideoCapture", device: int
     ) -> "tuple[cv2.Mat | None, cv2.VideoCapture | None]":
@@ -251,11 +393,19 @@ class CameraProducer:
         interval = 1.0 / max(1, self._cfg.fps)
         while not self._stop.is_set():
             t0 = time.monotonic()
+            # Apply a queued left/right reassignment (set_devices) before
+            # touching the handles — this loop is their only owner.
+            if self._pending_devices is not None:
+                new_l, new_r = self._pending_devices
+                self._pending_devices = None
+                await loop.run_in_executor(None, self._apply_devices, new_l, new_r)
+                self._devices_applied.set()
             # Auto-reconnect any dropped camera (throttled inside _reconnect).
             # Left is required; right only if it was present at least once.
             if self._cap_l is None:
                 self._cap_l = await self._reconnect(loop, self._cfg.left_device)
-            if self._cap_r is None and self._right_ever_open:
+            if (self._cap_r is None and self._right_ever_open
+                    and self._cfg.right_device is not None):
                 self._cap_r = await self._reconnect(loop, self._cfg.right_device)
 
             left = right = None

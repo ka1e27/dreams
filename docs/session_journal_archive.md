@@ -9,6 +9,65 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-06-30 — Merged the standalone dashboard into the command center; collapsible + draggable sections
+
+**Worked on:** user wanted the command center's UI reworked: every section as a collapsible dropdown,
+the old plain dashboard (`/`) retired and its data folded into the command center, a dedicated map
+section showing the boat, and a way to drag sections around to customize the layout.
+**Changed:**
+- `pi5/server/templates/command_center.html` — full rewrite. Restructured into a 12-col CSS grid of
+  `.section` cards (map, telemetry & mission, camera, health, boat health, radar, commands, pico
+  terminal), each with a collapsible `.sec-hd` header. Added a Leaflet map section (boat marker/track/
+  waypoints/compass, ported from the old dashboard) and a "Telemetry & Mission" dropdown holding the
+  rest of the old dashboard's data (position, throttle, environment, mission, winch depth, navigation,
+  sim/cruise/winch sliders) — now wired to `/ws/telemetry`, which the command center didn't previously
+  use. Added a CUSTOMIZE toggle enabling native HTML5 drag-and-drop section reordering, plus a RESET
+  LAYOUT button; order and collapsed-state both persist to `localStorage` (`dc_order_v1`,
+  `dc_collapsed_v1`).
+- `pi5/server/app.py` — `/` now serves `command_center.html` directly; `/command` is a 307 redirect to
+  `/` for backward compatibility; removed the unused `_STATIC_DIR` constant.
+- Deleted `pi5/server/static/index.html` (the old standalone dashboard) and the now-empty `static/` dir.
+- `run_hardware.py` — updated the startup docstring/printed URL (previously said dashboard-at-`/` +
+  command-center-at-`/command`; now just one merged command center at `/`).
+**Bugs caught during verification:** `.map-wrap{flex:1}` collapsed to 0 height — inside a
+`display:flex;flex-direction:column` chain with no ancestor height, `flex:1`'s implicit
+`flex-basis:0%` beats an explicit `height:480px` unless there's room to grow into, and there wasn't.
+Fixed by dropping `flex:1` and keeping the fixed height. Same risk pattern already avoided elsewhere
+(`.cam-wrap` has an explicit `min-height`, `.pico-inner`'s grid-template-rows uses `minmax(360px,1fr)`
+not `minmax(0,1fr)`).
+**Verified:** ran `run_sim.py`, drove the live page with Playwright (installed for this session) —
+zero console/page errors, map renders at 912×480 with tiles + live boat marker, `/ws/telemetry` data
+flows into the new telemetry section, collapse/expand toggles and persists, drag-reorder (via
+dispatched `DragEvent`s — Playwright's synthetic mouse drag doesn't trigger native HTML5 DnD, so this
+was the correct way to test the JS logic itself) reorders sections and survives a reload, RESET LAYOUT
+restores the default order. A follow-up review subagent independently checked `app.py` routing,
+duplicate IDs, other `flex:1`-collapse risks, and stale `/command`/`static/index.html` references
+across tests and docs — came back clean except the `run_hardware.py` URL string, which is now fixed.
+**Decisions / open questions:** none open. `/command` kept as a redirect rather than removed outright,
+in case anything external (bookmarks, scripts) still hits it.
+**Follow-up (same session):** user asked for a specific default arrangement — camera+system health on
+top, map+telemetry/mission under that, commands (left) + boat health (right) under that. Reordered the
+`.section` blocks in `command_center.html` to that DOM order and gave `commands`/`boat` a 6/6
+`--span` split (previously full-width `--span:12`) so they sit side by side like the other paired rows.
+Re-verified with Playwright: bounding-box coordinates confirm the three rows stack correctly
+(camera/health at y≈77, map/telemetry at y≈704, commands/boat at y≈1301), zero console errors.
+CUSTOMIZE/drag-reorder and RESET LAYOUT are unaffected — this only changed the *default* order they
+reset to.
+**Follow-up 2 (same session):** paired sections (camera/health, map/telemetry, commands/boat) had
+mismatched heights, leaving visible gaps. Changed `.dash-grid` from `align-items:start` to `stretch` so
+paired sections match their row's tallest sibling, with `.section.collapsed{align-self:start}` so a
+collapsed card doesn't get stretched into an oversized empty box. Made `.sec-body`, `.health`,
+`.tele-body`, and `.map-wrap` use `flex:1` to actually use that stretched height (safe now — the grid
+stretch gives `.section` a real definite height, so this doesn't hit the earlier flex-collapse bug).
+Also added three more command groups to fill the now-taller Commands panel with genuinely useful,
+already-backed actions: CAMERA (swap view, toggle detect), RADAR BAR (center/scan/stop shortcuts), and
+LINK (network/pod/full-status toasts pulling from the existing `/api/network`, `/api/pod/history`,
+`/api/status` endpoints, which had no buttons anywhere before). Re-verified with Playwright: paired
+sections now match height exactly (e.g. camera/health both 615px, commands/boat both 280px), new
+buttons work, zero console/page errors.
+**Next steps:** none pending. If a future session touches the command center again, note the
+flex-column-collapse pitfall above before adding new `flex:1` children.
+
 ## 2026-06-30 — Token-bloat audit of markdown/context files, cleanup applied
 
 **Worked on:** user asked for a subagent audit of all markdown files in the repo (CLAUDE.md, AGENTS.md,
