@@ -9,6 +9,57 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-01 — Stereo vision review + Windows camera resolution fix (DSHOW FOURCC/size ordering)
+
+**Worked on:** user asked about stereo vision (confirmed StereoSGBM pipeline exists), calibration setup with 320mm baseline, and why camera 0 wasn't setting to 640×480 on Windows startup (stayed at native 1920×1080; camera 2 was fine).
+**Changed:**
+- `pi5/cv/camera.py` — `_open()`: explicit `cv2.CAP_DSHOW` backend on Windows; added default-vs-actual resolution debug logging. **Root-cause fix:** on Windows, FOURCC was being set *before* width/height — DirectShow negotiates the capture pin as one combined (W, H, FourCC) mode, and if that exact combo isn't a discrete mode on the camera, DSHOW silently keeps native resolution instead of erroring (this is what camera 0's log showed: `fourcc=?` empty, stuck at 1920x1080). Fixed by setting width/height *first* on Windows, then FOURCC, then re-applying width/height after (in case setting FOURCC reset the pin). Linux/V4L2 path unchanged (V4L2 wants FOURCC pinned first).
+**Findings:**
+- Stereo vision complete: `pi5/cv/stereo.py` (StereoSGBM), `pi5/cv/camera.py` (dual USB), `pi5/scripts/calibrate_stereo.py` (calibration).
+- Calibration command: `python -m pi5.scripts.calibrate_stereo --baseline 0.32 --square 0.025 --out pi5/cv/calibration.npz` (9×6 checkerboard, ≥10 pairs, 320mm baseline).
+**Decisions / open questions:** the FOURCC/size-ordering fix did NOT resolve camera 0 being stuck at 1920x1080 (device 0 likely has no 640×480 mode via DirectShow at all — 1080p-only camera). Rather than chase a swap/format issue, **user decided to run both cameras at their native 1920×1080** instead of forcing 640×480.
+**Changed (this follow-up):**
+- `pi5/config.yaml` — `camera.width`/`camera.height` → `1920`/`1080` (both cameras use native res now); added a note that uncompressed YUY2 at 1080p30 needs USB 3.0 bandwidth per camera, fall back to `fourcc: "MJPG"` if frames stall; `camera.baseline_m` → `0.32` (was stale at `0.12`; corrected to match the user's actual measured 320mm stereo baseline — this is informational only, the real depth math comes from the calibration `.npz`).
+**Next steps:** restart the camera producer to pick up 1920×1080; run `pi5.scripts.calibrate_stereo --baseline 0.32` to generate `pi5/cv/calibration.npz` (checkerboard, ≥10 pairs) now that both cameras share the same resolution. Watch USB bandwidth/fps with YUY2 at 1080p on both cameras simultaneously — may need MJPG or a powered USB 3.0 hub.
+**Follow-up fix:** `calibrate_stereo.py` crashed on `cv2.imshow` with "function is not implemented... Rebuild the library with Windows, GTK+... support" — caused by `opencv-python-headless` (no GUI support) being installed in the user site-packages (`AppData\Roaming\...`), shadowing the full `opencv-python` (GUI-capable) install in system site-packages, since user site-packages take precedence. Fixed by `pip uninstall -y opencv-python-headless`. If some other dependency reinstalls the headless variant later, this will recur — worth checking `pi5/requirements.txt` doesn't pull it in transitively.
+**Follow-up fix #2:** after that, calibration ran but showed low framerate and no green checkerboard corners. `pi5/scripts/calibrate_stereo.py` — added `_open()` mirroring `pi5/cv/camera.py`'s explicit `CAP_DSHOW`/width-before-fourcc-before-width-again ordering (script was previously using plain `cv2.VideoCapture(index)` with no format hints, so Windows negotiated a slow default mode); added `--width/--height/--fourcc` args (defaults 1920/1080/YUY2, matching `config.yaml`) so calibration runs on the same feed the runtime sees; added `--detect-scale` (default 0.5) — chessboard search now runs on a downscaled copy with `cornerSubPix` refinement back at full res, since full-res search at 1080p was the main perceived-freeze cause; added `CALIB_CB_FAST_CHECK`/`ADAPTIVE_THRESH`/`NORMALIZE_IMAGE` flags. Also flagged in the updated usage docstring: `--rows`/`--cols` are *inner corners* (where black squares meet), not square count — miscounting this is the likely reason no corners were detected at all (e.g. `--rows 8 --cols 11` only correct if the board truly has 8×11 inner corners, not 8×11 squares).
+**Next steps:** user to recount actual checkerboard inner corners and re-run with `--width 1920 --height 1080 --fourcc YUY2` added to the command.
+**Follow-up (calibration completed):** user ran the fixed calibration script successfully — verified `pi5/cv/calibration.npz` exists (24 MB, freshly written). Confirmed the depth pipeline is already fully wired end-to-end: `pi5/server/app.py:574` loads the calibration and constructs `StereoDepth`, which `pi5/cv/avoidance.py` already calls via `median_depth_in_bbox()` to get real-world obstacle distance — no code changes needed there.
+**Next steps:** (1) sanity-check the calibration solve's printed baseline (`Baseline (||T||): ...`) was close to 0.32 m — if far off, recapture with more/varied checkerboard positions; (2) restart `run_hardware.py` so `app.py` picks up the new `.npz` (loaded once at startup); (3) real-world test — point cameras at something at a known distance and confirm a detected bbox reports roughly the right depth in logs/command center, not `None`.
+
+## 2026-07-01 — Live camera assignment: pick which connected camera is LEFT/RIGHT + rescan
+
+**Worked on:** user asked to be able to assign any connected USB camera as the left or right eye and
+to refresh the list when new cameras are plugged in. Previously the indices were hardcoded in
+`config.yaml` and changing them needed a restart.
+**Changed:**
+- `pi5/cv/camera.py` — `scan_devices()` (blocking; Linux scans /dev/video* with a grab test that
+  filters UVC metadata-only nodes and reads names from sysfs, elsewhere probes indices 0..7);
+  `CameraConfig.right_device` now nullable (single-camera rig, stereo off);
+  `CameraProducer.set_devices(left, right)` swaps devices live — the swap is queued and applied by
+  the capture loop itself (it owns the VideoCapture handles, so no mid-read races), failed opens fall
+  through to the existing auto-reconnect; plus `device_map` / `active_devices()` accessors.
+- `pi5/server/app.py` — `GET /api/camera/devices` (rescan on every call = the refresh; devices held
+  open are reported in_use, an assigned-but-dead device is still listed) and
+  `POST /api/camera/devices {left, right|null}` (validates, live-swaps, persists to
+  `pi5/server/camera_devices.json` atomically); `_camera_state()` now includes left/right indices.
+- `run_hardware.py` — restores the persisted assignment on startup (overrides config.yaml); also
+  fixed the `right_device` default mismatch (was 1, config.yaml says 2).
+- `pi5/server/templates/command_center.html` — camera bar gains DEV L / DEV R selects (R has NONE),
+  SET (apply + toast with per-camera not-responding status) and ⟳ RESCAN buttons; the CAM-N tag now
+  shows the real assigned device index instead of hardcoded CAM-0/CAM-1.
+- `pi5/config.yaml` comment + `.gitignore` (`camera_devices.json`).
+**Verified:** ruff + 97 pytest pass; real-webcam end-to-end on this laptop: `scan_devices` found 3
+devices, live swap left↔right mid-stream delivered frames from the new devices, single-camera mode
+works; curl of both endpoints (validation, persistence) against a harness server; sim mode returns
+`available:false` / 503 gracefully; Playwright drove the live UI — selects populate, RESCAN toasts,
+SET swaps and enables the RIGHT view button, zero console errors. Note: an earlier stale sim server
+from a previous session was still holding port 8000 serving old code — killed it.
+**Decisions / open questions:** persistence is a server-side JSON next to `saved_paths.json` (same
+atomic-write pattern) rather than rewriting config.yaml, so YAML comments survive. The React
+`dashboard/` app was left untouched — the command center is the UI in active use.
+**Next steps:** none pending.
+
 ## 2026-07-01 — Committed and pushed align-first steering, waypoint planner, and M18 PCB rework
 
 **Worked on:** housekeeping session — reviewed the pending working-tree changes (from the three prior
