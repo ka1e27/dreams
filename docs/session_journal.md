@@ -31,6 +31,23 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-21 — Single-hull test bench variant: spec + firmware (branch `single-hull-test-bench`)
+
+**Worked on:** user wants a single-hull "test bench" boat (two stern motors, differential steering, standard hobby ESCs instead of the VESC/CAN chain, 2× M18 series drive instead of 3×) to validate the stack on real hardware before the full catamaran. Produced a spec doc, then implemented the Boat Pico firmware on a new branch `single-hull-test-bench` (branched off `main`; `main` untouched). Mid-implementation the user chose to **keep both SHT41 air-temp sensors**, which forced a pin-plan revision (below).
+**Final pin plan (test bench):** left ESC **GP2**, right ESC **GP3** (PWM slice 1 A/B — same 50 Hz, independent duty), winch **GP6** (was GP14), SBUS **GP7** (was GP15), **both SHT41s kept on GP12–15** (J11/J13, native as-built pins). Reason: a PCB net-trace confirmed the as-built board routes GP12–15 to the two SHT41 SoftI2C connectors, so propulsion/winch/SBUS move to free Pico header pins (GP2/3/6/7 have no connector — hand-wired taps on a bench rig). This also sidesteps the long-standing dual-hull GP12–15 VESC/winch/SBUS-vs-SHT41 as-built conflict.
+**Changed (on branch `single-hull-test-bench`, committed locally, not pushed):**
+- `firmware/boat-pico/escs.py` (new) — dual hobby-ESC PWM driver on GP2/GP3, 50 Hz, reusing the winch pulse mapping (STOP 4915 / MIN 3277 / MAX 6553, `duty_u16`). Exposes `LEFT`/`RIGHT`/`LEFT_PIN`/`RIGHT_PIN`/`init` (returns success)/`ready`/`set_duty`/`stop` plus VESC-shaped telemetry **stubs** (temp→None, fault→0, `max_motor_temp`→0.0, poll/request→no-op) so `main.py` telemetry code runs unchanged.
+- `firmware/boat-pico/motor_control.py` — imports `escs` not `vesc`; `init/update/estop` drive ESCs; winch `MW_PIN` 14→6; `COMP_L=COMP_R=PULLEY_L=PULLEY_R=1.0` (single hull); `init()` returns ESC-up status. Steering math + RC/ESTOP gates unchanged.
+- `firmware/boat-pico/sbus.py` — `SBUS_PIN` 15→7 (PIO).
+- `firmware/boat-pico/sensors.py` — drive divider `INV_P_RATIO` 21.0→**14.0** (130k/10k; 42 V→3.00 V — same margin as the production 200k/10k at 63 V), `P_FULL/EMPTY/WARN/CRIT`=42/30/34/32. **Both SHT41s kept** (SoftI2C init unchanged); only battery constants + docstrings changed.
+- `firmware/boat-pico/main.py` — imports `escs`; removed `task_vesc_telemetry` + its task-list entry; removed watchdog motor-overheat/VESC-fault blocks and `_mt_throttled`/`_vesc_fault_sent` state; TEL2 `v_in` now carries `sensors.prop_batt_v`; startup prints drive-ESC OK/FAIL with a "do NOT arm" warning; docstring pin map updated. `vesc.py` left in tree but no longer imported.
+- `docs/hardware_changes_v2_to_testbench.md` (new) — full spec, revised for the keep-both-SHT41 pin plan. All five firmware files pass `python -m py_compile`.
+**Decisions / open questions:**
+- Ran an adversarial multi-lens verification Workflow (6 review lenses → per-finding refute pass, 14 agents) on the *first* (pre-SHT41-revision) firmware. Confirmed + fixed two real issues: (1) a stale ×13.0/3.23 V divider figure in a `sensors.py` docstring (correct is ×14.0/3.00 V); (2) `escs.init()` swallowed PWM-init failure silently — fixed with a success return + `ready()` + a `main()` FAIL banner. NB: the verification predates the pin move to GP2/3, but both fixes carried forward unchanged.
+- Confirmed the `MCP2515-I_P` symbol in `Boat_PCB.kicad_sch` is placed but **completely unwired**; irrelevant here, worth deleting from the schematic eventually.
+- **Safety note:** dumb ESCs hold last PWM (no VESC-style self-timeout); the heartbeat-watchdog→estop→neutral path is the only motor kill. Must be bench-verified before water testing.
+**Next steps:** (1) branch is committed locally but **not pushed** — user chose local-only; (2) `docs/pin_map.md` still describes the production board — regenerate/annotate for the GP2/3/6/7 test-bench pinout if this branch is kept; (3) before first spin-up, verify the chosen hobby ESCs' arming sequence + pulse range vs the reused winch mapping, and wire the four relocated signals to the Pico breakout header (open items in the new doc).
+
 ## 2026-07-21 — Commit/push three-tier survey vision pipeline
 
 **Worked on:** reviewed a pile of pending working-tree changes (from a prior session) and committed/pushed the intended ones; left tool clutter untracked.
@@ -163,42 +180,7 @@ performance tradeoff; if the feed feels sluggish, lower `detect_max_fps` or `img
 **Next steps:** user to restart `run_hardware.py` and confirm distances show up on the left camera feed
 for detected people/boats.
 
-## 2026-07-01 — Fixed right-view box misalignment; added live stereo depth view
-
-**Worked on:** after calibration completed, user reported (1) no depth showing anywhere when running
-`run_hardware.py`, and (2) detection boxes on the RIGHT camera view looked misaligned.
-**Findings (before changing anything):**
-- (2) is NOT a bug — `pi5/server/app.py`'s `_mjpeg_stream` already had a comment explaining detection
-  only ever runs on the LEFT frame (Pi is inference-bound, no second YOLO pass), and the same box
-  coordinates were being drawn on the right view too — at a 320mm baseline, nearby objects have real
-  parallax shift, so the boxes visibly sat in the wrong place on that view. Confirmed via
-  `AskUserQuestion`: user wants boxes hidden on the right view rather than a second inference pass.
-- (1) is because the depth pipeline (`pi5/cv/avoidance.py`'s `AvoidanceLoop` + `StereoDepth`) was never
-  actually wired into `run_hardware.py` — it's fully-built dead code, never constructed/started. The
-  only place calibration got loaded was the unused `/ws/camera?cam=disparity` WebSocket route, which
-  nothing in the UI ever called. Confirmed via `AskUserQuestion`: user wants a live depth *view* in the
-  UI (not full obstacle-avoidance wiring, which would double YOLO inference cost on this hardware).
-**Changed:**
-- `pi5/server/app.py` — `_mjpeg_stream`/`/video`: detection overlay boxes now draw on the LEFT view
-  only (right view streams clean). Added `_get_stereo_depth()` (lazy-loads `pi5/cv/calibration.npz` +
-  builds a `StereoDepth` once, shared across viewers, sticky-fails if the file's missing) and a new
-  `cam=disparity` option that computes live `StereoSGBM` disparity → `COLORMAP_TURBO` colormap per
-  frame (falls back to left if no right camera or no calibration).
-- `pi5/server/templates/command_center.html` — new "◈ DEPTH" button next to LEFT/RIGHT in the camera
-  SOURCE control (disabled when no right camera, same as RIGHT); `setCam()`/device-swap/rescan call
-  sites updated to treat `disparity` like `right` for the "needs a right camera" fallback logic;
-  `cam-det` (detection readout) now shows only on the left view, matching the new server behaviour.
-**Decisions / open questions:** did NOT wire `AvoidanceLoop` into `run_hardware.py` — that remains
-unused dead code (`pi5/cv/avoidance.py`, `pi5/cv/detector.py`'s `BoatDetector`) with its own
-`config.yaml` `avoidance:` block already defined but unread. If real steer-away obstacle avoidance is
-wanted later, that's the next piece — it needs a second YOLO pass (BoatDetector loads its own model
-separately from the command-center's `DetectionOverlay`), so evaluate inference cost on the target
-hardware first.
-**Next steps:** restart `run_hardware.py`, click ◈ DEPTH in the command center, confirm the colormap
-looks sane (near=one color, far=another) — if it's flat/uniform, the calibration solve may need
-redoing with more/varied checkerboard positions.
-
-<!-- Older entries (stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
+<!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
      third-downloaded-file audit, repomix/rtk, token-optimization config pass) live in
      docs/session_journal_archive.md. -->

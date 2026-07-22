@@ -1,27 +1,33 @@
-"""Motor control — VESC over UART for propulsion, PWM ESC for the winch.
+"""Motor control — two hobby ESCs on PWM for propulsion, PWM ESC for the winch.
+
+Single-hull test-bench variant. Propulsion is two standard hobby ESCs driven as
+50 Hz servo PWM (see `escs.py`) instead of the dual-hull boat's VESC / CAN chain.
 
 Propulsion:
-  - Left + right motors driven by two VESCs: master on UART0 (GP12/GP13),
-    slave reached via CAN forward through the master.
-  - Throttle range -100..+100 percent maps to duty -1.0..+1.0 after applying
-    pulley compensation, trim, and the thermal throttle multiplier.
+  - Left + right stern motors driven by two dumb ESCs on GP2 / GP3.
+  - Throttle range -100..+100 percent maps to duty -1.0..+1.0 after applying the
+    (unity) compensation, trim, and the thermal throttle multiplier, then handed
+    to `escs.set_duty()`.
+  - Single hull with two identical motors, so there is no pulley asymmetry to
+    correct: COMP_L = COMP_R = 1.0 (the dual-hull boat corrected for 18:27 vs
+    15:30 pulley ratios here).
 
 Winch:
-  - Standard hobby ESC on GP14, 50 Hz PWM. Unchanged from the prior design.
+  - Standard hobby ESC on GP6, 50 Hz PWM (moved off GP14, which this variant
+    keeps for the SHT41 #B temp sensor).
   - Spool can be swapped mechanically to repurpose the winch as a fishing
     reel; firmware behavior is identical regardless.
 
 RC override:
   - rc_override_on()/off() flips a software flag. While active, main.py's
     motor task feeds SBUS channel values directly into set_throttle() and
-    set_winch() instead of using navigator commands. Prior firmware
-    deinit-ed the PWM pins so a receiver could hijack them — that doesn't
-    work with VESCs over UART, so the path is now Pico-mediated.
+    set_winch() instead of using navigator commands. The path is Pico-mediated
+    (the Pico owns the ESC PWM pins), same as the dual-hull firmware.
 
 Note: GP0/GP1 are dead — do not use.
 """
 from machine import Pin, PWM
-import vesc
+import escs
 
 # ---- Winch PWM (unchanged) ----
 STOP_PWM = 4915
@@ -30,12 +36,12 @@ MAX_PWM = 6553
 FWD_RANGE = MAX_PWM - STOP_PWM  # 1638
 REV_RANGE = STOP_PWM - MIN_PWM  # 1638
 
-MW_PIN = 14
+MW_PIN = 6
 
-# Pulley compensation (applies to propulsion only)
-PULLEY_L = 18.0 / 27.0
-PULLEY_R = 15.0 / 30.0
-COMP_L = PULLEY_R / PULLEY_L
+# Compensation (propulsion only). Single hull, two identical motors → unity.
+PULLEY_L = 1.0
+PULLEY_R = 1.0
+COMP_L = 1.0
 COMP_R = 1.0
 
 # Runtime state
@@ -52,7 +58,11 @@ _mw_spd = 0
 
 
 def init():
-    """Initialise winch PWM and the VESC UART. Call once at startup."""
+    """Initialise winch PWM and the two drive ESCs. Call once at startup.
+
+    Returns True if both drive ESCs came up (so the ESTOP / watchdog kill path
+    can actually neutralise them); False if either PWM channel failed.
+    """
     global _mw
     try:
         _mw = PWM(Pin(MW_PIN))
@@ -60,13 +70,13 @@ def init():
         _set_winch_pwm(0)
     except Exception as e:
         print("motor_control init error (winch): %s" % e)
+    escs_ok = False
     try:
-        vesc.init()
-        # Send a zero-duty so the VESCs know we're alive immediately.
-        vesc.set_duty(vesc.LEFT, 0.0)
-        vesc.set_duty(vesc.RIGHT, 0.0)
+        # escs.init() creates both ESC PWM channels and arms them at neutral.
+        escs_ok = escs.init()
     except Exception as e:
-        print("motor_control init error (vesc): %s" % e)
+        print("motor_control init error (escs): %s" % e)
+    return escs_ok
 
 
 def _set_winch_pwm(spd):
@@ -140,10 +150,11 @@ def set_winch_rc(speed):
 
 
 def update():
-    """Apply commanded speeds to VESC + winch PWM. Call from main loop (~10 Hz).
+    """Apply commanded speeds to the drive ESCs + winch PWM. Call ~10 Hz.
 
-    Streaming this at 10 Hz keeps the VESCs' own command-timeout watchdog
-    fed; if Pico goes silent for ~1 s the VESCs cut motor current.
+    Unlike a VESC, a dumb ESC has no command-timeout — it holds the last PWM
+    pulse if commands stop. The safety net is the heartbeat watchdog (main.py →
+    watchdog.py, 3 s) calling estop(), which drives both ESCs to neutral.
     """
     if _estop_active:
         return
@@ -153,8 +164,8 @@ def update():
     duty_l = max(-1.0, min(1.0, eff_l / 100.0))
     duty_r = max(-1.0, min(1.0, eff_r / 100.0))
     try:
-        vesc.set_duty(vesc.LEFT, duty_l)
-        vesc.set_duty(vesc.RIGHT, duty_r)
+        escs.set_duty(escs.LEFT, duty_l)
+        escs.set_duty(escs.RIGHT, duty_r)
     except:
         pass
     _set_winch_pwm(_mw_spd)
@@ -168,8 +179,7 @@ def estop():
     _mr_spd = 0
     _mw_spd = 0
     try:
-        vesc.set_duty(vesc.LEFT, 0.0)
-        vesc.set_duty(vesc.RIGHT, 0.0)
+        escs.stop()
     except:
         pass
     _set_winch_pwm(0)

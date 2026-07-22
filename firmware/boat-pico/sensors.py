@@ -1,34 +1,28 @@
 """Onboard hull sensors — triple battery, air temp/humidity (SHT41 ×2), hull leak.
 
-Motor temperatures used to live here as NTC thermistors on GP27/GP28; that
-job moved to the VESCs (queried over UART by `vesc.py`). The freed ADCs
-now monitor a second battery.
+Single-hull test-bench variant. Motor temperatures used to live here as NTC
+thermistors on GP27/GP28; that job moved off-board (the VESCs reported temp on the
+dual-hull boat). The freed ADCs now monitor the electronics and winch batteries.
 
-Air temp/humidity is now two Sensirion **SHT41** I2C modules (was a single
-DHT11 on GP16, which the as-built Boat PCB does not have). Both SHT41s share
-the fixed address 0x44, so each sits on its own bus:
+Air temp/humidity is two Sensirion **SHT41** I2C modules, KEPT on this variant on
+their native as-built pins (the drive ESCs / winch / SBUS moved to free Pico header
+pins instead — see docs/hardware_changes_v2_to_testbench.md). Both SHT41s share the
+fixed address 0x44, so each sits on its own bit-banged SoftI2C bus:
 
   - SHT41 #A → J11 (GP12 SDA / GP13 SCL)   → `air_temp`  / `air_humidity`
   - SHT41 #B → J13 (GP14 SDA / GP15 SCL)   → `air_temp2` / `air_humidity2`
 
-These use bit-banged ``SoftI2C``: the hardware I2C0 controller is already
-owned by the BNO085 on GP8/GP9 (compass.py), and I2C1's pins clash with the
-firmware's winch/SBUS assignments (see the warning below).
-
-⚠ As-built pin conflict — GP12/GP13 are VESC UART0, GP14 is the winch PWM and
-  GP15 is the SBUS input in vesc.py / motor_control.py / sbus.py. On the
-  fabricated board the temp connectors J11/J13 occupy those pins, so those
-  three modules are mis-pinned for this board and must be relocated off
-  GP12-15 before the temp sensors can run without a pin clash. See
-  docs/pin_map.md → "As-built board divergence".
+SoftI2C is used because I2C0 (GP8/GP9) is owned by the BNO085 (compass.py). Unlike
+the dual-hull firmware — where GP12-15 collided with VESC/winch/SBUS — on this
+variant nothing else touches GP12-15, so both SHT41s run without a pin clash.
 
 Battery architecture — three fully isolated Milwaukee M18 domains (see
-docs/battery_architecture.md). ADCs are on this Boat Pico (RP2040, 3.3 V), not
-the Pi 5.
+docs/battery_architecture.md). The DRIVE rail on this variant is 2× M18 in series
+(not 3×). ADCs are on this Boat Pico (RP2040, 3.3 V), not the Pi 5.
 
 Pin assignments:
-  - Drive battery (3× M18 series, 54 V nom / 63 V max) ADC: GP26 (ADC0)
-      — divider 200k/10k → ×21.0; 63 V → 3.00 V at the Pico pin
+  - Drive battery (2× M18 series, 36 V nom / 42 V max) ADC: GP26 (ADC0)
+      — divider 130k/10k → ×14.0; 42 V → 3.00 V at the Pico pin
   - Electronics battery (1× M18, 18 V nom / 21 V max) ADC: GP27 (ADC1)
       — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - Winch battery (1× M18, 18 V nom / 21 V max) ADC: GP28 (ADC2)
@@ -41,14 +35,16 @@ Pin assignments:
 from machine import Pin, ADC, SoftI2C
 import sht41
 
-# ---- Drive battery (3× M18 series, 54 V nominal) ----
-# Divider 200k high / 10k low → reconstruct ×(200+10)/10 = 21.0. 63 V → 3.00 V.
-# `prop_*` names are kept for wire/protocol compatibility (TEL carries batt_v).
-INV_P_RATIO = 21.0
-P_FULL = 63.0   # 21 V × 3 (full)
-P_EMPTY = 45.0  # 15 V × 3 (cutoff → % floor)
-P_WARN = 51.0   # 17 V × 3
-P_CRIT = 48.0   # 16 V × 3 → return to home
+# ---- Drive battery (2× M18 series, 36 V nominal) ----
+# Divider 130k high / 10k low → reconstruct ×(130+10)/10 = 14.0. 42 V → 3.00 V at
+# the Pico pin — same conservative 3.00 V ceiling the dual-hull 200k/10k divider
+# gives at 63 V. `prop_*` names are kept for wire/protocol compatibility (TEL
+# carries batt_v).
+INV_P_RATIO = 14.0
+P_FULL = 42.0   # 21 V × 2 (full)
+P_EMPTY = 30.0  # 15 V × 2 (cutoff → % floor)
+P_WARN = 34.0   # 17 V × 2
+P_CRIT = 32.0   # 16 V × 2 → return to home
 P_RANGE = P_FULL - P_EMPTY
 
 # ---- Electronics battery (1× M18) ----
@@ -71,6 +67,8 @@ W_CRIT = 16.0   # → disable winch
 W_RANGE = W_FULL - W_EMPTY
 
 # ---- Air temp/humidity (two SHT41 on separate SoftI2C buses) ----
+# Kept on their native as-built pins; the drive ESCs / winch / SBUS moved to free
+# Pico header pins on this variant so GP12-15 are free for the temp sensors.
 SHT_A_SDA = 12
 SHT_A_SCL = 13
 SHT_B_SDA = 14
@@ -148,7 +146,7 @@ def _read_battery_voltage(adc, inv_ratio):
 
 
 def read_prop_battery():
-    """Read drive (3× M18 series) battery voltage and percentage."""
+    """Read drive (2× M18 series) battery voltage and percentage."""
     global prop_batt_v, prop_batt_pct
     try:
         prop_batt_v = _read_battery_voltage(_prop_adc, INV_P_RATIO)

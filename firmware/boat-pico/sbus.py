@@ -12,7 +12,10 @@ pushes raw bytes to its FIFO. Python reads the FIFO, inverts each byte
 (SBUS line polarity), and assembles them into 25-byte frames.
 
 Pin assignment:
-  - SBUS RX → Pico GP15 (direct, no external inverter required)
+  - SBUS RX → Pico GP7 (direct, no external inverter required)
+
+Test-bench note: moved off GP15, which this variant keeps for the SHT41 #B temp
+sensor (SoftI2C). GP7 is a free Pico header pin. PIO works on any GPIO.
 """
 import time
 
@@ -24,7 +27,7 @@ except ImportError:
     # Allows host-side import for tests without raising
     _PIO_OK = False
 
-SBUS_PIN = 15
+SBUS_PIN = 7
 SBUS_BAUD = 100_000
 
 # Frame layout

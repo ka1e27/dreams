@@ -9,6 +9,41 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-01 — Fixed right-view box misalignment; added live stereo depth view
+
+**Worked on:** after calibration completed, user reported (1) no depth showing anywhere when running
+`run_hardware.py`, and (2) detection boxes on the RIGHT camera view looked misaligned.
+**Findings (before changing anything):**
+- (2) is NOT a bug — `pi5/server/app.py`'s `_mjpeg_stream` already had a comment explaining detection
+  only ever runs on the LEFT frame (Pi is inference-bound, no second YOLO pass), and the same box
+  coordinates were being drawn on the right view too — at a 320mm baseline, nearby objects have real
+  parallax shift, so the boxes visibly sat in the wrong place on that view. Confirmed via
+  `AskUserQuestion`: user wants boxes hidden on the right view rather than a second inference pass.
+- (1) is because the depth pipeline (`pi5/cv/avoidance.py`'s `AvoidanceLoop` + `StereoDepth`) was never
+  actually wired into `run_hardware.py` — it's fully-built dead code, never constructed/started. The
+  only place calibration got loaded was the unused `/ws/camera?cam=disparity` WebSocket route, which
+  nothing in the UI ever called. Confirmed via `AskUserQuestion`: user wants a live depth *view* in the
+  UI (not full obstacle-avoidance wiring, which would double YOLO inference cost on this hardware).
+**Changed:**
+- `pi5/server/app.py` — `_mjpeg_stream`/`/video`: detection overlay boxes now draw on the LEFT view
+  only (right view streams clean). Added `_get_stereo_depth()` (lazy-loads `pi5/cv/calibration.npz` +
+  builds a `StereoDepth` once, shared across viewers, sticky-fails if the file's missing) and a new
+  `cam=disparity` option that computes live `StereoSGBM` disparity → `COLORMAP_TURBO` colormap per
+  frame (falls back to left if no right camera or no calibration).
+- `pi5/server/templates/command_center.html` — new "◈ DEPTH" button next to LEFT/RIGHT in the camera
+  SOURCE control (disabled when no right camera, same as RIGHT); `setCam()`/device-swap/rescan call
+  sites updated to treat `disparity` like `right` for the "needs a right camera" fallback logic;
+  `cam-det` (detection readout) now shows only on the left view, matching the new server behaviour.
+**Decisions / open questions:** did NOT wire `AvoidanceLoop` into `run_hardware.py` — that remains
+unused dead code (`pi5/cv/avoidance.py`, `pi5/cv/detector.py`'s `BoatDetector`) with its own
+`config.yaml` `avoidance:` block already defined but unread. If real steer-away obstacle avoidance is
+wanted later, that's the next piece — it needs a second YOLO pass (BoatDetector loads its own model
+separately from the command-center's `DetectionOverlay`), so evaluate inference cost on the target
+hardware first.
+**Next steps:** restart `run_hardware.py`, click ◈ DEPTH in the command center, confirm the colormap
+looks sane (near=one color, far=another) — if it's flat/uniform, the calibration solve may need
+redoing with more/varied checkerboard positions.
+
 ## 2026-07-01 — Stereo vision review + Windows camera resolution fix (DSHOW FOURCC/size ordering)
 
 **Worked on:** user asked about stereo vision (confirmed StereoSGBM pipeline exists), calibration setup with 320mm baseline, and why camera 0 wasn't setting to 640×480 on Windows startup (stayed at native 1920×1080; camera 2 was fine).
