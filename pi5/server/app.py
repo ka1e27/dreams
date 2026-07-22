@@ -66,6 +66,7 @@ _overlay = None    # cv.vision_overlay.DetectionOverlay (optional)
 _network = None    # comms.network.NetworkManager (optional)
 _stepper = None    # cv.stepper.StepperMotor (optional, radar-bar pan)
 _radar = None      # cv.radar_tracker.RadarTracker (optional)
+_pipeline = None   # cv.pipeline.SurveyVisionPipeline (optional, three-tier vision)
 _winch_mode = "survey"
 _home_lat = None
 _home_lon = None
@@ -75,11 +76,12 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
               home_lat=None, home_lon=None, api_key=None,
               cors_origins=None, simulator=None, camera=None,
               network=None, winch_mode="survey", overlay=None,
-              jpeg_quality=60, stream_fps=15, stepper=None, radar=None):
+              jpeg_quality=60, stream_fps=15, stepper=None, radar=None,
+              pipeline=None):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
-    global _stepper, _radar
+    global _stepper, _radar, _pipeline
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -95,6 +97,7 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
     _stream_fps_cap = float(stream_fps)
     _stepper = stepper
     _radar = radar
+    _pipeline = pipeline
     auth.configure(api_key)
 
     if cors_origins:
@@ -883,6 +886,15 @@ async def _gather_health() -> dict:
         except Exception as e:  # noqa: BLE001
             logger.debug("overlay primary_target unavailable: %s", e)
 
+    # Three-tier vision pipeline (Tier-1 water state, anomaly score, threat +
+    # tracking status). None when the pipeline isn't wired (sim / no camera).
+    vision = None
+    if _pipeline is not None:
+        try:
+            vision = _pipeline.vision_state()
+        except Exception as e:  # noqa: BLE001 — a vision hiccup must not break health
+            logger.debug("vision_state unavailable: %s", e)
+
     # Boat / Pico health — battery, hull, motors, GPS, decoded sensor flags, and
     # the latest alert. Pulled from the live PicoSerial state (works with the
     # simulator's MockPicoSerial too). Degrades to None if no Pico is wired.
@@ -922,6 +934,7 @@ async def _gather_health() -> dict:
         "stepper_target_locked": stepper_locked,
         "stepper_target": stepper_target,
         "track": track,
+        "vision": vision,
         "boat": boat,
         "timestamp": time.time(),
     }
@@ -1046,9 +1059,18 @@ async def _mjpeg_stream(view: str = "left"):
                 # Detection boxes only make sense on the left view they were
                 # computed from — drawing them on the right view puts them at
                 # the wrong pixel position (parallax offset), so skip there.
-                if not show_right and _overlay is not None and _overlay.enabled:
+                # The vision-pipeline HUD (water state, anomaly bar, threat
+                # highlight) is drawn on the left view regardless of whether the
+                # YOLO overlay is currently gated on.
+                if not show_right and (_overlay is not None or _pipeline is not None):
                     img = img.copy()
-                    _overlay.draw(img)
+                    if _overlay is not None and _overlay.enabled:
+                        _overlay.draw(img)
+                    if _pipeline is not None:
+                        try:
+                            _pipeline.annotate(img)
+                        except Exception as e:  # noqa: BLE001
+                            logger.debug("pipeline annotate failed: %s", e)
             # JPEG encode is blocking and CPU-heavy at 1080p; run it off the
             # event loop so it overlaps the next capture instead of serializing
             # with it. cv2 releases the GIL during imencode, so this parallelizes.
@@ -1142,6 +1164,14 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
             pass
     if _overlay is not None:
         _overlay.apply_controls(payload)
+    # When the vision pipeline is wired it OWNS overlay.enabled (it gates YOLO on
+    # the Tier-1 anomaly trigger), so route the operator's detection toggle to
+    # the pipeline — otherwise the pipeline would just overwrite it next frame.
+    if "detection_enabled" in payload and _pipeline is not None:
+        try:
+            _pipeline.set_yolo_enabled(bool(payload["detection_enabled"]))
+        except Exception:  # noqa: BLE001
+            pass
     # Keep the radar bar tracking the same class the operator picked for vision.
     if "track_class" in payload and _radar is not None:
         try:
@@ -1149,6 +1179,49 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
         except Exception:  # noqa: BLE001 — never let the UI control 500
             pass
     return _camera_state()
+
+
+# ---- Three-tier vision pipeline (Tier-1 segmentation + threat tracking) ----
+# These drive pi5/cv/pipeline.py's SurveyVisionPipeline. All degrade to 503 when
+# no pipeline is wired (simulator mode / no camera).
+
+@app.get("/vision/status")
+async def vision_status(_: str = Depends(auth.require_api_key)):
+    """Current pipeline state: toggles, water state, anomaly score, threat."""
+    if _pipeline is None:
+        return {"available": False, "yolo_enabled": False,
+                "segmentation_enabled": False}
+    st = _pipeline.vision_state()
+    st["available"] = True
+    return st
+
+
+@app.get("/vision/threats")
+async def vision_threats(_: str = Depends(auth.require_api_key)):
+    """List current CRITICAL/WARNING threats with class, distance, and bearing."""
+    if _pipeline is None:
+        return {"available": False, "threats": []}
+    return {"available": True, "threats": _pipeline.threats()}
+
+
+@app.post("/vision/yolo/toggle")
+async def toggle_yolo(_: str = Depends(auth.require_api_key)):
+    """Toggle Tier-2 YOLO classification on/off."""
+    if _pipeline is None:
+        return Response(status_code=503, content="vision pipeline not available")
+    state = _pipeline.set_yolo_enabled(not _pipeline.yolo_enabled)
+    return {"yolo_enabled": state,
+            "message": "YOLO %s" % ("enabled" if state else "disabled")}
+
+
+@app.post("/vision/segmentation/toggle")
+async def toggle_segmentation(_: str = Depends(auth.require_api_key)):
+    """Toggle Tier-1 water segmentation on/off."""
+    if _pipeline is None:
+        return Response(status_code=503, content="vision pipeline not available")
+    state = _pipeline.set_segmentation_enabled(not _pipeline.segmentation_enabled)
+    return {"segmentation_enabled": state,
+            "message": "Segmentation %s" % ("enabled" if state else "disabled")}
 
 
 # ---- Camera device assignment (which /dev/video* is LEFT / RIGHT) ----

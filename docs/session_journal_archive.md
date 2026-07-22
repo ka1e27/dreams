@@ -9,6 +9,23 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-01 — Committed and pushed align-first steering, waypoint planner, and M18 PCB rework
+
+**Worked on:** housekeeping session — reviewed the pending working-tree changes (from the three prior
+sessions logged below: align-first navigator, waypoint planner page, M18 battery migration) and the
+untracked files, staged the intended project files, and committed + pushed to `main`.
+**Changed:** no source changes. Committed (`e21ea2a`): `.gitignore`, `Boat_PCB/*` (kicad_pcb/pro/sch +
+new `.kicad_dru` files + new `Boat_PCB_V1.*` KiCad project), `docs/session_journal*.md`,
+`pi5/navigation/navigator.py`, `pi5/server/app.py`, `pi5/server/templates/command_center.html`,
+`pi5/server/templates/waypoint_planner.html` (new), `pi5/tests/test_navigator.py`.
+**Decisions / open questions:** left several untracked paths out of the commit as unrelated to boat
+software work: `.claude/` hooks & settings, `.cursor/`, `.gemini/`, `.kiro/`, `.qoder/`,
+`.opencode.json`, `.mcp.json`, `.github/code-review-graph.instruction.md`, and the PCB backup zips /
+`Boat_PCB V2/` folder. These remain untracked in the working tree — flag if any should actually be
+committed or added to `.gitignore`.
+**Next steps:** none pending from this session; KiCad M18 divider rework itself was already done in
+a prior session (now pushed).
+
 ## 2026-07-01 — Align-first steering: boat points at the waypoint before driving (no more orbiting)
 
 **Worked on:** in the sim the boat turned too slowly to aim at the next waypoint, so it arced/orbited

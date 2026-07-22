@@ -180,6 +180,29 @@
   .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}
   .cbtn.ghost2:hover{color:var(--cyan);border-color:var(--cyan);background:transparent;box-shadow:none}
   .cbtn.active{background:var(--cyan);color:#0a0d0f;border-color:var(--cyan);box-shadow:0 0 14px rgba(0,212,255,.4)}
+  /* ---- vision pipeline panel ---- */
+  .cbtn.btn-off{background:transparent;color:var(--muted);border-color:var(--muted)}
+  .cbtn.btn-green{background:rgba(58,211,122,.14);color:var(--ok);border-color:var(--ok);box-shadow:0 0 12px rgba(58,211,122,.25)}
+  .cbtn.btn-green:hover{background:var(--ok);color:#0a0d0f}
+  .cbtn.btn-amber{background:rgba(255,140,0,.16);color:var(--amber);border-color:var(--amber);box-shadow:0 0 12px var(--amber-dim)}
+  @keyframes vpulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .cbtn.pulse{animation:vpulse 1.8s ease-in-out infinite}
+  .vis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;padding:12px 14px}
+  .vis-col{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .vis-state{font-family:var(--display);font-size:22px;color:var(--cyan);letter-spacing:.06em}
+  .vis-state.alert{color:var(--warn)}
+  .vis-anom{height:12px;background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:4px;overflow:hidden}
+  .vis-anom .fill{height:100%;width:0;background:var(--cyan);transition:width .3s,background .3s}
+  .vis-tiers{display:flex;gap:8px}
+  .tier-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-family:var(--mono);background:var(--panel-2);border:1px solid var(--muted);color:var(--muted)}
+  .tier-dot.on{border-color:var(--cyan);color:#0a0d0f;background:var(--cyan)}
+  .tier-dot.on.amber{border-color:var(--amber);background:var(--amber)}
+  .tier-dot.on.crit{border-color:var(--crit);background:var(--crit);color:#fff}
+  .vis-toggles{display:flex;align-items:center;gap:7px;margin-top:6px}
+  .vis-warn{display:none;color:var(--warn);font-size:14px}
+  .vis-threat-body{font-size:12px;line-height:1.6}
+  .vis-threat-body b{letter-spacing:.06em}
   .cmd-in{width:96px;background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
     border-radius:5px;padding:7px 9px;font-family:var(--mono);font-size:12px;outline:none}
   .cmd-in:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
@@ -380,33 +403,6 @@
           <div class="cam-fps" id="cam-fps">-- FPS</div>
           <div class="nosignal" id="nosignal">◬ NO SIGNAL<span style="font-size:11px;letter-spacing:.1em;color:var(--muted)">camera producer offline</span></div>
         </div>
-        <div class="cam-ctl">
-          <span class="cs"><span class="lbl">SOURCE</span>
-            <button class="srcbtn active" id="camLeft" onclick="setCam('left')">◀ LEFT</button>
-            <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
-            <button class="srcbtn" id="camDisparity" onclick="setCam('disparity')" title="live stereo depth colormap (needs pi5/cv/calibration.npz + right camera)">◈ DEPTH</button>
-          </span>
-          <span class="cs"><span class="lbl">DEV L</span>
-            <select id="devLeft" class="imgsel" title="which connected camera is the LEFT eye"></select>
-            <span class="lbl">R</span>
-            <select id="devRight" class="imgsel" title="which connected camera is the RIGHT eye (NONE = single camera, stereo off)"></select>
-            <button class="srcbtn" onclick="applyDevices()" title="apply the left/right camera assignment (live swap, persists across restarts)">SET</button>
-            <button class="srcbtn" onclick="loadDevices(true)" title="rescan for newly plugged-in cameras">⟳ RESCAN</button>
-          </span>
-          <label class="tg"><input type="checkbox" id="detOn"> DETECT</label>
-          <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
-            title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
-            <option value="">AUTO</option></select></span>
-          <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
-          <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
-            title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
-            <option value="256">256</option><option value="320">320</option>
-            <option value="416" selected>416</option><option value="512">512</option>
-            <option value="640">640</option></select></span>
-          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"><span class="csv" id="confV">0.40</span></span>
-          <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60"><span class="csv" id="jqV">60</span></span>
-          <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15"><span class="csv" id="sfpsV">15</span></span>
-        </div>
       </div>
     </div>
 
@@ -451,6 +447,71 @@
             <div class="kv"><span class="lbl">CAM FPS</span><span class="v" id="fps">--</span></div>
             <div class="kv"><span class="lbl">THR RAW</span><span class="v" id="thr-raw">--</span></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISION PIPELINE + CAMERA CONTROL -->
+    <div class="section" data-id="vision" style="--span:12">
+      <div class="sec-hd"><span class="drag-handle">⠿</span><span>◈ VISION &amp; CAMERA CONTROL</span>
+        <span class="sp"></span><span class="lbl" id="vis-backend">—</span><span class="chev">▾</span></div>
+      <div class="sec-body">
+        <div class="vis-grid">
+          <div class="vis-col">
+            <div class="sec-ttl">WATER STATE</div>
+            <div class="vis-state" id="vis-state">CLEAR</div>
+            <div class="sec-ttl" style="margin-top:8px">ANOMALY</div>
+            <div class="vis-anom"><div class="fill" id="vis-anom-bar"></div></div>
+            <div class="lbl" id="vis-anom-lbl">0%</div>
+          </div>
+          <div class="vis-col">
+            <div class="sec-ttl">TIERS</div>
+            <div class="vis-tiers">
+              <span class="tier-dot on" id="tier1" title="Tier 1 — water segmentation (always on)">1</span>
+              <span class="tier-dot" id="tier2" title="Tier 2 — YOLO classification (on when anomaly detected)">2</span>
+              <span class="tier-dot" id="tier3" title="Tier 3 — depth + threat assessment">3</span>
+            </div>
+            <div class="vis-toggles">
+              <button class="cbtn btn-off" id="seg-toggle" onclick="toggleSegmentation()">SEG --</button>
+              <span class="vis-warn" id="vis-warn" title="YOLO with no segmentation trigger runs every frame — high CPU">⚠</span>
+              <button class="cbtn btn-off" id="yolo-toggle" onclick="toggleYolo()">YOLO --</button>
+            </div>
+          </div>
+          <div class="vis-col vis-threat" id="vis-threat-col">
+            <div class="sec-ttl">PRIMARY THREAT</div>
+            <div class="vis-threat-body" id="vis-threat"><span class="muted">no threat</span></div>
+          </div>
+          <div class="vis-col">
+            <div class="sec-ttl">SURVEY LOGGED</div>
+            <div class="big" id="vis-survey">0</div>
+            <div class="lbl">anomalies this mission</div>
+          </div>
+        </div>
+        <div class="cam-ctl">
+          <span class="cs"><span class="lbl">SOURCE</span>
+            <button class="srcbtn active" id="camLeft" onclick="setCam('left')">◀ LEFT</button>
+            <button class="srcbtn" id="camRight" onclick="setCam('right')">RIGHT ▶</button>
+            <button class="srcbtn" id="camDisparity" onclick="setCam('disparity')" title="live stereo depth colormap (needs pi5/cv/calibration.npz + right camera)">◈ DEPTH</button>
+          </span>
+          <span class="cs"><span class="lbl">DEV L</span>
+            <select id="devLeft" class="imgsel" title="which connected camera is the LEFT eye"></select>
+            <span class="lbl">R</span>
+            <select id="devRight" class="imgsel" title="which connected camera is the RIGHT eye (NONE = single camera, stereo off)"></select>
+            <button class="srcbtn" onclick="applyDevices()" title="apply the left/right camera assignment (live swap, persists across restarts)">SET</button>
+            <button class="srcbtn" onclick="loadDevices(true)" title="rescan for newly plugged-in cameras">⟳ RESCAN</button>
+          </span>
+          <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
+            title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
+            <option value="">AUTO</option></select></span>
+          <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
+          <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
+            title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
+            <option value="256">256</option><option value="320">320</option>
+            <option value="416" selected>416</option><option value="512">512</option>
+            <option value="640">640</option></select></span>
+          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"><span class="csv" id="confV">0.40</span></span>
+          <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60"><span class="csv" id="jqV">60</span></span>
+          <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15"><span class="csv" id="sfpsV">15</span></span>
         </div>
       </div>
     </div>
@@ -1089,6 +1150,8 @@ function renderHealth(h){
     ct.textContent = '◎ TRACKING ' + h.track.label + ' ' + Math.round(h.track.confidence*100) + '%';
     ct.style.display = 'block';
   } else { ct.style.display = 'none'; }
+  // three-tier vision pipeline panel
+  if (h.vision) renderVision(h.vision);
   // radar bar / stepper
   const ra = h.stepper_angle;
   if (ra === null || ra === undefined){
@@ -1123,14 +1186,92 @@ function renderHealth(h){
   else setDot('dot-pod', false);                                               // not responding
   // warning banner (prioritised — leaks are most urgent)
   const hullLeak = h.boat && h.boat.hull && h.boat.hull !== 'DRY';
+  // CRITICAL vision threat: banner while it's within 50 m (or distance unknown).
+  const pt = h.vision && h.vision.primary_threat;
+  const critThreat = pt && pt.threat_level === 'CRITICAL'
+    && (pt.distance_m == null || pt.distance_m <= 50);
   let warn = null;
   if (h.pod_leak) warn = '⚠ POD LEAK DETECTED — retrieve the pod';
   else if (hullLeak) warn = '⚠ HULL LEAK — ' + h.boat.hull;
+  else if (critThreat) warn = '⚠ CRITICAL: ' + pt.class_name.toUpperCase()
+    + ' DETECTED — ' + (pt.distance_m != null ? pt.distance_m.toFixed(1) + 'm' : 'range unknown')
+    + (h.vision.tracking_engaged ? ' — TRACKING ENGAGED' : '');
   else if (h.temp_c !== null && h.temp_c !== undefined && h.temp_c >= 75)
     warn = '⚠ THERMAL WARNING — ' + h.temp_c.toFixed(1) + '°C';
   else if (ts && ts !== 'OK' && ts !== 'N/A' && ts.indexOf('current') >= 0)
     warn = '⚠ POWER / THROTTLE — ' + h.throttled;
   showBanner(warn);
+}
+// ---- three-tier vision pipeline ------------------------------------------
+function renderVision(v){
+  // toggle buttons reflect server-authoritative state
+  updateSegButton(v.segmentation_enabled);
+  updateYoloButton(v.yolo_enabled);
+  // high-load warning: YOLO on with segmentation off = every-frame inference
+  $('vis-warn').style.display = (v.yolo_enabled && !v.segmentation_enabled) ? 'inline' : 'none';
+  // water state
+  const st = (v.water_state || 'clear').toUpperCase().replace(/_/g,' ');
+  const se = $('vis-state'); se.textContent = st;
+  se.classList.toggle('alert', st !== 'CLEAR');
+  // anomaly bar
+  const score = v.anomaly_score || 0;
+  const bar = $('vis-anom-bar');
+  bar.style.width = Math.min(100, score*100).toFixed(0) + '%';
+  bar.style.background = (score >= 0.15) ? 'var(--warn)' : 'var(--cyan)';
+  $('vis-anom-lbl').textContent = (score*100).toFixed(0) + '%'
+    + (v.tier1_fps ? ' · ' + v.tier1_fps.toFixed(0) + ' fps' : '');
+  // tier dots (T1 always on; T2 amber when active; T3 red when active)
+  $('tier2').classList.toggle('on', !!v.tier2_active);
+  $('tier2').classList.toggle('amber', !!v.tier2_active);
+  $('tier3').classList.toggle('on', !!v.tier3_active);
+  $('tier3').classList.toggle('crit', !!v.tier3_active);
+  // primary threat readout
+  const pt = v.primary_threat, tb = $('vis-threat'), col = $('vis-threat-col');
+  if (pt){
+    const arrow = pt.approach_vector === 'APPROACHING' ? '▲ approaching'
+                : pt.approach_vector === 'RECEDING' ? '▼ receding' : '● static';
+    const lc = pt.threat_level === 'CRITICAL' ? 'var(--crit)'
+             : pt.threat_level === 'WARNING' ? 'var(--warn)' : 'var(--cyan)';
+    tb.innerHTML = '<b style="color:' + lc + '">' + pt.class_name.toUpperCase() + '</b> · '
+      + pt.threat_level + '<br>'
+      + (pt.distance_m != null ? pt.distance_m.toFixed(1) + ' m' : 'range —') + ' · ' + arrow + '<br>'
+      + (v.tracking_engaged ? '<span style="color:var(--cyan)">◎ TRACKING'
+          + (v.tracked_object ? ' ' + pt.class_name.toUpperCase() : '') + '</span>'
+          : '<span class="muted">not tracking</span>');
+    col.classList.add('active');
+  } else {
+    tb.innerHTML = '<span class="muted">no threat</span>';
+    col.classList.remove('active');
+  }
+  // survey counter + backend label
+  $('vis-survey').textContent = v.survey_logged != null ? v.survey_logged : 0;
+  $('vis-backend').textContent = 'SEG:' + (v.seg_backend || '—').toUpperCase();
+}
+function updateSegButton(enabled){
+  const b = $('seg-toggle');
+  b.textContent = enabled ? 'SEG ON' : 'SEG OFF';
+  b.className = 'cbtn ' + (enabled ? 'btn-green pulse' : 'btn-off');
+}
+function updateYoloButton(enabled){
+  const b = $('yolo-toggle');
+  b.textContent = enabled ? 'YOLO ON' : 'YOLO OFF';
+  b.className = 'cbtn ' + (enabled ? 'btn-amber pulse' : 'btn-off');
+}
+async function toggleSegmentation(){
+  try{
+    const r = await fetch('/vision/segmentation/toggle', { method:'POST', headers: apiHeaders() });
+    if (!r.ok){ toast('Vision pipeline not available', false); return; }
+    const d = await r.json(); updateSegButton(d.segmentation_enabled);
+    toast(d.message || 'segmentation toggled', true);
+  }catch(e){ toast('toggle failed', false); }
+}
+async function toggleYolo(){
+  try{
+    const r = await fetch('/vision/yolo/toggle', { method:'POST', headers: apiHeaders() });
+    if (!r.ok){ toast('Vision pipeline not available', false); return; }
+    const d = await r.json(); updateYoloButton(d.yolo_enabled);
+    toast(d.message || 'YOLO toggled', true);
+  }catch(e){ toast('toggle failed', false); }
 }
 // ---- boat / pico health panel --------------------------------------------
 const FLAG_LABELS = { GPS:'GPS', CMP:'COMPASS', BAT:'BATT', DHT:'TEMP', MOT:'MOTOR', POD:'POD' };
@@ -1332,9 +1473,8 @@ async function sendGoto(){
 }
 function swapCam(){ setCam(camView === 'left' ? 'right' : 'left'); }
 function toggleDetect(){
-  const el = $('detOn'); el.checked = !el.checked;
-  el.dispatchEvent(new Event('change'));
-  toast(el.checked ? '◉ Detection ON' : '◉ Detection OFF', true);
+  // Detection is Tier 2 of the vision pipeline — the YOLO toggle owns it.
+  toggleYolo();
 }
 async function checkNetwork(){
   try{
@@ -1446,7 +1586,6 @@ setInterval(rebuildTrackList, 1000);
 async function loadCameraControls(){
   try{
     const c = await (await fetch('/api/camera', { headers: apiHeaders() })).json();
-    $('detOn').checked = !!c.detection_enabled;
     trackCurrent = c.track_class || '';
     rebuildTrackList();
     if (c.detect_max_fps != null){ $('detFps').value = c.detect_max_fps; $('detFpsV').textContent = c.detect_max_fps; }
@@ -1465,7 +1604,6 @@ async function loadCameraControls(){
     else if (!c.model_loaded) $('cam-det').textContent = 'DET off (no model)';
   }catch(e){}
 }
-$('detOn').addEventListener('change', () => postCamera({ detection_enabled: $('detOn').checked }));
 $('trackClass').addEventListener('change', () => {
   const v = $('trackClass').value;
   trackCurrent = v;

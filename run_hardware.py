@@ -28,6 +28,7 @@ import pi5.server.app as server_app
 from pi5.comms.pico_serial import PicoSerial
 from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.camera import CameraConfig, CameraProducer
+from pi5.cv.pipeline import SurveyVisionPipeline
 from pi5.cv.radar_tracker import RadarTracker
 from pi5.cv.stepper import StepperMotor
 from pi5.cv.vision_overlay import DetectionConfig, DetectionOverlay
@@ -60,6 +61,7 @@ def main() -> None:
     server_cfg = cfg.get("server", {})
     hb_cfg = cfg.get("heartbeat", {})
     step_cfg = cfg.get("stepper", {})
+    vision_cfg = cfg.get("vision", {})
 
     port = serial_cfg.get("port", "/dev/ttyACM0")
     baud = serial_cfg.get("baud", 115200)
@@ -161,6 +163,18 @@ def main() -> None:
         initial_mode=step_cfg.get("initial_mode", "SLEEP"),
     )
 
+    # Three-tier survey vision pipeline. LAYERS on the overlay + radar above (it
+    # does NOT run a second YOLO): Tier 1 water segmentation gates the existing
+    # detection overlay, Tier 3 threat assessment drives the radar. Runs even
+    # without a segmentation model (classical CV fallback) — the only hard
+    # requirement is the camera producer.
+    pipeline = SurveyVisionPipeline(
+        camera, overlay=overlay, radar=radar,
+        config=vision_cfg, pico=pico,
+        fov_deg=step_cfg.get("fov_degrees", 75),
+        frame_width=cam_cfg.get("width", 640),
+    )
+
     configure(
         pico=pico,
         navigator=nav,
@@ -178,6 +192,7 @@ def main() -> None:
         winch_mode=cfg.get("winch", {}).get("mode", "survey"),
         stepper=stepper,          # radar-bar pan (Pi 5 GPIO)
         radar=radar,              # tracker thread = the motor's motion authority
+        pipeline=pipeline,        # three-tier vision (Tier-1 seg → threat → radar)
     )
 
     @app.on_event("startup")
@@ -199,8 +214,18 @@ def main() -> None:
             except Exception as e:  # noqa: BLE001
                 logger.error("Detection overlay failed to start: %s", e)
                 server_app._overlay = None
+
+            # Vision pipeline rides on the camera + overlay; start it once they're up.
+            try:
+                await pipeline.start()
+                logger.info("Vision pipeline started (seg backend=%s)",
+                            pipeline.seg.backend)
+            except Exception as e:  # noqa: BLE001
+                logger.error("Vision pipeline failed to start: %s", e)
+                server_app._pipeline = None
         else:
             server_app._overlay = None
+            server_app._pipeline = None
 
         # Firmware: push the latest Boat Pico code over USB and let it reboot,
         # so the Pico is running current firmware before we open the link. The
@@ -242,6 +267,10 @@ def main() -> None:
         await nav.stop()
         await pod.stop()
         await pico.disconnect()
+        try:
+            await pipeline.stop()
+        except Exception as e:  # noqa: BLE001
+            logger.error("Vision pipeline shutdown error: %s", e)
         await overlay.stop()
         await camera.stop()
         try:

@@ -188,6 +188,49 @@ camera:
     # center's TRACK picker (which also retargets the radar bar).
     track_class: ""
 
+vision:
+  # Three-tier survey vision pipeline (pi5/cv/pipeline.py). This LAYERS on the
+  # existing detection overlay + radar tracker — it does NOT run a second YOLO.
+  #   Tier 1  water segmentation  — cheap, always-on anomaly screen
+  #   Tier 2  the existing YOLO overlay — gated ON only when Tier 1 sees an anomaly
+  #   Tier 3  threat assessment    — distance + approach vector → drives the radar
+  # Optional TFLite segmentation model. If this file is absent (it is by default)
+  # the classical OpenCV HSV/edge fallback is used — no model, no extra packages.
+  seg_model_path: "pi5/cv/models/water_seg.tflite"
+  # Fraction of the frame that must read as non-water to wake Tier 2 (YOLO).
+  anomaly_trigger_threshold: 0.15
+  # Once triggered, keep YOLO active this many frames before it can idle again
+  # (hysteresis so it doesn't flicker on/off as the anomaly crosses threshold).
+  yolo_cooldown_frames: 5
+  # Gate YOLO on the Tier-1 anomaly trigger (true = real tiering, saves CPU when
+  # the water is clear). Set false to keep the detection overlay always-on
+  # (classic behaviour) and use the YOLO toggle as a simple on/off.
+  gate_yolo_on_anomaly: true
+  # Tier-1 analysis rate cap (Hz). Segmentation is cheap (downscaled) so this can
+  # stay high; it's decoupled from the video stream + the YOLO detect rate.
+  tier1_max_fps: 20
+  # Camera horizontal FOV — for mapping a bbox to a bearing (bbox → radar angle).
+  fov_degrees: 75
+
+  threat_tracking:
+    enabled: true
+    # Class → threat level lives in pi5/cv/threat_assessor.py (THREAT_LEVELS).
+    # CRITICAL (vessel/boat/person/kayak) always tracks; WARNING (debris/buoy)
+    # tracks only if approaching; INFO/SURVEY never track.
+    approach_detection_frames: 5
+    approach_size_threshold: 1.10   # 10% apparent-size growth = APPROACHING
+    track_warning_if_approaching: true
+    mission_alert_distance_m: 30.0  # raise a mission alert when a CRITICAL threat is this close
+    # After a threat clears, hold then return the radar to SCAN after this long.
+    clear_timeout_s: 5.0
+
+  survey_logging:
+    # INFO/SURVEY detections are counted and (if a CloudUploader is wired)
+    # uploaded; CRITICAL/WARNING go to the threat system instead.
+    min_confidence: 0.6
+    min_anomaly_score: 0.20
+    min_interval_s: 5.0             # per-class rate limit so a static dock doesn't spam
+
 avoidance:
   # COCO class id for "boat" — used by the YOLO detector to filter
   boat_class_id: 8
