@@ -40,6 +40,7 @@ from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
+from ..scripts import am32_config
 from . import auth
 from .models import (
     EnvironmentOut,
@@ -68,6 +69,7 @@ _stepper = None    # cv.stepper.StepperMotor (optional, radar-bar pan)
 _radar = None      # cv.radar_tracker.RadarTracker (optional)
 _pipeline = None   # cv.pipeline.SurveyVisionPipeline (optional, three-tier vision)
 _obstacles = None  # navigation.sim_obstacles.ObstacleField (simulator only)
+_esc_mock = None   # bytearray — persistent mock ESC EEPROM for the editor in sim mode
 _winch_mode = "survey"
 _home_lat = None
 _home_lon = None
@@ -612,6 +614,89 @@ async def esc_passthrough(payload: dict, _: str = Depends(auth.require_api_key))
                     "the boat stack. See docs/esc_setup.md / esc_passthrough.md."
                     % ("right" if esc else "left")),
     }
+
+
+# --------------------------------------------------------------------------- #
+# ESC settings editor — read/write AM32 EEPROM directly over the Pi GPIO UART
+# (am32_config talks the one-wire bootloader). The dashboard renders the field
+# registry (am32_config.FIELDS) as a live editor. In simulator mode we serve a
+# persistent in-memory mock EEPROM so the whole editor is demoable without hardware.
+# --------------------------------------------------------------------------- #
+def _esc_mock_buf():
+    """Lazily-seeded persistent mock EEPROM so sim writes stick within the session."""
+    global _esc_mock
+    if _esc_mock is None:
+        _esc_mock = am32_config.default_mock_eeprom()
+    return _esc_mock
+
+
+def _esc_meta() -> dict:
+    """Static editor metadata (groups, wiring, one-time setup) — no serial IO."""
+    return {
+        "sim": _sim is not None,
+        "port": am32_config.DEFAULT_PORT,
+        "groups": [{"key": k, "label": lbl} for k, lbl in am32_config.GROUPS],
+        "wiring": [{"from": a, "to": b, "note": c} for a, b, c in am32_config.WIRING],
+        "wiring_note": am32_config.WIRING_NOTE,
+        "setup_cmds": list(am32_config.SETUP_CMDS),
+    }
+
+
+@app.get("/api/esc/meta")
+async def esc_meta(_: str = Depends(auth.require_api_key)):
+    """Static ESC-editor metadata (field groups, wiring, one-time setup). No serial IO,
+    so the modal can show the wiring guide before anything is connected."""
+    return _esc_meta()
+
+
+@app.post("/api/esc/read")
+async def esc_read(_: str = Depends(auth.require_api_key)):
+    """Read the drive ESC's AM32 settings for the editor. Simulator mode returns the
+    persistent mock EEPROM; hardware reads /dev/ttyAMA0 (needs the ESC signal wired to
+    the Pi UART — see the modal's Wiring tab and docs/am32_config.md)."""
+    from fastapi import HTTPException
+
+    meta = _esc_meta()
+    if _sim is not None:
+        e = _esc_mock_buf()
+        return {**meta, "connected": True, "flash": "SIM",
+                "boot_configured": e[0] == 1, "fields": am32_config.decode_eeprom(e)}
+    if _mission is not None and _mission.state.running:
+        raise HTTPException(status_code=409, detail="Stop the mission first — ESC config is a bench operation")
+    try:
+        r = await asyncio.to_thread(am32_config.read_settings, am32_config.DEFAULT_PORT)
+    except am32_config.Am32Error as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {**meta, "connected": True, **r}
+
+
+@app.post("/api/esc/write")
+async def esc_write(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Write only the changed AM32 settings (read-modify-write + read-back verify).
+    Body: {"changes": {key: value, ...}}. Simulator mode mutates the mock EEPROM."""
+    from fastapi import HTTPException
+
+    changes = payload.get("changes") if isinstance(payload, dict) else None
+    if not isinstance(changes, dict) or not changes:
+        raise HTTPException(status_code=400, detail="no changes given")
+    if _sim is not None:
+        buf = _esc_mock_buf()
+        try:
+            changed = am32_config.apply_changes(buf, changes)  # validates + mutates
+        except am32_config.Am32Error as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"sim": True, "flash": "SIM", "changed": changed,
+                "fields": am32_config.decode_eeprom(buf)}
+    if _mission is not None and _mission.state.running:
+        raise HTTPException(status_code=409, detail="Stop the mission first — ESC config is a bench operation")
+    try:
+        r = await asyncio.to_thread(am32_config.write_settings, am32_config.DEFAULT_PORT, changes)
+    except am32_config.Am32Error as e:
+        # 400 for a bad key/value (client error), 502 for a link/verify failure
+        msg = str(e)
+        bad = ("unknown setting" in msg or "read-only" in msg or "must be" in msg)
+        raise HTTPException(status_code=400 if bad else 502, detail=msg)
+    return {"sim": False, **r}
 
 
 @app.post("/api/winch/speed")

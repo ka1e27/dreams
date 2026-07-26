@@ -43,11 +43,19 @@ You configure **each ESC individually** (the NeutronRC "USB TO ESC" linker conne
 AM32 is configured over the ESC's **signal wire** using a one-wire (half-duplex) serial protocol —
 the USB "linker" is just a CH340 USB-serial adapter on that wire. So:
 
-- **Directly from the Pi's GPIO UART — yes, PROVEN (`pi5/scripts/am32_config.py`).** Temporarily move
-  the ESC **signal** wire off Pico GP2 to the Pi's UART (pin 10 RX direct, pin 8 TX via ~1 kΩ, GND
-  pin 6), enable `uart0`, and this script reads/sets bidirectional/telemetry/LVC over the one-wire
-  bootloader — **no browser, no adapter.** Settings only (not firmware flashing). Full guide +
-  one-time UART setup in **`docs/am32_config.md`**. This is now the recommended bench path.
+- **From the dashboard — easiest, recommended.** The command center has a full **ESC Settings** editor
+  (COMMANDS → DRIVE → **⚡ ESC SETTINGS**, or ⚙ TRIM → *Open ESC Settings*). Wire the ESC to the Pi's
+  UART as below (the modal's **Wiring & Setup** tab shows the pinout + the one-time `uart0` commands with
+  copy buttons), press **Read ESC**, toggle/slide the settings, then **Write Changes** (read-modify-write
+  + read-back verified). It renders straight from `am32_config`'s field registry, so bi-directional,
+  telemetry, LVC, direction and the drivetrain tuning below are all one click. Boat-critical settings are
+  flagged (★) and risky states glow amber. In the simulator it serves a demo ESC so you can explore it
+  with no hardware. Backed by the same GPIO-UART path as the CLI below.
+- **From the CLI — `pi5/scripts/am32_config.py` (PROVEN).** Same wiring; move the ESC **signal** wire off
+  Pico GP2 to the Pi's UART (pin 10 RX direct, pin 8 TX via ~1 kΩ, GND pin 6), enable `uart0`, and this
+  script reads/sets bidirectional/telemetry/LVC/… over the one-wire bootloader — **no browser, no
+  adapter.** Settings only (not firmware flashing). Full guide + one-time UART setup in
+  **`docs/am32_config.md`**.
 - **USB linker on a Pi USB port — also works.** Plug the NeutronRC "USB TO ESC" (or any CH340
   USB-serial) into a Pi USB-A port and run `am32.ca` in **Chromium on the Pi desktop**. (Note:
   Chromium's Web Serial only lists **USB** ports, so it will *not* see the GPIO UART above — a USB

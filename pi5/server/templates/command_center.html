@@ -421,6 +421,131 @@
   .modal textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
   .modal label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:10px}
+  /* ---- ESC SETTINGS EDITOR (renders from am32_config FIELDS) ---- */
+  .esc-modal{max-width:640px;max-height:88vh;padding:0;display:flex;flex-direction:column;overflow:hidden}
+  .esc-top{padding:16px 20px 0}
+  .esc-hd{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .esc-hd h3{margin:0;flex:1;display:flex;align-items:baseline;gap:10px}
+  .esc-hd .esc-sub{font-family:var(--mono);font-weight:400;font-size:10px;letter-spacing:.18em;color:var(--muted)}
+  .esc-pill{font-size:9px;font-weight:600;letter-spacing:.14em;padding:4px 10px;border-radius:20px;
+    border:1px solid var(--muted);color:var(--muted);text-transform:uppercase;white-space:nowrap;font-family:var(--mono)}
+  .esc-pill.live,.esc-pill.sim{display:inline-flex;align-items:center}
+  .esc-pill.live::before,.esc-pill.sim::before{content:"";width:6px;height:6px;border-radius:50%;
+    background:currentColor;box-shadow:0 0 6px currentColor;margin-right:7px}
+  .esc-pill.live{color:var(--ok);border-color:var(--ok);background:rgba(58,211,122,.1);box-shadow:0 0 12px rgba(58,211,122,.2)}
+  .esc-pill.sim{color:var(--accent);border-color:var(--accent);background:var(--accent-glow)}
+  .esc-pill.reading{color:var(--cyan);border-color:var(--cyan);animation:vpulse 1.1s ease-in-out infinite}
+  .esc-pill.err{color:var(--crit);border-color:var(--crit);background:rgba(255,59,59,.1)}
+  .esc-tabs{display:flex;gap:2px;border-bottom:1px solid var(--accent-dim);padding:0 20px}
+  .esc-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);
+    font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;
+    padding:10px 13px;cursor:pointer;transition:.15s;margin-bottom:-1px}
+  .esc-tab:hover{color:var(--cyan)}
+  .esc-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .esc-tab .dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--cyan);
+    box-shadow:0 0 6px var(--cyan);margin-left:7px;vertical-align:middle}
+  .esc-tab.dirty .dot{display:inline-block}
+  .esc-panes{flex:1 1 auto;overflow-y:auto;padding:16px 20px;min-height:120px}
+  .esc-pane.hidden{display:none}
+  .esc-empty{text-align:center;color:var(--muted);padding:32px 12px;line-height:1.75;font-size:12px}
+  .esc-empty .big{font-family:var(--display);font-size:13px;letter-spacing:.1em;color:#cfe0ec;margin-bottom:8px}
+  .esc-empty b{color:var(--cyan);font-weight:600}
+  .esc-empty.err .big{color:var(--crit)}
+  /* group */
+  .esc-grp{margin-bottom:18px}
+  .esc-grp:last-child{margin-bottom:2px}
+  .esc-grp-hd{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:10px;font-weight:600;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--accent);padding-bottom:7px;margin-bottom:2px;
+    border-bottom:1px solid var(--accent-dim)}
+  .esc-grp-hd::before{content:"";width:3px;height:12px;border-radius:2px;background:var(--accent);
+    box-shadow:0 0 8px var(--accent-dim)}
+  .esc-grp.info .esc-grp-hd{color:var(--muted)}
+  .esc-grp.info .esc-grp-hd::before{background:var(--muted);box-shadow:none}
+  /* row */
+  .esc-row{display:flex;align-items:center;gap:16px;padding:11px 6px;border-bottom:1px solid rgba(255,255,255,.045);
+    border-left:2px solid transparent;transition:background .15s}
+  .esc-row:last-child{border-bottom:none}
+  .esc-row.important{border-left-color:var(--accent-dim)}
+  .esc-row.changed{background:linear-gradient(90deg,rgba(56,189,248,.07),transparent 70%);border-left-color:var(--cyan)}
+  .esc-row.warn{background:linear-gradient(90deg,rgba(255,176,46,.06),transparent 70%);border-left-color:var(--warn)}
+  .esc-row-l{flex:1;min-width:0}
+  .esc-row-lbl{display:flex;align-items:center;gap:7px;color:#e2edf4;font-size:12.5px;font-weight:500}
+  .esc-row.warn .esc-row-lbl{color:var(--warn)}
+  .esc-row-help{color:var(--muted);font-size:10.5px;line-height:1.55;margin-top:4px;max-width:44ch}
+  .esc-row.warn .esc-row-help{color:var(--warn);opacity:.85}
+  .esc-star{color:var(--accent);font-size:10px}
+  .esc-warn{color:var(--warn);font-size:11px}
+  .esc-chg{color:var(--cyan);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+    border:1px solid var(--cyan);border-radius:3px;padding:0 4px;line-height:1.5}
+  .esc-row-c{flex-shrink:0;display:flex;align-items:center}
+  /* toggle */
+  .esc-ctl-bool{display:flex;align-items:center;gap:10px}
+  .esc-tgl{position:relative;width:46px;height:24px;border-radius:20px;border:1px solid var(--muted);
+    background:var(--panel-2);cursor:pointer;transition:.18s;padding:0;flex-shrink:0}
+  .esc-tgl .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;
+    background:var(--muted);transition:.18s}
+  .esc-tgl:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .esc-tgl.on{border-color:var(--ok);background:rgba(58,211,122,.2)}
+  .esc-tgl.on .knob{left:24px;background:var(--ok);box-shadow:0 0 8px rgba(58,211,122,.55)}
+  .esc-tgl.warn.on{border-color:var(--warn);background:rgba(255,176,46,.2)}
+  .esc-tgl.warn.on .knob{background:var(--warn);box-shadow:0 0 8px rgba(255,176,46,.55)}
+  .esc-tgl.warn:not(.on){border-color:var(--warn)}
+  .esc-tgl:disabled{opacity:.45;cursor:not-allowed}
+  .esc-tgl-state{font-family:var(--display);font-size:11px;font-weight:700;letter-spacing:.1em;color:var(--muted);min-width:26px}
+  .esc-tgl-state.on{color:var(--ok)} .esc-tgl-state.on.warn{color:var(--warn)}
+  /* numeric slider */
+  .esc-ctl-num{display:flex;align-items:center;gap:12px}
+  .esc-range{-webkit-appearance:none;appearance:none;width:118px;height:4px;border-radius:3px;
+    background:var(--panel-2);border:1px solid var(--accent-dim);outline:none;cursor:pointer}
+  .esc-range::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--cyan);cursor:pointer;box-shadow:0 0 8px rgba(56,189,248,.55);border:2px solid #0a0e17}
+  .esc-range::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--cyan);
+    cursor:pointer;border:2px solid #0a0e17;box-shadow:0 0 8px rgba(56,189,248,.55)}
+  .esc-range:focus-visible{box-shadow:0 0 0 1px var(--cyan)}
+  .esc-numval{font-family:var(--display);font-weight:700;font-size:15px;color:var(--cyan);
+    min-width:70px;text-align:right;white-space:nowrap}
+  .esc-numval .u{font-size:10px;color:var(--muted);margin-left:3px;font-family:var(--mono);font-weight:400}
+  /* info chip */
+  .esc-chip{font-family:var(--mono);font-size:12px;color:#dbe7f0;background:var(--panel-2);
+    border:1px solid var(--accent-dim);border-radius:5px;padding:4px 11px;white-space:nowrap}
+  .esc-chip.ok{color:var(--ok);border-color:rgba(58,211,122,.4)}
+  .esc-chip.warn{color:var(--warn);border-color:rgba(255,176,46,.45)}
+  /* wiring pane */
+  .esc-wire-note{color:var(--warn);font-size:11px;line-height:1.6;background:rgba(255,176,46,.07);
+    border:1px solid rgba(255,176,46,.3);border-radius:6px;padding:10px 13px;margin-bottom:16px}
+  .esc-wire-tbl{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:18px}
+  .esc-wire-tbl th{text-align:left;color:var(--muted);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    font-weight:600;padding:5px 9px;border-bottom:1px solid var(--accent-dim)}
+  .esc-wire-tbl td{padding:8px 9px;border-bottom:1px solid rgba(255,255,255,.045);color:#cfe0ec;vertical-align:top}
+  .esc-wire-tbl td.pin{color:var(--cyan);font-family:var(--mono);white-space:nowrap}
+  .esc-wire-tbl td.note{color:var(--muted)}
+  .esc-setup-hd{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin:4px 0 9px}
+  .esc-cmd{display:flex;align-items:center;gap:10px;background:#080812;border:1px solid var(--accent-dim);
+    border-radius:5px;padding:8px 11px;margin-bottom:7px}
+  .esc-cmd code{flex:1;white-space:pre-wrap;word-break:break-all;color:#bfe9ff;font-family:var(--mono);font-size:11px}
+  .esc-cmd .cp{cursor:pointer;color:var(--muted);border:1px solid var(--accent-dim);border-radius:4px;
+    padding:3px 9px;font-size:10px;letter-spacing:.08em;background:none;transition:.15s;white-space:nowrap;font-family:var(--mono)}
+  .esc-cmd .cp:hover{color:var(--cyan);border-color:var(--cyan)}
+  .esc-doc{color:var(--muted);font-size:11px;margin-top:6px;line-height:1.7}
+  .esc-doc code{color:var(--cyan);font-size:11px}
+  .esc-adv{margin-top:20px;border-top:1px solid var(--accent-dim);padding-top:12px}
+  .esc-adv-hd{cursor:pointer;color:var(--muted);font-size:11px;letter-spacing:.06em;user-select:none;transition:.15s}
+  .esc-adv-hd:hover{color:var(--cyan)}
+  .esc-adv-hd .chev{display:inline-block;transition:transform .2s;font-size:9px;margin-right:5px}
+  .esc-adv.open .esc-adv-hd .chev{transform:rotate(90deg)}
+  .esc-adv-body{display:none;margin-top:12px}
+  .esc-adv.open .esc-adv-body{display:block}
+  .esc-adv-warn{color:var(--muted);font-size:11px;line-height:1.6;margin-bottom:10px}
+  /* action bar */
+  .esc-act{display:flex;align-items:center;gap:12px;padding:13px 20px;border-top:1px solid var(--accent-dim);
+    background:rgba(129,140,248,.04);flex-shrink:0}
+  .esc-act .sp{flex:1}
+  .esc-dirty{font-size:11px;color:var(--cyan);letter-spacing:.05em;font-family:var(--mono)}
+  .esc-cta{cursor:pointer;background:rgba(56,189,248,.1);color:var(--cyan);border:1px solid var(--cyan);
+    border-radius:6px;padding:10px 16px;font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;transition:.15s;width:100%;margin-top:4px}
+  .esc-cta:hover{background:var(--cyan);color:#08121a;box-shadow:0 0 16px rgba(56,189,248,.35)}
   .path-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;
     cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)}
   .path-row:hover{background:rgba(56,189,248,.05)}
@@ -782,7 +907,8 @@
           </div>
           <div class="cmd-group">
             <span class="cmd-glabel">DRIVE</span>
-            <button class="cbtn" onclick="openMotorModal()" title="Configure the drive motors: per-motor trim (Kv mismatch) and AM32 ESC setup">⚙ MOTORS</button>
+            <button class="cbtn" onclick="openMotorModal()" title="Per-motor trim for mismatched-Kv motors (software gain)">⚙ TRIM</button>
+            <button class="cbtn" onclick="openEscModal()" title="Read &amp; change AM32 ESC settings (bi-directional, telemetry, LVC, tuning) from the dashboard">⚡ ESC SETTINGS</button>
           </div>
           <div class="cmd-group">
             <span class="cmd-glabel">CAMERA</span>
@@ -988,12 +1114,12 @@
   </div>
 </div>
 
-<!-- MOTOR / ESC CONFIGURATION -->
+<!-- MOTOR TRIM -->
 <div class="modal-bg" id="mMotors">
-  <div class="modal" style="max-width:540px">
-    <h3>⚙ MOTOR CONFIGURATION</h3>
+  <div class="modal" style="max-width:520px">
+    <h3>⚙ MOTOR TRIM</h3>
 
-    <div class="sec-ttl">PER-MOTOR TRIM</div>
+    <div class="sec-ttl">PER-MOTOR SOFTWARE GAIN</div>
     <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 8px">
       Two different-Kv motors give unequal thrust at equal command, so the boat crabs. Lower the
       <i>faster</i> motor's gain until it tracks straight (1.00 = no trim). The heading loop nulls the rest.
@@ -1011,24 +1137,72 @@
       <span class="lbl" id="trimMsg"></span>
     </div>
 
-    <div class="sec-ttl" style="margin-top:18px">ESC CONFIGURATION (AM32)</div>
-    <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 8px">
-      ⚠ <b>Experimental / hardware-only.</b> Hands the selected ESC's signal line to the AM32
-      configurator through the Pico. This <b>stops the boat</b> and drops the serial link — then open
-      <b>am32.ca</b> in Chromium on the Pi and connect to the Pico port. Restart the boat stack when done.
-      See <code>docs/esc_setup.md</code>. Props off, out of the water.
+    <div class="sec-ttl" style="margin-top:20px">ESC FIRMWARE SETTINGS (AM32)</div>
+    <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 10px">
+      Bi-directional, telemetry, low-voltage cutoff and drivetrain tuning live on the ESC itself —
+      read and change them from the dashboard.
     </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span class="lbl">ESC</span>
-      <select id="escSel" class="imgsel"><option value="left">LEFT (GP2)</option><option value="right">RIGHT (GP3)</option></select>
-      <span class="lbl">BAUD</span>
-      <input type="number" id="escBaud" class="cmd-in" style="width:90px" value="19200">
-      <button class="cbtn warn" onclick="escConfig()">ENTER ESC CONFIG MODE</button>
-    </div>
-    <div id="escMsg" style="font-size:11px;line-height:1.5;margin-top:8px;color:var(--cyan)"></div>
+    <button class="esc-cta" onclick="closeModal('mMotors'); openEscModal()">⚡ Open ESC Settings →</button>
 
     <div class="modal-actions" style="margin-top:16px">
       <button class="cbtn" onclick="closeModal('mMotors')">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ESC SETTINGS EDITOR (AM32) -->
+<div class="modal-bg" id="mEsc">
+  <div class="modal esc-modal">
+    <div class="esc-top">
+      <div class="esc-hd">
+        <h3>⚡ ESC SETTINGS <span class="esc-sub">AM32 · Drive</span></h3>
+        <span class="esc-pill" id="escPill">Offline</span>
+      </div>
+    </div>
+    <div class="esc-tabs">
+      <button class="esc-tab active" data-tab="settings" onclick="escSetTab('settings')">Settings<span class="dot" id="escTabDot"></span></button>
+      <button class="esc-tab" data-tab="wiring" onclick="escSetTab('wiring')">Wiring &amp; Setup</button>
+    </div>
+
+    <div class="esc-panes">
+      <!-- SETTINGS -->
+      <div class="esc-pane" id="escPaneSettings">
+        <div id="escBody"></div>
+      </div>
+      <!-- WIRING & SETUP -->
+      <div class="esc-pane hidden" id="escPaneWiring">
+        <div id="escWireDyn"></div>
+        <div class="esc-adv" id="escAdv">
+          <div class="esc-adv-hd" onclick="document.getElementById('escAdv').classList.toggle('open')">
+            <span class="chev">▶</span>Advanced — am32.ca passthrough (for firmware flashing)
+          </div>
+          <div class="esc-adv-body">
+            <div class="esc-adv-warn">
+              The editor above changes <b>settings</b> over the Pi's UART. To flash new AM32
+              <b>firmware</b> you still need am32.ca: this hands an ESC's signal line to the Pico's
+              USB bridge (<b>stops the boat</b>, drops the link), then open <b>am32.ca</b> in Chromium on
+              the Pi. Hardware-only. See <code>docs/esc_passthrough.md</code>. Props off, out of the water.
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <span class="lbl">ESC</span>
+              <select id="escSel" class="imgsel"><option value="left">LEFT (GP2)</option><option value="right">RIGHT (GP3)</option></select>
+              <span class="lbl">BAUD</span>
+              <input type="number" id="escBaud" class="cmd-in" style="width:90px" value="19200">
+              <button class="cbtn warn" onclick="escConfig()">ARM PASSTHROUGH</button>
+            </div>
+            <div id="escMsg" style="font-size:11px;line-height:1.5;margin-top:8px;color:var(--cyan)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="esc-act">
+      <button class="cbtn ghost2" onclick="closeModal('mEsc')">CLOSE</button>
+      <span class="esc-dirty" id="escDirty"></span>
+      <span class="sp"></span>
+      <button class="cbtn ghost2" id="escRevertBtn" onclick="escRevert()" style="display:none">REVERT</button>
+      <button class="cbtn" id="escReadBtn" onclick="escRead()">↻ READ ESC</button>
+      <button class="cbtn btn-green" id="escWriteBtn" onclick="escWrite()" disabled>WRITE CHANGES</button>
     </div>
   </div>
 </div>
@@ -1856,10 +2030,9 @@ async function sendHeading(){
   try{ await postApi('heading', {heading: h}); toast('✓ Holding heading ' + Math.round(h) + '°', true); }
   catch(e){ toast('✗ ' + e.message, false); }
 }
-// ---- motor / ESC configuration -------------------------------------------
+// ---- motor trim -----------------------------------------------------------
 async function openMotorModal(){
   openModal('mMotors');
-  $('escMsg').textContent = '';
   $('trimMsg').textContent = '';
   try{
     const t = await getApi('nav/motor-trim');
@@ -1886,6 +2059,234 @@ async function escConfig(){
     $('escMsg').textContent = '✓ ' + (r.message || 'armed');
     toast('✓ ESC config mode armed', true);
   }catch(e){ $('escMsg').textContent = '✗ ' + e.message; toast('✗ ' + e.message, false); }
+}
+
+// ---- ESC settings editor (renders am32_config's FIELDS registry) ----------
+// State: orig = last-read values, pending = user edits not yet written.
+let escS = { meta:null, orig:{}, pending:{}, fields:[], connected:false, sim:false };
+function escEl(tag, cls, txt){ const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+function escCurVal(f){ return (f.key in escS.pending) ? escS.pending[f.key] : f.value; }
+function escEq(a, b, f){ return f.kind === 'bool' ? (!!a) === (!!b) : Math.abs(Number(a) - Number(b)) < 1e-6; }
+function escFmt(v, f){ const s = f.step || 1, dec = s >= 1 ? 0 : (s >= 0.1 ? 1 : 2); return Number(v).toFixed(dec); }
+
+async function openEscModal(){
+  openModal('mEsc');
+  escSetTab('settings');
+  if (!escS.meta){ try{ escS.meta = await getApi('esc/meta'); }catch(e){ escS.meta = null; } }
+  escRenderWiring();
+  if (escS.connected) escRenderFields(); else escShowEmpty();
+  escUpdatePill(escS.connected ? (escS.sim ? 'sim' : 'live') : 'offline');
+  escUpdateDirty();
+}
+function escSetTab(name){
+  document.querySelectorAll('#mEsc .esc-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  $('escPaneSettings').classList.toggle('hidden', name !== 'settings');
+  $('escPaneWiring').classList.toggle('hidden', name !== 'wiring');
+}
+function escUpdatePill(state){
+  const map = { offline:['Offline',''], reading:['Reading…','reading'],
+    live:['Live · ESC','live'], sim:['Simulated','sim'], err:['Error','err'] };
+  const m = map[state] || map.offline;
+  $('escPill').textContent = m[0]; $('escPill').className = 'esc-pill ' + m[1];
+}
+function escShowEmpty(){
+  const b = $('escBody'); b.textContent = '';
+  const d = escEl('div', 'esc-empty');
+  d.appendChild(escEl('div', 'big', 'No ESC connected'));
+  const p = escEl('div');
+  p.appendChild(document.createTextNode('Wire the ESC to the Pi (see '));
+  p.appendChild(escEl('b', null, 'Wiring & Setup'));
+  p.appendChild(document.createTextNode('), then press '));
+  p.appendChild(escEl('b', null, '↻ Read ESC'));
+  p.appendChild(document.createTextNode(' below.'));
+  d.appendChild(p);
+  if (escS.meta && escS.meta.sim){
+    const s = escEl('div', null, 'Simulator mode — Read returns a demo ESC you can edit freely.');
+    s.style.cssText = 'margin-top:9px;color:var(--accent)'; d.appendChild(s);
+  }
+  b.appendChild(d);
+}
+function escShowError(msg){
+  const b = $('escBody'); b.textContent = '';
+  const d = escEl('div', 'esc-empty err');
+  d.appendChild(escEl('div', 'big', 'Couldn’t read the ESC'));
+  d.appendChild(escEl('div', null, msg));
+  const p = escEl('div'); p.style.marginTop = '9px';
+  p.appendChild(document.createTextNode('Check the '));
+  p.appendChild(escEl('b', null, 'Wiring & Setup'));
+  p.appendChild(document.createTextNode(' tab, power-cycle the ESC, then Read again.'));
+  d.appendChild(p);
+  b.appendChild(d);
+}
+function escRenderFields(){
+  const body = $('escBody'); body.textContent = '';
+  const groups = (escS.meta && escS.meta.groups) || [
+    { key:'drive', label:'Drive' }, { key:'protect', label:'Protection' },
+    { key:'tune', label:'Tuning' }, { key:'info', label:'ESC Info' }];
+  groups.forEach(g => {
+    const fs = escS.fields.filter(f => f.group === g.key);
+    if (!fs.length) return;
+    const wrap = escEl('div', 'esc-grp' + (g.key === 'info' ? ' info' : ''));
+    wrap.appendChild(escEl('div', 'esc-grp-hd', g.label));
+    fs.forEach(f => wrap.appendChild(escRow(f)));
+    body.appendChild(wrap);
+  });
+}
+function escRow(f){
+  const row = escEl('div', 'esc-row' + (f.important ? ' important' : ''));
+  row.dataset.key = f.key;
+  const warn = f.kind === 'bool' && f.warn_when != null && ((!!escCurVal(f)) === (!!f.warn_when));
+  const changed = f.key in escS.pending;
+  if (warn) row.classList.add('warn');
+  if (changed) row.classList.add('changed');
+  const l = escEl('div', 'esc-row-l');
+  const lbl = escEl('div', 'esc-row-lbl');
+  lbl.appendChild(escEl('span', null, f.label));
+  if (f.important) lbl.appendChild(escEl('span', 'esc-star', '★'));
+  if (warn) lbl.appendChild(escEl('span', 'esc-warn', '⚠'));
+  if (changed) lbl.appendChild(escEl('span', 'esc-chg', 'edited'));
+  l.appendChild(lbl);
+  if (f.help) l.appendChild(escEl('div', 'esc-row-help', f.help));
+  row.appendChild(l);
+  const c = escEl('div', 'esc-row-c');
+  if (f.editable === false) c.appendChild(escInfoCtl(f));
+  else if (f.kind === 'bool') c.appendChild(escBoolCtl(f, warn));
+  else if (f.kind === 'num') c.appendChild(escNumCtl(f));
+  else c.appendChild(escInfoCtl(f));
+  row.appendChild(c);
+  return row;
+}
+function escBoolCtl(f, warn){
+  const wrap = escEl('div', 'esc-ctl-bool');
+  const cur = !!escCurVal(f);
+  const btn = escEl('button', 'esc-tgl' + (cur ? ' on' : '') + (warn ? ' warn' : ''));
+  btn.type = 'button'; btn.setAttribute('role', 'switch');
+  btn.setAttribute('aria-checked', cur ? 'true' : 'false'); btn.setAttribute('aria-label', f.label);
+  btn.appendChild(escEl('span', 'knob'));
+  btn.onclick = () => escSet(f.key, !cur);
+  wrap.appendChild(btn);
+  wrap.appendChild(escEl('span', 'esc-tgl-state' + (cur ? ' on' : '') + (warn ? ' warn' : ''), cur ? 'ON' : 'OFF'));
+  return wrap;
+}
+function escNumCtl(f){
+  const wrap = escEl('div', 'esc-ctl-num');
+  const cur = escCurVal(f);
+  const rng = escEl('input', 'esc-range'); rng.type = 'range';
+  if (f.min != null) rng.min = f.min;
+  if (f.max != null) rng.max = f.max;
+  rng.step = f.step || 1; rng.value = cur; rng.setAttribute('aria-label', f.label);
+  const val = escEl('div', 'esc-numval');
+  const v = escEl('span', 'v', escFmt(cur, f)); val.appendChild(v);
+  if (f.unit) val.appendChild(escEl('span', 'u', f.unit));
+  rng.oninput = () => { v.textContent = escFmt(parseFloat(rng.value), f); };
+  rng.onchange = () => escSet(f.key, parseFloat(rng.value));
+  wrap.appendChild(rng); wrap.appendChild(val);
+  return wrap;
+}
+function escInfoCtl(f){
+  if (f.kind === 'boot'){
+    const ok = !!f.value;
+    return escEl('span', 'esc-chip ' + (ok ? 'ok' : 'warn'), ok ? 'Configured' : 'UNCONFIGURED');
+  }
+  return escEl('span', 'esc-chip', f.display != null ? String(f.display) : String(f.value));
+}
+function escSet(key, value){
+  const f = escS.fields.find(x => x.key === key); if (!f) return;
+  if (escEq(value, escS.orig[key], f)) delete escS.pending[key];
+  else escS.pending[key] = value;
+  const old = document.querySelector('#mEsc .esc-row[data-key="' + key + '"]');
+  if (old) old.replaceWith(escRow(f));
+  escUpdateDirty();
+}
+function escUpdateDirty(){
+  const n = Object.keys(escS.pending).length;
+  $('escWriteBtn').disabled = n === 0 || !escS.connected;
+  $('escWriteBtn').textContent = n ? ('WRITE ' + n + ' CHANGE' + (n > 1 ? 'S' : '')) : 'WRITE CHANGES';
+  $('escDirty').textContent = n ? (n + ' unsaved change' + (n > 1 ? 's' : '')) : '';
+  $('escRevertBtn').style.display = n ? 'inline-block' : 'none';
+  const dot = $('escTabDot'); if (dot) dot.parentElement.classList.toggle('dirty', n > 0);
+}
+async function escRead(){
+  escUpdatePill('reading');
+  const btn = $('escReadBtn'); btn.disabled = true;
+  try{
+    const r = await postApi('esc/read', {});
+    escApply(r);
+    toast(r.sim ? '✓ ESC read (simulated)' : '✓ ESC settings read', true);
+  }catch(e){
+    escS.connected = false; escUpdatePill('err'); escShowError(e.message);
+    escUpdateDirty(); toast('✗ ' + e.message, false);
+  }finally{ btn.disabled = false; }
+}
+function escApply(r){
+  escS.connected = true; escS.sim = !!r.sim; escS.fields = r.fields || [];
+  escS.orig = {}; escS.fields.forEach(f => { escS.orig[f.key] = f.value; });
+  escS.pending = {};
+  if (r.groups){ escS.meta = escS.meta || {}; escS.meta.groups = r.groups; }
+  if (r.wiring){
+    escS.meta = escS.meta || {};
+    escS.meta.wiring = r.wiring; escS.meta.wiring_note = r.wiring_note;
+    escS.meta.setup_cmds = r.setup_cmds; escS.meta.sim = r.sim;
+    escRenderWiring();
+  }
+  escRenderFields();
+  escUpdatePill(escS.sim ? 'sim' : 'live');
+  escUpdateDirty();
+}
+async function escWrite(){
+  const changes = Object.assign({}, escS.pending);
+  const keys = Object.keys(changes);
+  if (!keys.length) return;
+  if (!escS.sim && !confirm('Write ' + keys.length + ' setting' + (keys.length > 1 ? 's' : '')
+      + ' to the ESC EEPROM?\n\nProps off, boat on the bench.')) return;
+  const w = $('escWriteBtn'), orig = w.textContent;
+  w.disabled = true; w.textContent = 'WRITING…';
+  try{
+    const r = await postApi('esc/write', { changes });
+    const n = (r.changed || []).length;
+    escApply(r);
+    toast(r.sim ? ('✓ ' + n + ' setting' + (n === 1 ? '' : 's') + ' updated (sim)')
+                : ('✓ ' + n + ' setting' + (n === 1 ? '' : 's') + ' written & verified'), true);
+  }catch(e){
+    toast('✗ ' + e.message, false); w.textContent = orig; w.disabled = false;
+  }
+}
+function escRevert(){ escS.pending = {}; escRenderFields(); escUpdateDirty(); }
+function escRenderWiring(){
+  const p = $('escWireDyn'); if (!p) return; p.textContent = '';
+  const m = escS.meta;
+  if (!m || !m.wiring){ p.appendChild(escEl('div', 'esc-empty', 'Wiring info unavailable — reopen the panel.')); return; }
+  if (m.wiring_note) p.appendChild(escEl('div', 'esc-wire-note', '⚠ ' + m.wiring_note));
+  const tbl = escEl('table', 'esc-wire-tbl');
+  const hr = escEl('tr'); ['Wire', 'Pi connection', 'Note'].forEach(h => hr.appendChild(escEl('th', null, h))); tbl.appendChild(hr);
+  (m.wiring || []).forEach(w => {
+    const tr = escEl('tr');
+    tr.appendChild(escEl('td', null, w.from));
+    tr.appendChild(escEl('td', 'pin', w.to));
+    tr.appendChild(escEl('td', 'note', w.note));
+    tbl.appendChild(tr);
+  });
+  p.appendChild(tbl);
+  p.appendChild(escEl('div', 'esc-setup-hd', 'One-time Pi setup — enables /dev/ttyAMA0'));
+  (m.setup_cmds || []).forEach(cmd => {
+    const row = escEl('div', 'esc-cmd');
+    row.appendChild(escEl('code', null, cmd));
+    const cp = escEl('button', 'cp', 'copy'); cp.type = 'button';
+    cp.onclick = () => escCopy(cmd, cp);
+    row.appendChild(cp);
+    p.appendChild(row);
+  });
+  const doc = escEl('div', 'esc-doc');
+  doc.appendChild(document.createTextNode('Full guide: '));
+  doc.appendChild(escEl('code', null, 'docs/am32_config.md'));
+  doc.appendChild(document.createTextNode(' · settings reference: '));
+  doc.appendChild(escEl('code', null, 'docs/esc_setup.md'));
+  p.appendChild(doc);
+}
+function escCopy(text, btn){
+  const done = () => { const o = btn.textContent; btn.textContent = 'copied ✓'; setTimeout(() => { btn.textContent = o; }, 1200); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done);
+  else done();
 }
 // ---- saved-path picker (paths are created/edited in /planner) --------------
 let savedPaths = [], selPath = null;

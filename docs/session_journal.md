@@ -31,6 +31,44 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-26 — Designer-grade ESC Settings editor (dashboard) + endpoints + tests
+
+**Worked on:** finished the interrupted ESC-config UI. A prior session had refactored
+`am32_config.py` into a library (`FIELDS` registry, `read/write_settings`, `decode_eeprom`, mock EEPROM,
+wiring/setup constants) explicitly *"for the dashboard ESC editor"* — but the server endpoints and the
+actual editor were never built; the modal was still the old "arm am32.ca passthrough" stub. Built the
+whole thing and verified it on the Pi.
+**Changed:**
+- `pi5/server/app.py` — new `POST /api/esc/read`, `POST /api/esc/write`, `GET /api/esc/meta` (+ a
+  persistent `_esc_mock` sim buffer). Hardware path runs `am32_config.read/write_settings` in a
+  threadpool (blocking pyserial) and refuses during a running mission; sim path serves + mutates the
+  mock so the editor is fully usable with no hardware. 400 (bad key/value) vs 502 (link/verify) split.
+- `pi5/scripts/am32_config.py` — `_decode_field` now emits `warn_when` for bool fields so the UI
+  recomputes the amber "risky state" live on toggle (the registry itself already existed).
+- `pi5/server/templates/command_center.html` — replaced the passthrough stub with a full
+  **⚡ ESC SETTINGS** modal rendered straight from the field registry: grouped Drive/Protection/Tuning/
+  Info sections, real toggle switches + range sliders + info chips, ★ important flags, amber warn rows
+  (⚠ + reason) that flip live, dirty/"EDITED" tracking with a sticky Read / Revert / Write action bar
+  (Write sends only changed keys, server-verified), and a **Wiring & Setup** tab with the pin table +
+  copy-paste one-time `uart0` commands + doc links + the am32.ca passthrough demoted to an Advanced
+  collapsible. New `⚡ ESC SETTINGS` button in COMMANDS→DRIVE; ⚙ MOTORS renamed ⚙ TRIM and links to it.
+  All device-derived text set via textContent (no innerHTML).
+- `pi5/tests/test_am32_config.py` (NEW, 21 tests) — decode/scaling/warn-flags/encode-validate/
+  all-or-nothing/round-trip on the library the endpoints call.
+- Docs: `docs/am32_config.md` + `docs/esc_setup.md` now present the dashboard editor as the easiest
+  setup path (same GPIO-UART backend as the CLI).
+**Verified on the Pi:** `pytest pi5/tests` **194 green** (+21), ruff clean, the inline `<script>` passes
+`node --check`. Booted the sim and hit the live endpoints via curl — meta/read/write, sim-write
+persistence, warn-flip (bidir OFF → warn), and 400s on out-of-range/unknown/empty. Rendered the modal
+with a faithful chromium harness (real CSS + markup + render fns + live payload): the Settings tab, the
+edited+warn state, and the Wiring tab all read as designer-grade.
+**Decisions / open questions:** the underlying `am32_config` read/write was already hardware-proven on
+the NeutronRC G071; only the new FastAPI/threadpool wrapper is unexercised on metal — wants one on-bench
+pass over `/dev/ttyAMA0`. Web-font (Orbitron) fetch hangs headless chromium on this ARM Pi, so the render
+harness strips it (live page is unaffected).
+**Next steps:** on-bench — wire an ESC to the Pi UART, open ⚡ ESC SETTINGS, Read/Write a real ESC end to
+end; then the outstanding telemetry-on-GP16 check (motor spinning). Nothing committed — tree left for review.
+
 ## 2026-07-26 — CV overlay fixed (no model → COCO ONNX), MJPG 720p, HUD de-conflict, auto-exposure
 
 **Worked on:** user reported the command-center CV showed **no bounding boxes**, the top-right
@@ -310,78 +348,8 @@ only WARNs (doesn't ESTOP). Did NOT modernize `on_event`→`lifespan` (risky wit
 run_sim.py` and exercise **pause/resume mid-transit and mid-DATA-waypoint** (the changed uncovered
 path), then `npm run dev` both UIs for a visual pass; then triage the firmware S1–S4 safety findings.
 
-## 2026-07-24 — Vision pipeline: full audit + efficiency pass (15 fps water target)
-
-**Worked on:** user asked to fully check + optimize the vision code, find a water-vision library, and
-hit ~15 fps Tier-1 water detection with YOLO at a lower-but-high rate. Audited all of `pi5/cv/*` + the
-server MJPEG path statically (no Python interpreter/WSL available in this session — see caveat).
-**Root bottleneck found + fixed:** `StereoDepth.compute()` ran SGBM + `reprojectImageTo3D` at full
-1080p *inside* `vision_overlay._infer`, so every inference with a detection present collapsed detect
-FPS to ~1-2/s (this was the exact tradeoff flagged in the 2026-07-01 archive entry).
-**Changed:**
-- `pi5/cv/stereo.py` — `StereoDepth(calib, downscale=0.5)`: rectify at full res, then run SGBM +
-  reproject on a downscaled pair (~4× cheaper) with a **rescaled Q** (`Q[:, :3] /= s`, an exact
-  coordinate change → depth stays metrically correct) and a scale-matched disparity range; upsample
-  disp/depth back to full res so callers (bbox lookup, `/video?cam=disparity`) are unchanged.
-  `downscale=1.0` reproduces the old path exactly.
-- `pi5/cv/onnx_detector.py` — YOLO preproc now uses `cv2.dnn.blobFromImage` (one C++ call: swapRB +
-  /255 + HWC→NCHW) instead of manual cvtColor/astype/transpose copies. Geometry unchanged (letterbox
-  still applied first).
-- `pi5/cv/segmentation.py` — added an **ONNX water-seg backend** (onnxruntime, already a dep — no new
-  package) alongside the classical + TFLite paths, auto-selected by file extension. Handles WaSR/eWaSR-
-  style `(1,C,H,W)`/`(1,H,W,C)` class maps and single water-probability outputs; `seg_water_class` /
-  `seg_ignore_classes` / `seg_normalize` / `seg_input_size` are config-driven. Classical path (and its
-  tests) untouched. New `_seg_mask` reducer has 3 unit tests.
-- `pi5/config.yaml` — `stereo_downscale: 0.5`; `vision.tier1_max_fps 20→15` (the water target);
-  detection `imgsz 416→320`, `detect_max_fps 8→10` (keeps YOLO high but under the 15 fps screen);
-  seg model default `.tflite→.onnx` + the new seg knobs, documented.
-- `run_hardware.py` — passes `camera.stereo_downscale` into `StereoDepth`.
-- `pi5/scripts/benchmark_vision.py` (new) — per-stage FPS harness (Tier-1 seg / YOLO / stereo at each
-  downscale) for the Pi. `docs/water_vision.md` (new) — backend guide + eWaSR/WaSR recommendation.
-**Decisions / open questions:**
-- **Not executed/verified here** — no Python, WSL, conda, or ruff in this Windows session (the
-  2026-07-23 Py 3.14.4 env is gone). All edits are static-review only. Run `pytest pi5/tests` and
-  `python -m pi5.scripts.benchmark_vision` **on the Pi** to confirm. On a Pi 5 *CPU*, the classical
-  screen easily does 15 fps; a full seg DNN (eWaSR) does not — it's wired as an optional accuracy/
-  accelerator path, documented as such.
-- `pi5/cv/avoidance.py` + `detector.py` (`BoatDetector`) are **dead code** — never instantiated by
-  `run_hardware.py` (the pipeline + threat_assessor + radar are the live obstacle path). Left in place;
-  flagged as a consolidation candidate.
-**Next steps:** on the Pi — `pytest pi5/tests`, then `benchmark_vision.py`; tune `imgsz` /
-`tier1_max_fps` / `stereo_downscale` to the measured numbers. Optionally export an eWaSR model to
-`pi5/cv/models/water_seg.onnx` (see `docs/water_vision.md`) if HSV isn't robust enough in glare.
-
-**Follow-on (same session): hybrid Tier-1 (classical 15 fps screen + eWaSR spot-check).** User asked
-to "run eWaSR instead" and whether a Coral M.2 would work. Verified (web): Coral is a poor fit —
-INT8-TFLite-only (not ONNX), can't run eWaSR's transformer ops, no official Pi 5 support, pycoral
-stuck on Py 3.6-3.9 (repo is 3.14); **Hailo AI HAT+ is the right accelerator** (ONNX-native, 1st-party
-Pi 5). Also: eWaSR on the Pi CPU is ~2-8 fps, so it can't be the 15 fps primary. User chose the
-**hybrid**, which I built:
-- `pi5/cv/pipeline.py` — added `_confirm_seg` (optional DNN water model) on a **separate slow async
-  loop** (`_confirm_loop`, `seg_confirm_max_fps` ~2 Hz) so its ~200 ms inference never stalls the fast
-  15 fps classical loop. A fresh verdict (within `seg_confirm_ttl_s`) becomes the authoritative
-  `water_state` and can wake YOLO on obstacles HSV missed — **fail-safe: only ever ADDS triggers**.
-  `vision_state()` gains a `confirm` block. Hybrid is **off unless a real DNN model loads** (two
-  classical screens would be pointless), so existing behaviour/tests are unchanged.
-- `pi5/config.yaml` — `seg_model_path` now **empty** (classical primary); new `seg_confirm_model_path`
-  (`…/water_seg.onnx`), `seg_confirm_max_fps: 2`, `seg_confirm_ttl_s: 3`. (Supersedes this entry's
-  earlier "seg_model_path default → .onnx" bullet.)
-- `pi5/tests/test_vision_pipeline.py` — +3 hybrid tests (confirm wakes YOLO on clear water; stale
-  verdict ignored; hybrid off without a model). `docs/water_vision.md` — hybrid section + Coral-vs-Hailo.
-- `ml/export_ewasr.py` (new) — one-command eWaSR→ONNX exporter producing
-  `pi5/cv/models/water_seg.onnx` (+ tracked `water_seg_info.json`). Confirmed against the eWaSR repo
-  (tersekmatija/eWaSR): forces the single-input `ewasr_resnet18` variant (IMU variant is 2-input and
-  won't load), mirrors their `torch.onnx.export(model, {"x": {"image","imu_mask"}}, opset=12,
-  output_names=["prediction","intermediate"])` (non-IMU prunes imu_mask → 1 input), ImageNet norm,
-  MaSTr1325 class order 0=obstacle/1=water/2=sky (matches config). `--self-check` runs onnxruntime on a
-  water frame to confirm class order. Weights from the 0.1.0 GitHub release; run on a GPU box, scp the
-  .onnx to the Pi. Decided **Hailo AI HAT+** over Coral if acceleration is wanted (Coral = INT8-TFLite
-  only, no ONNX, no transformer ops, pycoral stuck on Py 3.6-3.9).
-**Still needs the Pi:** run `ml/export_ewasr.py` on a GPU box, scp `water_seg.onnx` to the Pi, then
-`pytest pi5/tests` + `benchmark_vision.py` to confirm. I did not fetch/train the model (no GPU/Python
-here, and shouldn't download weights unprompted).
-
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
      third-downloaded-file audit, repomix/rtk, token-optimization config pass) live in
      docs/session_journal_archive.md. -->
+

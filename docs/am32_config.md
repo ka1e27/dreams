@@ -14,6 +14,19 @@ adapter, or an ST-Link).
 > devices, so it never offers the Pi's GPIO UART (`/dev/ttyAMA0`). A USB-TTL
 > adapter would work in am32.ca (it's USB), but this tool avoids needing one.
 
+## From the dashboard (easiest — no CLI)
+
+This module is also the backend for the command center's **ESC Settings** editor
+(COMMANDS → DRIVE → **⚡ ESC SETTINGS**). Wire the ESC as below, open the modal's
+**Wiring & Setup** tab (it lists the pinout and the one-time `uart0` commands with
+copy buttons), press **Read ESC**, edit with the toggles/sliders, then **Write
+Changes** — read-modify-write with read-back verification, exactly like the CLI.
+The UI renders directly from the `FIELDS` registry in this file, so the two never
+drift. `pi5/server/app.py` exposes `POST /api/esc/read` + `POST /api/esc/write`
+(and `GET /api/esc/meta` for the wiring guide); in the simulator they serve a
+persistent mock ESC so the whole editor is usable with no hardware attached. The
+CLI below is the same thing, headless.
+
 ## Wiring (one-wire half-duplex → the Pi's 2-wire UART)
 
 ```
