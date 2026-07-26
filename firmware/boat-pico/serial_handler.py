@@ -43,6 +43,15 @@ passthrough_requested = None
 _stdin_poll = select.poll()
 _stdin_poll.register(sys.stdin, select.POLLIN)
 
+# Non-blocking poll on stdout (USB CDC TX). If the Pi stops draining the CDC the
+# RP2040 TX buffer fills, and a plain sys.stdout.write() then busy-loops forever —
+# stalling the single asyncio loop so task_watchdog never runs and a lost heartbeat
+# never fires ESTOP (the AM32 ESCs hold their last PWM, so the boat drives away).
+# _send() polls POLLOUT before each byte and drops the rest of a frame when the
+# buffer is full. Mirrors the non-blocking stdin poll above.
+_stdout_poll = select.poll()
+_stdout_poll.register(sys.stdout, select.POLLOUT)
+
 
 def _checksum(payload):
     """XOR checksum over payload string."""
@@ -53,10 +62,22 @@ def _checksum(payload):
 
 
 def _send(payload):
-    """Frame and send a message over USB serial (stdout)."""
+    """Frame and send a message over USB serial (stdout) — never blocking.
+
+    Writes byte-at-a-time behind a POLLOUT check so a Pi that has stopped reading
+    can never wedge the event loop here (see _stdout_poll above). Dropping frames
+    under back-pressure is safe: telemetry is periodic and the Pi validates every
+    frame's checksum, so a truncated frame is simply ignored.
+    """
     cs = _checksum(payload)
     msg = "$%s*%d\n" % (payload, cs)
-    sys.stdout.write(msg)
+    try:
+        for ch in msg:
+            if not _stdout_poll.poll(0):   # TX buffer full -> Pi not reading -> drop rest
+                break
+            sys.stdout.write(ch)
+    except:
+        pass
 
 
 def ack(seq, cmd, *args):

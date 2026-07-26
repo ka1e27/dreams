@@ -215,7 +215,10 @@ async def task_fast_sensors():
     global _pending_pod_seq
     while True:
         try:
-            gps.read()
+            # Do NOT read UART1 here — task_uart1_reader is the SOLE UART1 reader; it
+            # demuxes $GP*/$GN* to gps._parse_rmc and $POD to pod_uart. A second
+            # gps.read() raced it, so each stole bytes from the other and GPS fixes
+            # *and* $POD frames (incl. the pod leak flag) were intermittently lost.
             compass.read()
             sensors.read_all_fast()
 

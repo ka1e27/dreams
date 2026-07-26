@@ -87,7 +87,13 @@ per `docs/esc_telemetry.md`; (3) regen stale `pin_map.md`; (4) pi5/cloud one-lin
   (USART1 115200 8N1 open-drain) and the transmit sits in the commutation path → **likely only streams
   while a motor is spinning**. No motor connected, so `esc_telem` correctly sees 0 bytes. Left for the
   user to finish: motor (props off) + throttle, and confirm GP16 is on the ESC's actual telemetry pad (PB6).
-**Still uncommitted.** Working `am32_config.py` + all firmware/pi5/UI/doc changes from this session.
+**Committed + pushed** as `c70a8f0`. Then **fixed the two firmware safety criticals** (deployed to the
+Pico + verified telemetry still flows with valid checksums): **S1** — removed the racing `gps.read()` from
+`task_fast_sensors` so `task_uart1_reader` is the sole UART1 reader (it demuxes GPS + `$POD`; the double
+read was shredding GPS fixes and the pod leak frame). **S2** — `serial_handler._send()` now writes
+byte-at-a-time behind a `POLLOUT` poll (`_stdout_poll`) and drops the rest of a frame under back-pressure,
+so a Pi that stops draining the CDC can no longer wedge the asyncio loop and starve the heartbeat
+watchdog. S1/S2 changes (`main.py`, `serial_handler.py`) + this note uncommitted.
 
 ## 2026-07-25 — Deep review: LOS nav, obstacle avoidance wired, vision perf, Abyssal Indigo UI
 
