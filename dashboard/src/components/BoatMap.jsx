@@ -29,16 +29,20 @@ function BoatMarker({ lat, lon, heading }) {
   const markerRef = useRef(null)
 
   useEffect(() => {
-    if (markerRef.current) {
-      const el = markerRef.current.getElement()
-      if (el) {
-        el.style.transform += ` rotate(${heading}deg)`
-        el.style.transformOrigin = 'center center'
-      }
-    }
+    const el = markerRef.current?.getElement()
+    if (!el) return
+    // Replace any existing rotate(...) rather than appending: Leaflet
+    // rewrites el.style.transform (translate3d) whenever the marker's
+    // position changes, but NOT when only heading changes (e.g. the
+    // align-first navigator pivoting in place before driving a leg with
+    // lat/lon constant). Appending unconditionally (`+=`) accumulated an
+    // unbounded chain of rotate() functions in that case.
+    const base = el.style.transform.replace(/\s*rotate\([^)]*\)/, '')
+    el.style.transform = `${base} rotate(${heading}deg)`
+    el.style.transformOrigin = 'center center'
   }, [heading])
 
-  if (!lat || !lon) return null
+  if (lat == null || lon == null) return null
   return <Marker ref={markerRef} position={[lat, lon]} icon={BOAT_ICON} />
 }
 
@@ -51,11 +55,17 @@ function MapFollower({ lat, lon }) {
 }
 
 function MapClickHandler({ onMapClick }) {
-  useMapEvents({
+  // useMapEvents re-subscribes (map.off + map.on) whenever the handlers
+  // object identity changes; an inline object literal here was a new
+  // reference on every render of BoatMap (i.e. every telemetry tick),
+  // rebinding the click listener ~1x/sec for no reason. Memoize so it
+  // only rebinds when onMapClick itself actually changes.
+  const handlers = useMemo(() => ({
     click(e) {
-      if (onMapClick) onMapClick(e.latlng.lat, e.latlng.lng)
+      onMapClick?.(e.latlng.lat, e.latlng.lng)
     },
-  })
+  }), [onMapClick])
+  useMapEvents(handlers)
   return null
 }
 

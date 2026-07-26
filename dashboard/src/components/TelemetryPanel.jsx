@@ -32,7 +32,7 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
     <>
       {/* Connection */}
       <div className="card">
-        <div className="card-header">Connection</div>
+        <div className="card-header card-header--connection">Connection</div>
         <div className="card-body">
           <div className="data-row">
             <span className="data-label">Status</span>
@@ -46,7 +46,7 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
 
       {/* Navigation */}
       <div className="card">
-        <div className="card-header">Navigation</div>
+        <div className="card-header card-header--nav">Navigation</div>
         <div className="card-body">
           <div className="data-row">
             <span className="data-label">Position</span>
@@ -83,7 +83,7 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
 
       {/* Battery & Hull */}
       <div className="card">
-        <div className="card-header">Power & Hull</div>
+        <div className="card-header card-header--power">Power & Hull</div>
         <div className="card-body">
           <div className="data-row">
             <span className="data-label">Drive (3× M18)</span>
@@ -134,7 +134,7 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
 
       {/* Environment */}
       <div className="card">
-        <div className="card-header">Environment</div>
+        <div className="card-header card-header--env">Environment</div>
         <div className="card-body">
           <div className="data-row">
             <span className="data-label">Air</span>
@@ -165,7 +165,7 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
 
       {/* Sensor Health */}
       <div className="card">
-        <div className="card-header">Sensor Health</div>
+        <div className="card-header card-header--sensor">Sensor Health</div>
         <div className="card-body">
           <div className="health-grid">
             {HEALTH_LABELS.map((label, i) => {

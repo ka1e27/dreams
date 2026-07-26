@@ -33,8 +33,10 @@ import asyncio
 import datetime
 import logging
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .avoidance import AvoidanceConfig, AvoidanceController
 from .segmentation import ANOMALY_TRIGGER_THRESHOLD, WaterSegmentation, WaterState
 from .threat_assessor import ThreatAssessor, ThreatLevel, threat_level_for
 
@@ -56,7 +58,7 @@ class SurveyVisionPipeline:
 
     def __init__(self, camera, overlay=None, radar=None, *,
                  config: dict | None = None, seg: WaterSegmentation | None = None,
-                 pico=None, uploader=None,
+                 pico=None, uploader=None, navigator=None,
                  fov_deg: float = 75.0, frame_width: int = 1920) -> None:
         cfg = config or {}
         self._camera = camera
@@ -64,8 +66,10 @@ class SurveyVisionPipeline:
         self._radar = radar              # EXISTING RadarTracker — do NOT rewrite
         self._pico = pico                # for GPS (telemetry) + future alert hook
         self._uploader = uploader        # optional CloudUploader; no-op if None
+        self._navigator = navigator      # optional Navigator — reactive avoidance
         self.fov_deg = float(cfg.get("fov_degrees", fov_deg))
         self._frame_width = int(frame_width)
+        self._frame_height = 0
 
         self.trigger_threshold = float(
             cfg.get("anomaly_trigger_threshold", ANOMALY_TRIGGER_THRESHOLD))
@@ -77,13 +81,56 @@ class SurveyVisionPipeline:
         self._tracking_enabled = bool(tt.get("enabled", True))
         self._clear_timeout_s = float(tt.get("clear_timeout_s", 5.0))
         self.seg = seg or WaterSegmentation(
-            cfg.get("seg_model_path"), self.trigger_threshold)
+            cfg.get("seg_model_path"), self.trigger_threshold, config=cfg)
+
+        # Hybrid confirmation (Tier-1b): an optional higher-accuracy DNN water
+        # model (eWaSR) run on a *separate slow loop* so it never blocks the fast
+        # 15 fps classical screen. It refines the reported water_state and can
+        # wake YOLO on obstacles the HSV screen misses (fail-safe: it only *adds*
+        # triggers, never suppresses them). Off entirely unless a real model
+        # loads — two classical screens would be pointless.
+        self._confirm_max_fps = float(cfg.get("seg_confirm_max_fps", 2.0))
+        self._confirm_ttl_s = float(cfg.get("seg_confirm_ttl_s", 3.0))
+        self._confirm_seg = None
+        confirm_path = cfg.get("seg_confirm_model_path")
+        if confirm_path and Path(confirm_path).exists():
+            cseg = WaterSegmentation(confirm_path, self.trigger_threshold, config=cfg)
+            if cseg.backend != "classical":
+                self._confirm_seg = cseg
+            else:
+                logger.info("Confirm seg model %s loaded no DNN backend — hybrid "
+                            "spot-check disabled (classical screen only)", confirm_path)
         self.threat = ThreatAssessor(
             approach_detection_frames=int(tt.get("approach_detection_frames", 5)),
             approach_size_threshold=float(tt.get("approach_size_threshold", 1.10)),
             track_warning_if_approaching=bool(tt.get("track_warning_if_approaching", True)),
             mission_alert_distance_m=float(tt.get("mission_alert_distance_m", 30.0)),
         )
+
+        # Reactive obstacle avoidance — pushes a steer-away override into the
+        # navigator when the primary threat enters the avoidance envelope. Only
+        # active when a navigator is wired (hardware mode). Distance comes from
+        # stereo depth when available, else a coarse monocular bbox-size proxy.
+        ra = cfg.get("reactive_avoidance", {}) or {}
+        self.avoidance_enabled = bool(ra.get("enabled", True))
+        nav_cruise = int(getattr(getattr(navigator, "_config", None),
+                                 "cruise_throttle", 40))
+        self._avoid_cfg = AvoidanceConfig(
+            trigger_distance_m=float(ra.get("trigger_distance_m", 8.0)),
+            critical_distance_m=float(ra.get("critical_distance_m", 3.0)),
+            cruise_throttle=int(ra.get("cruise_throttle", nav_cruise)),
+            max_steer=int(ra.get("max_steer", 65)),
+            head_on_deg=float(ra.get("head_on_deg", 8.0)),
+            min_forward_frac=float(ra.get("min_forward_frac", 0.2)),
+        )
+        # Bug-style controller: commits to a side and passes the hazard instead of
+        # orbiting it. Forward-only sensing here (the camera can't see behind), so
+        # it leans on the blind pass-hold once a threat leaves the forward view.
+        self._avoid_ctrl = AvoidanceController(
+            self._avoid_cfg,
+            pass_hold_s=float(ra.get("pass_hold_s", 6.0)),
+            pass_bearing_deg=float(ra.get("pass_bearing_deg", 110.0)))
+        self._avoiding = False
         sl = cfg.get("survey_logging", {}) or {}
         self._survey_min_conf = float(sl.get("min_confidence", 0.6))
         self._survey_min_anomaly = float(sl.get("min_anomaly_score", 0.20))
@@ -95,7 +142,10 @@ class SurveyVisionPipeline:
 
         # Runtime state.
         self._task: asyncio.Task[None] | None = None
+        self._confirm_task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
+        self._confirm_result = None       # latest SegResult from the DNN spot-check
+        self._confirm_t = 0.0             # time.monotonic() of that result
         self._yolo_hold = 0
         self._engaged = False
         self._tracked_class: str | None = None
@@ -118,16 +168,29 @@ class SurveyVisionPipeline:
     async def start(self) -> None:
         self._stop.clear()
         self._task = asyncio.create_task(self._loop())
-        logger.info("Survey vision pipeline started (seg=%s, gate_yolo=%s)",
-                    self.seg.backend, self._gate_yolo)
+        if self._confirm_seg is not None:
+            self._confirm_task = asyncio.create_task(self._confirm_loop())
+        logger.info("Survey vision pipeline started (seg=%s, confirm=%s, gate_yolo=%s)",
+                    self.seg.backend,
+                    self._confirm_seg.backend if self._confirm_seg else "off",
+                    self._gate_yolo)
 
     async def stop(self) -> None:
         self._stop.set()
-        if self._task is not None:
+        for task in (self._task, self._confirm_task):
+            if task is not None:
+                try:
+                    await task
+                except Exception:  # noqa: BLE001
+                    pass
+        # Never leave a stale steer-away override latched on the navigator.
+        if self._avoiding and self._navigator is not None:
             try:
-                await self._task
+                self._navigator.set_avoidance_override(0, 0)
             except Exception:  # noqa: BLE001
                 pass
+            self._avoiding = False
+        self._avoid_ctrl.reset()
 
     # -- operator toggles --------------------------------------------------- #
     def set_segmentation_enabled(self, enabled: bool) -> bool:
@@ -139,6 +202,20 @@ class SurveyVisionPipeline:
         if not self.yolo_enabled and self._overlay is not None:
             self._overlay.enabled = False
         return self.yolo_enabled
+
+    def set_avoidance_enabled(self, enabled: bool) -> bool:
+        """Enable/disable reactive obstacle avoidance. Turning it off releases any
+        active steer-away override back to the navigator immediately."""
+        self.avoidance_enabled = bool(enabled)
+        if not self.avoidance_enabled and self._avoiding:
+            self._avoiding = False
+            self._avoid_ctrl.reset()
+            if self._navigator is not None:
+                try:
+                    self._navigator.set_avoidance_override(0, 0)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("avoidance release failed: %s", e)
+        return self.avoidance_enabled
 
     # -- main loop ---------------------------------------------------------- #
     async def _loop(self) -> None:
@@ -167,10 +244,48 @@ class SurveyVisionPipeline:
         finally:
             self._camera.unsubscribe(q)
 
+    async def _confirm_loop(self) -> None:
+        """Slow, decoupled DNN (eWaSR) spot-check. Its own camera subscription
+        and rate cap (``seg_confirm_max_fps``, ~1-2 Hz) so a ~200 ms segmentation
+        inference never stalls the fast 15 fps classical loop. Publishes the
+        latest verdict into ``self._confirm_result`` for ``_process`` to fold in."""
+        loop = asyncio.get_event_loop()
+        q = self._camera.subscribe()
+        last = 0.0
+        try:
+            while not self._stop.is_set():
+                try:
+                    frame = await asyncio.wait_for(q.get(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    continue
+                if not self.segmentation_enabled:
+                    continue
+                interval = 1.0 / max(0.1, self._confirm_max_fps)
+                now = time.monotonic()
+                if last and now - last < interval:
+                    continue
+                try:
+                    res = await loop.run_in_executor(
+                        None, self._confirm_seg.analyze, frame.left)
+                    self._confirm_result = res
+                    self._confirm_t = time.monotonic()
+                except Exception as e:  # noqa: BLE001 — a spot-check hiccup is harmless
+                    logger.debug("confirm seg error: %s", e)
+                last = time.monotonic()
+        finally:
+            self._camera.unsubscribe(q)
+
+    def _confirm_fresh(self, now: float) -> bool:
+        """True if the DNN spot-check verdict is recent enough to trust."""
+        return (self._confirm_result is not None and self._confirm_t > 0.0
+                and (now - self._confirm_t) <= self._confirm_ttl_s)
+
     def _process(self, frame, now: float) -> None:
         """One analysis pass (runs in an executor — blocking cv2 work)."""
         fw = frame.left.shape[1] if frame.left is not None else self._frame_width
         self._frame_width = fw
+        if frame.left is not None:
+            self._frame_height = frame.left.shape[0]
 
         # TIER 1 — segmentation (or pass-through when disabled).
         if self.segmentation_enabled:
@@ -186,6 +301,16 @@ class SurveyVisionPipeline:
             self._anomaly_regions = []
 
         triggered = self._anomaly_score >= self.trigger_threshold
+
+        # Hybrid Tier-1b: fold in a fresh DNN (eWaSR) spot-check. It's the
+        # authoritative water_state for the UI, and can wake YOLO on an obstacle
+        # the fast HSV screen missed — but it only *adds* triggers (fail-safe: a
+        # survey boat should over-wake rather than miss a hazard).
+        if self.segmentation_enabled and self._confirm_fresh(now):
+            cres = self._confirm_result
+            self._water_state = cres.water_state
+            if cres.anomaly_score >= self.trigger_threshold:
+                triggered = True
 
         # TIER 2 gate — wake YOLO on a trigger, hold it for the cooldown window.
         if self.yolo_enabled and triggered:
@@ -214,6 +339,9 @@ class SurveyVisionPipeline:
             self._primary = self.threat.update([], self._current_gps(), now=now)
             self._mission_alert = self.threat.get_mission_alert()
             self._drive_radar(now)
+
+        # Reactive avoidance rides on whatever the primary threat is now.
+        self._drive_avoidance(now)
 
     # -- tier 2 bridge ------------------------------------------------------ #
     def _detections_from_overlay(self) -> list[dict]:
@@ -282,6 +410,62 @@ class SurveyVisionPipeline:
             self._tracked_class = None
             logger.info("Threat cleared — radar resuming SCAN")
 
+    def _drive_avoidance(self, now: float) -> None:
+        """Push a steer-away override into the navigator for the primary threat.
+
+        The override only replaces waypoint steering while a hazard is inside the
+        avoidance envelope; when it clears we release the override exactly once
+        (set 0,0) so we don't fight the navigator every frame. Distance prefers
+        stereo depth and falls back to a coarse monocular bbox-size proxy, so
+        avoidance still works on a single-camera rig (less precisely).
+        """
+        nav = self._navigator
+        if nav is None or not self.avoidance_enabled:
+            return
+        p = self._primary
+        bearing = distance = None
+        if p is not None and p.threat_level >= ThreatLevel.WARNING:
+            distance = (p.distance_m if p.distance_m is not None
+                        else self._fallback_distance(p.bbox))
+            bearing = self._avoidance_bearing(p.bbox)
+        override = self._avoid_ctrl.update(bearing, distance, now)
+        if override is not None:
+            if not self._avoiding:
+                side = "STBD" if self._avoid_ctrl.committed_side > 0 else "PORT"
+                logger.info("AVOID engage (%s): %s → L=%d R=%d", side,
+                            p.class_name if p is not None else "?",
+                            override[0], override[1])
+            self._avoiding = True
+            try:
+                nav.set_avoidance_override(override[0], override[1])
+            except Exception as e:  # noqa: BLE001
+                logger.debug("avoidance override failed: %s", e)
+        elif self._avoiding:
+            self._avoiding = False
+            try:
+                nav.set_avoidance_override(0, 0)
+                logger.info("AVOID clear — hazard passed, steering to navigator")
+            except Exception as e:  # noqa: BLE001
+                logger.debug("avoidance release failed: %s", e)
+
+    def _avoidance_bearing(self, bbox) -> float:
+        """Threat bearing relative to the bow (deg, +starboard) from its position
+        in the forward camera frame. Assumes the detection camera looks ahead."""
+        center = self._frame_width / 2.0
+        if center <= 0:
+            return 0.0
+        cx = (bbox[0] + bbox[2]) / 2.0
+        return (cx - center) / center * (self.fov_deg / 2.0)
+
+    def _fallback_distance(self, bbox) -> float | None:
+        """Very rough monocular range from bbox height (assumes a ~3 m tall
+        target), used only when stereo depth is unavailable. None if unusable."""
+        h = self._frame_height or self._frame_width  # something sane
+        bh = max(1, bbox[3] - bbox[1])
+        if h <= 0:
+            return None
+        return 3.0 * (h / bh)
+
     def _log_survey(self, detections: list[dict], now: float) -> None:
         """Count INFO/SURVEY-level detections and (optionally) upload them.
 
@@ -345,9 +529,29 @@ class SurveyVisionPipeline:
             "detections_count": self._detections_count,
             "yolo_enabled": self.yolo_enabled,
             "segmentation_enabled": self.segmentation_enabled,
+            "avoidance_enabled": self.avoidance_enabled,
+            "avoiding": self._avoiding,
             "survey_logged": self._survey_count,
             "seg_backend": self.seg.backend,
+            "confirm": self._confirm_snapshot(),
             "mission_alert": self._mission_alert,
+        }
+
+    def _confirm_snapshot(self) -> "dict | None":
+        """DNN spot-check status for the dashboard, or None if hybrid is off."""
+        if self._confirm_seg is None:
+            return None
+        cres = self._confirm_result
+        if cres is None:
+            return {"backend": self._confirm_seg.backend, "water_state": None,
+                    "anomaly_score": None, "age_s": None, "fresh": False}
+        age = time.monotonic() - self._confirm_t
+        return {
+            "backend": self._confirm_seg.backend,
+            "water_state": cres.water_state.value,
+            "anomaly_score": round(cres.anomaly_score, 3),
+            "age_s": round(age, 1),
+            "fresh": age <= self._confirm_ttl_s,
         }
 
     def threats(self) -> list[dict]:

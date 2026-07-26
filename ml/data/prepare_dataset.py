@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import shutil
 from collections import Counter
@@ -61,6 +62,9 @@ def _id_map(source_key: str, names: list[str] | None, remap: dict) -> dict[int, 
     """
     table = {k.lower(): v for k, v in (remap.get(source_key) or {}).items()}
     if not names:
+        print(f"  [warn] {source_key}: no data.yaml/classes.txt found — assuming its "
+              f"label ids already line up with {CLASSES} (identity map). Verify this "
+              f"before trusting the merged labels.")
         return {i: i for i in range(len(CLASSES))}
     out: dict[int, int | None] = {}
     for sid, name in enumerate(names):
@@ -116,10 +120,15 @@ def collect() -> list[tuple[Path, list[str]]]:
         if not root.exists():
             continue
         # roboflow nests per-project dirs; treat each as its own name space.
-        project_dirs = [p for p in root.iterdir() if p.is_dir()] if key == "roboflow" else [root]
+        # Sorted so the pool this feeds into `_split()` has a fixed order —
+        # `Path.iterdir()`/`rglob()` order is filesystem-dependent, and the
+        # SEED-ed shuffle in `_split()` only reproduces the same train/val/test
+        # membership across reruns/platforms if its *input* order is stable.
+        project_dirs = (sorted(p for p in root.iterdir() if p.is_dir())
+                        if key == "roboflow" else [root])
         for proj in project_dirs:
             idmap = _id_map(key, _source_names(proj), remap)
-            imgs = [p for p in proj.rglob("*") if p.suffix.lower() in IMG_EXTS]
+            imgs = sorted(p for p in proj.rglob("*") if p.suffix.lower() in IMG_EXTS)
             kept = 0
             for img in imgs:
                 lbl = _find_label(img)
@@ -172,6 +181,23 @@ def _oversample(train: list) -> list:
     return train + extra
 
 
+def _place_image(src: Path, dst: Path) -> None:
+    """Materialize `src` at `dst` as cheaply as possible.
+
+    Oversampling can duplicate the same source image up to OVERSAMPLE_CAP times,
+    and every image is copied again from raw/ into unified/ regardless of
+    oversampling — a plain shutil.copy() re-reads+re-writes the full file every
+    time. Hardlink instead (same inode, no extra bytes, no read/write of the
+    image data) when src/dst share a volume; fall back to a real copy on
+    cross-volume setups or filesystems without hardlink support so behaviour
+    (a real, independent-looking file at `dst`) is unchanged either way.
+    """
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy(src, dst)
+
+
 def write_split(name: str, items: list) -> None:
     img_dir = OUT / name / "images"
     lbl_dir = OUT / name / "labels"
@@ -179,7 +205,7 @@ def write_split(name: str, items: list) -> None:
     lbl_dir.mkdir(parents=True, exist_ok=True)
     for i, (img, lines) in enumerate(items):
         stem = f"{name}_{i:06d}"
-        shutil.copy(img, img_dir / (stem + img.suffix.lower()))
+        _place_image(img, img_dir / (stem + img.suffix.lower()))
         (lbl_dir / (stem + ".txt")).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

@@ -3,9 +3,16 @@
   --card: #111827;
   --border: #1e2d3d;
   --text: #e2e8f0;
-  --dim: #64748b;
+  /* Slate-400 rather than the original slate-500 (#64748b): ~7.5:1 contrast on
+     --bg vs. ~4.0:1 before, so small uppercase labels clear WCAG AA (4.5:1). */
+  --dim: #94a3b8;
   --accent: #38bdf8;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --danger: #f87171;
   --font: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --radius: 8px;
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,10 +25,16 @@ html, body, #root {
   font-size: 13px;
 }
 
+body {
+  background-image: radial-gradient(circle at 15% -10%, rgba(56, 189, 248, 0.08), transparent 45%),
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.05), transparent 40%);
+  background-attachment: fixed;
+}
+
 .viewer {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  grid-template-rows: 48px 1fr;
+  grid-template-columns: 288px 1fr;
+  grid-template-rows: 56px 1fr;
   height: 100vh;
   gap: 1px;
   background: var(--border);
@@ -30,10 +43,19 @@ html, body, #root {
 .header {
   grid-column: 1 / -1;
   background: var(--card);
+  box-shadow: var(--shadow-card);
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  gap: 16px;
+  padding: 0 18px;
+  gap: 20px;
+  flex-wrap: wrap;
+  min-height: 56px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .header h1 {
@@ -41,16 +63,46 @@ html, body, #root {
   font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  color: var(--dim);
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+.status-dot--error {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 .panel {
   background: var(--card);
-  padding: 12px;
+  padding: 14px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .map-area {
@@ -74,17 +126,29 @@ label {
 
 select, input {
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
   font-family: var(--font);
   font-size: 12px;
+  transition: border-color 0.15s ease;
+}
+
+select:hover, input:hover {
+  border-color: var(--dim);
+}
+
+select:focus-visible, input:focus-visible, .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
 }
 
 .btn {
-  padding: 6px 14px;
+  padding: 8px 14px;
+  min-height: 36px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: transparent;
@@ -94,14 +158,157 @@ select, input {
   font-weight: 600;
   cursor: pointer;
   text-transform: uppercase;
+  letter-spacing: 0.3px;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
-.btn:hover { background: rgba(56,189,248,0.1); }
+.btn:hover:not(:disabled) { background: rgba(56, 189, 248, 0.1); }
 
-.legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dim); }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn--sm {
+  padding: 6px 10px;
+  min-height: 30px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* ---- Legend (real gradient tied to HeatMap's valueToColor scale) ---- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.legend-bar {
+  width: 120px;
+  height: 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.legend-value {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.legend-value--dim {
+  color: var(--dim);
+  font-style: italic;
+}
+
+/* ---- Status / loading ---- */
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--accent);
+  margin-left: auto;
+}
+
+.spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(56, 189, 248, 0.25);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.meta-line {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* ---- Banners (error / auth-required) ---- */
+
+.banner {
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-left: 3px solid var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.banner--warn {
+  border-left-color: var(--warn);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.banner p { color: var(--text); }
+
+.key-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.key-form label {
+  margin-bottom: 0;
+}
+
+.key-form .btn--sm {
+  align-self: flex-start;
+}
+
+/* ---- Empty state (overlay on the map) ---- */
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  pointer-events: none;
+  color: var(--dim);
+  font-size: 13px;
+  z-index: 400; /* above Leaflet's tile/overlay panes, below its controls */
+}
+
+.empty-state p:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.empty-state-hint {
+  font-size: 11px;
+}
 
 @media (max-width: 768px) {
-  .viewer { grid-template-columns: 1fr; grid-template-rows: 48px 200px 1fr; }
+  .viewer { grid-template-columns: 1fr; grid-template-rows: auto 200px 1fr; }
+  .header { padding: 10px 14px; }
+  .status-line { margin-left: 0; }
+}
+
+@media (max-width: 480px) {
+  .legend-bar { width: 84px; }
+  .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--ok,
+  .spinner {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.001ms !important;
+  }
 }

@@ -17,12 +17,16 @@ the dual-hull firmware — where GP12-15 collided with VESC/winch/SBUS — on th
 variant nothing else touches GP12-15, so both SHT41s run without a pin clash.
 
 Battery architecture — three fully isolated Milwaukee M18 domains (see
-docs/battery_architecture.md). The DRIVE rail on this variant is 2× M18 in series
-(not 3×). ADCs are on this Boat Pico (RP2040, 3.3 V), not the Pi 5.
+docs/battery_architecture.md). The DRIVE rail on this test-bench variant is
+2× M18 in PARALLEL (18 V nom / 21 V max) — same voltage as one pack, double the
+current capacity, for the twin 2814 drive motors. ADCs are on this Boat Pico
+(RP2040, 3.3 V), not the Pi 5.
 
 Pin assignments:
-  - Drive battery (2× M18 series, 36 V nom / 42 V max) ADC: GP26 (ADC0)
-      — divider 130k/10k → ×14.0; 42 V → 3.00 V at the Pico pin
+  - Drive battery (2× M18 parallel, 18 V nom / 21 V max) ADC: GP26 (ADC0)
+      — existing 130k/10k divider → ×14.0; 21 V now reads ~1.5 V at the pin
+        (safe, correct, ~0.01 V resolution — plenty for a gauge). Swap to
+        56k/10k (×6.6) to match the elec/winch domains for full-scale range.
   - Electronics battery (1× M18, 18 V nom / 21 V max) ADC: GP27 (ADC1)
       — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - Winch battery (1× M18, 18 V nom / 21 V max) ADC: GP28 (ADC2)
@@ -35,16 +39,21 @@ Pin assignments:
 from machine import Pin, ADC, SoftI2C
 import sht41
 
-# ---- Drive battery (2× M18 series, 36 V nominal) ----
-# Divider 130k high / 10k low → reconstruct ×(130+10)/10 = 14.0. 42 V → 3.00 V at
-# the Pico pin — same conservative 3.00 V ceiling the dual-hull 200k/10k divider
-# gives at 63 V. `prop_*` names are kept for wire/protocol compatibility (TEL
-# carries batt_v).
-INV_P_RATIO = 14.0
-P_FULL = 42.0   # 21 V × 2 (full)
-P_EMPTY = 30.0  # 15 V × 2 (cutoff → % floor)
-P_WARN = 34.0   # 17 V × 2
-P_CRIT = 32.0   # 16 V × 2 → return to home
+# ---- Drive battery (2× M18 PARALLEL, 18 V nominal) ----
+# Two M18 packs in parallel = one pack's voltage (18 V nom / 21 V max / 15 V
+# cutoff), double the current. Thresholds are therefore a SINGLE M18's — the same
+# as the elec/winch domains. (This is the change that matters: on the old 2×
+# series 42 V thresholds a full 21 V parallel pack would read as "empty" and
+# ESTOP instantly.) INV_P_RATIO must match the PHYSICAL drive divider: the
+# as-built 130k/10k reads 21 V → ~1.5 V at the pin and reconstructs correctly at
+# ×14.0, so a plain battery swap needs no resistor rework. If you swap the drive
+# divider to 56k/10k (to match elec/winch and use the full ADC range), set
+# INV_P_RATIO = 6.6. `prop_*` names kept for wire/protocol compatibility.
+INV_P_RATIO = 14.0    # 130k/10k as-built; set 6.6 if you fit a 56k/10k divider
+P_FULL = 21.0   # 1× M18 full (packs in parallel share this voltage)
+P_EMPTY = 15.0  # cutoff → % floor
+P_WARN = 17.0
+P_CRIT = 16.0   # → return to home
 P_RANGE = P_FULL - P_EMPTY
 
 # ---- Electronics battery (1× M18) ----

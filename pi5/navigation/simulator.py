@@ -58,7 +58,7 @@ class BoatSimulator:
         self.lon = start_lon
         self.heading = start_heading
         self.speed_mps = 0.0
-        self.batt_v = 58.0          # 3× M18 drive rail (54 V nom; drains as it drives)
+        self.batt_v = 20.5          # 2× M18 parallel drive rail (18 V nom; drains as it drives)
         self.elec_batt_v = 20.0     # 1× M18 electronics rail
         self.winch_batt_v = 20.0    # 1× M18 winch rail (drops while the winch runs)
 
@@ -223,7 +223,7 @@ class MockPicoSerial:
     def telemetry(self) -> Telemetry:
         """Build telemetry from simulator state. batt_v is the 3× M18 drive rail."""
         s = self._sim
-        batt_pct = self._pct(s.batt_v, 45.0, 63.0)   # drive range (cutoff..full)
+        batt_pct = self._pct(s.batt_v, 15.0, 21.0)   # 2× M18 parallel (cutoff..full)
         return Telemetry(
             lat=s.lat,
             lon=s.lon,

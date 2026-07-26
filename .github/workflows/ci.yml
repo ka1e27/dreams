@@ -33,7 +33,10 @@ jobs:
   # ---- Cloud API: lint + integration test against PostGIS ----
   cloud-api:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'cloud/api') || github.event_name == 'pull_request'
+    # Always run on push/PR. (The old `contains(head_commit.modified, 'cloud/api')`
+    # filter never matched — `contains` on a list does exact element matching, so
+    # it never equalled a real path like 'cloud/api/app.py', and these jobs were
+    # silently skipped on every push.)
     services:
       postgis:
         image: postgis/postgis:16-3.4
@@ -82,7 +85,7 @@ jobs:
   # ---- Dashboard: lint + build ----
   dashboard:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'dashboard') || github.event_name == 'pull_request'
+    # Always run on push/PR (see note on the cloud-api job — the old path filter never matched).
     steps:
       - uses: actions/checkout@v4
 
@@ -101,7 +104,7 @@ jobs:
   # ---- Map Viewer: lint + build ----
   map-viewer:
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'cloud/map-viewer') || github.event_name == 'pull_request'
+    # Always run on push/PR (see note on the cloud-api job — the old path filter never matched).
     steps:
       - uses: actions/checkout@v4
 

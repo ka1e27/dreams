@@ -96,7 +96,6 @@ def _benchmark_onnx(onnx_path: str, runs: int = 100) -> float:
         t0 = time.perf_counter()
         sess.run(None, {name: dummy})
         times.append(time.perf_counter() - t0)
-    import numpy as np
     print(f"  mean latency: {np.mean(times) * 1000:.1f} ms")
     return 1.0 / float(np.mean(times)) if times else 0.0
 

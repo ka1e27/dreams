@@ -73,6 +73,11 @@ def main() -> None:
         print("opencv (cv2) required — pip install opencv-python")
         return
     try:
+        import numpy as np
+    except ImportError:
+        print("numpy required — pip install numpy")
+        return
+    try:
         pipe = _pipeline()
     except ImportError:
         print("albumentations required — pip install albumentations")
@@ -84,9 +89,13 @@ def main() -> None:
         print("No train split at", img_dir, "— run prepare_dataset.py first.")
         return
 
-    originals = [p for p in img_dir.iterdir()
-                 if p.suffix.lower() in IMG_EXTS and "_aug" not in p.stem]
+    # Sorted: Path.iterdir() order is filesystem-dependent, and without a fixed
+    # input order the seeded RNG below draws different augmentations for
+    # different images on every rerun/platform even though the seed is pinned.
+    originals = sorted(p for p in img_dir.iterdir()
+                        if p.suffix.lower() in IMG_EXTS and "_aug" not in p.stem)
     random.seed(42)
+    np.random.seed(42)  # Albumentations transforms draw from numpy's RNG too
     made = 0
     for img_path in originals:
         image = cv2.imread(str(img_path))

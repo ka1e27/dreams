@@ -6,6 +6,7 @@ with a MockPicoSerial, and launches the FastAPI server on port 8000.
 Usage:
     python run_sim.py
 """
+import asyncio
 import logging
 
 import uvicorn
@@ -13,6 +14,7 @@ import uvicorn
 from pi5.comms.pod_bridge import PodBridge
 from pi5.navigation.mission_manager import MissionManager
 from pi5.navigation.navigator import Navigator
+from pi5.navigation.sim_obstacles import ObstacleField, SimAvoider
 from pi5.navigation.simulator import BoatSimulator
 from pi5.server.app import app, configure
 
@@ -32,6 +34,13 @@ def main():
     pod = PodBridge(pico)
     mission = MissionManager(pico, nav, pod)
 
+    # Simulated obstacle field — plays the vision sensor's role from ground truth
+    # so reactive avoidance runs end-to-end without a camera. Drop obstacles from
+    # the command center (DROP OBSTACLE) or POST /api/sim/obstacles; the avoider
+    # drives the same steer-away override the boat uses on hardware.
+    obstacles = ObstacleField()
+    avoider = SimAvoider(obstacles, nav)
+
     # Inject into the FastAPI app
     configure(
         pico=pico,
@@ -42,13 +51,26 @@ def main():
         home_lon=sim.lon,
         cors_origins=["http://localhost:5173", "http://localhost:3000"],
         simulator=sim,
+        obstacle_field=obstacles,
     )
+
+    avoid_task: list[asyncio.Task] = []
+
+    async def _avoid_loop():
+        # ~4 Hz, the same cadence the hardware reactive layer runs at.
+        while True:
+            try:
+                avoider.update(sim.lat, sim.lon, sim.heading)
+            except Exception as e:  # noqa: BLE001 — a glitch must not kill the loop
+                logging.getLogger("run_sim").debug("sim avoid error: %s", e)
+            await asyncio.sleep(0.25)
 
     # Start simulator and nav loop before serving
     async def on_startup():
         await sim.start()
         await nav.start()
         await pod.start()
+        avoid_task.append(asyncio.create_task(_avoid_loop()))
 
     @app.on_event("startup")
     async def startup():
@@ -56,6 +78,8 @@ def main():
 
     @app.on_event("shutdown")
     async def shutdown():
+        for t in avoid_task:
+            t.cancel()
         await sim.stop()
         await nav.stop()
         await pod.stop()

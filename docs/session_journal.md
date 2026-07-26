@@ -31,6 +31,227 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-25 — Deep review: LOS nav, obstacle avoidance wired, vision perf, Abyssal Indigo UI
+
+**Worked on:** user asked for an extremely thorough review + make it run *great*, research-backed
+vision/nav optimization, and a non-orange UI redesign. This session's changes were **run + tested**
+(venv pytest: 123→144 green, ruff clean, sim booted and probed live in-browser). Full write-up in
+`docs/code_review_2026-07.md`.
+**Changed:**
+- **Obstacle avoidance was dead code** — `AvoidanceLoop` (ran a *duplicate* YOLO) was never
+  instantiated and the pipeline never steered around threats. Rewrote `pi5/cv/avoidance.py` into a
+  pure, tested `reactive_avoidance()` rule (bearing+range → slow & bear away; head-on → starboard per
+  COLREGS); `pi5/cv/pipeline.py` now pushes a steer-away override into the navigator (wired
+  `navigator=nav` in `run_hardware.py`). Live **AVOID** toggle + `POST /vision/avoidance/toggle`.
+- **Navigation:** added lookahead **LOS + ILOS** guidance and cross-track error to
+  `pi5/navigation/geo.py`; `Navigator.compute_throttle` steers to the LOS course when a leg start is
+  given (legacy point-at-target kept for no-leg + old tests); `MissionManager` anchors each leg to the
+  previous waypoint. New `test_los.py` (10 tests incl. convergence rollout) + `test_avoidance.py` (11).
+- **Config gap:** `run_hardware.py` ignored the whole `navigation:` block — added `_nav_config()`.
+  New config keys: `navigation.los_*`, `camera.stereo_wls`, `vision.reactive_avoidance` (replaced the
+  stale top-level `avoidance:` block).
+- **Vision perf:** new `pi5/cv/ort_utils.py` (ONNX Runtime graph-opt=ALL + 4-thread + XNNPACK) used by
+  the detector and segmenter; `pi5/cv/stereo.py` SGBM 3-way + preFilterCap + optional WLS disparity
+  filter for textureless water (`opencv-contrib`, graceful fallback).
+- **UI:** rethemed `command_center.html` + `waypoint_planner.html` from amber → **Abyssal Indigo**
+  (0 residual orange, verified in-browser, no console errors); added AVOID toggle + Cross-Track
+  telemetry readout. `NavStateOut` gains `cross_track_m`/`course_deg`/`avoiding`.
+- **Docs:** `docs/vision_optimization.md`, `docs/navigation_guidance.md`, `docs/code_review_2026-07.md`.
+**Follow-up (same session — user asked for tasks 1 & 2 + a drive-battery change):**
+- **Stereo sync (review A4):** `CameraProducer` now grabs both handles back-to-back then decodes both
+  (`_grab_retrieve` + `_account`), cutting stereo capture skew from a decode-time to ~one grab
+  (`test_camera.py`).
+- **Sim obstacle injection:** new `pi5/navigation/sim_obstacles.py` (`ObstacleField` + `SimAvoider`)
+  drives the real reactive rule into the real navigator from ground truth; wired into `run_sim.py`
+  (~4 Hz task) + `GET/POST/DELETE /api/sim/obstacles` + a **DROP OBSTACLE** map button. Avoidance now
+  runs end-to-end in sim, and faithfully shows the reactive **local-minimum** limit (a hazard dead on
+  the goal line is orbited, not passed — collision-free but no progress; documented, VFH/bug planner is
+  the upgrade). Gave `min_forward_frac` a 0.2 default so the boat arcs vs stalls.
+- **Drive battery → 2× M18 PARALLEL (18 V)** for the twin 2814 motors (was 2× series 36 V): firmware
+  `sensors.py` thresholds → single-M18 (21/15/17/16), `INV_P_RATIO` kept 14.0 (existing 130k/10k divider
+  reads 21 V→1.5 V correctly — no resistor rework; 56k/10k+6.6 optional). Updated `config.yaml`,
+  `simulator.py` (drive now ~20.5 V/91 %, verified live), `docs/battery_architecture.md`, `CLAUDE.md`.
+  Gotcha documented: 2× parallel = 18 V is **below 6S (22 V)**, so the 2814s make less than their
+  1330 W/6S rating; cap VESC **battery** current per motor (~45 A on HO 6Ah) so the two don't overdraw
+  the pair. Added `navigation.motor_gain_left/right` per-motor trim for the different-Kv 2814s
+  (`Navigator._trim`, tested); the heading loop nulls the residual crab.
+**Follow-up 2 (same session — user asked for the bug escape + confirmed plain ESCs):**
+- **Bug-style escape** (`pi5/cv/avoidance.py:AvoidanceController`): wraps the memoryless reactive rule
+  with commit-to-a-side + pass-detection (bearing behind the beam when tracked, or a blind `pass_hold_s`
+  when sight is lost). `reactive_avoidance` gained `force_side`. Wired into `SimAvoider` (tracks the
+  committed obstacle 360° so release is exact) and `pipeline._drive_avoidance`. Result: the boat now
+  **routes past** a dead-centered blocking obstacle to the waypoint (was orbiting) — verified against the
+  real `BoatSimulator` motion model (centered + offset, minsep ~8.8 m vs 4 m radius, arrives). New config
+  `vision.reactive_avoidance.pass_bearing_deg/pass_hold_s`; +5 controller tests.
+- **Drive = ESCs off the Pico (no VESC), identified as NeutronRC 70A-G071 (AM32).** Firmware already does
+  plain PWM ESCs (`firmware/boat-pico/escs.py`, GP2/GP3, 50 Hz servo PWM) — no code change; the -1..1→
+  1.0-2.0 ms mapping already matches AM32 bidirectional mode. These are AM32 (STM32G071) crawler/robot
+  ESCs, NOT "dumb": configurable firmware with current telemetry + protections, so I corrected the earlier
+  VESC/dumb-ESC framing. New **`docs/esc_setup.md`** — the required AM32 config: **Bi-directional mode ON**
+  (else reverse pulses idle and the boat can't pivot/back away — the navigator commands negative throttle),
+  5S LVC, low-RPM-power-protect OFF, stall/brake tuning, current limit ~45 A/motor if the AM32 build has it.
+  The pack (~90 A HO-6Ah pair) is the tighter limit vs the 70 A ESCs. Updated `escs.py` docstring,
+  `docs/battery_architecture.md`, `CLAUDE.md`. Kv trim via `motor_gain_*` + firmware `COMP_L/COMP_R`.
+Suite now **164 green**, ruff clean.
+**Follow-up 3 (same session — user asked to build the AM32 passthrough to test on the Pi later):**
+- **AM32 ESC passthrough through the Pico** — configure the drive ESCs in place (no USB linker), like
+  FC BLHeli/AM32 passthrough. `firmware/boat-pico/esc_passthrough.py`: a **PIO half-duplex one-wire UART**
+  on GP2/GP3 + a transparent USB-CDC↔ESC bridge; entered via a new `ESC_PASS,<esc>,<baud>` serial command
+  (mirrors the REFLASH pattern — stops motors, cancels tasks, hands over the CDC, `machine.reset()` on
+  exit). Pi driver `pi5/scripts/esc_passthrough.py` (`enter` for the am32.ca workflow — am32.ca connects
+  straight to /dev/ttyACM0; `probe`/`scan` for scripted bring-up + baud discovery). Doc
+  `docs/esc_passthrough.md` with the ordered validation plan (PIO UART loopback → baud scan → am32.ca).
+  **⚠ UNTESTED — no hardware yet.** Firmware py_compiles, Pi script ruff-clean. Research: AM32 signal-line
+  is a BLHeli-derived one-wire link (am32.ca "Arduino PC Link" ref); baud not publicly pinned → parameterised
+  + `scan` sweeps it. Risky bits (PIO timing, half-duplex turnaround, baud, bootloader-entry) isolated +
+  flagged for on-Pi iteration.
+- **User plans to install Claude Code on the Pi** to run the hardware-in-the-loop validation (real Pico +
+  ESC). That closes most of the "verify on Pi later" gaps (camera FPS, serial link, and this passthrough).
+- **⚙ MOTORS button** added to the command center (COMMANDS→DRIVE) → a Motor Configuration modal:
+  per-motor **trim** (fully working — `GET/POST /api/nav/motor-trim`, browser-verified) + **ESC config**
+  (arms the AM32 passthrough via `POST /api/esc/passthrough` → sends ESC_PASS, drops the link; hardware-only,
+  400s cleanly in sim). `PicoSerial.esc_passthrough()` added. All browser-verified, no console errors.
+**Decisions / open questions:** ILOS gain defaults to 0 (field-tune on a flowing river). WLS off by
+default. `pi5/cv/detector.py` orphaned — candidate for deletion. Bug escape handles one blocking obstacle
+at a time; dense multi-obstacle fields still want VFH/DWA. ESC passthrough is unvalidated scaffolding.
+**Next steps:** (1) **on-Pi validation of the ESC passthrough** — PIO UART loopback → baud scan → am32.ca
+(see `docs/esc_passthrough.md`); (2) flash AM32 ≥v1.99 + enable Bi-directional mode + bench-verify reverse
+before first spin-up; (3) end-to-end ONNX detector test + measure real vision FPS on the Pi; (4) YOLO→NCNN
+or Hailo-8L; (5) confirm drive divider / whether to fit 56k/10k. Nothing committed — working tree left for
+the user to review.
+
+## 2026-07-24 — Whole-project multi-agent review + efficiency/design pass
+
+**Worked on:** user asked for a full review of the whole D.R.E.A.M.S codebase — make it efficient and
+the UIs designer-grade. Ran 9 directory-partitioned review agents in parallel. Nothing could be
+executed (no Python/Node/ruff in this Windows session), so ALL edits are **static-review-only** — run
+`pytest pi5/tests`, the two Vite builds, and the on-Pi checks below before trusting them.
+**Changed (highlights):**
+- `cloud/api` — SRID insert bug fixed (`ST_SetSRID(ST_MakePoint,4326)`); 6 DB routes `async def`→`def`
+  (sync `Session` was blocking the event loop); `init_db` now creates `postgis`+`btree_gist` before
+  `create_all` (the GiST index over timestamp+geometry needs btree_gist); indexes on `mission_name`
+  and `(mission_name,timestamp)`; `pool_pre_ping`; non-root Dockerfile + HEALTHCHECK.
+- `pi5/comms` — ALERT 2-field detail no longer truncated; pod poll loop survives a link-down; bounded
+  nmcli wifi-connect. `pi5/data/uploader` — offline-buffer race fixed (pop-before-await) + blocking
+  saves → `asyncio.to_thread`. `pi5/server/app` — 7 vcgencmd probes `gather`ed; ws pump guard;
+  `_pico_port_lock` around the /pico reflash endpoints.
+- `pi5/navigation` — **fixed a real pause/resume deadlock** (`pause()` cleared the nav target via
+  `stop_nav()` but `resume_mission()` never re-issued `goto()`/`hold()` → hung forever); added a
+  bit-identical `distance_and_bearing()` to halve per-tick trig; removed dead `_on_wp_arrived`.
+- `pi5/cv/segmentation` — fixed the `_seg_mask` NCHW channel-axis heuristic (the 2 new NCHW tests were
+  RED; real eWaSR (1,3,384,512) preserved) and routed the TFLite path through the same config-driven
+  reducer (was hardcoded `water_class=0`, inverting eWaSR-convention models). A review agent verified
+  the 2026-07-24 stereo-downscale rescaled-Q and `blobFromImage` changes are metrically/geometrically
+  CORRECT.
+- Front-end — `command_center.html`/`waypoint_planner.html` polish (WCAG-AA contrast, focus-visible,
+  reduced-motion, responsive Pico terminal; **no `<script>` touched**; visually QA'd in a browser).
+  React `dashboard/` + `cloud/map-viewer/` code+design passes (re-render/leak/race fixes, Leaflet CSS
+  self-hosted for field/offline use, canvas heatmap, componentized styling). `ml/` — determinism
+  (`sorted()`+seeds), hardlinked dataset copies, dead-import removal.
+- Cross-cutting — health-flag byte 4 relabelled **DHT→E_BAT** across `app.py`, `command_center.html`,
+  and `serial-protocol.md` (firmware truth = electronics battery; the React dashboard was already
+  correct); `run_hardware` `stream_fps` default 15→30; CI `head_commit.modified` path filters removed
+  (they never matched → cloud/dashboard/map-viewer jobs silently skipped on push).
+**Decisions / open questions:** **Firmware was audited REVIEW-ONLY (no edits)** — safety-critical and
+untestable here. Real items to fix + bench-test: **S1** UART1 is drained by two tasks → `$POD` (incl.
+leak) frames can be lost; **S2** a blocking USB `stdout.write` can freeze the loop so the software
+watchdog never ESTOPs, and there's no hardware WDT; **S3** the SBUS PIO samples 9 cycles/bit not 8 →
+RC override may never decode (verify on a scope); **S4** on this single-hull branch a one-hull leak
+only WARNs (doesn't ESTOP). Did NOT modernize `on_event`→`lifespan` (risky without a runtime).
+**Next steps:** on the Pi/laptop — `pytest pi5/tests` (the 2 seg tests should now be GREEN), `python
+run_sim.py` and exercise **pause/resume mid-transit and mid-DATA-waypoint** (the changed uncovered
+path), then `npm run dev` both UIs for a visual pass; then triage the firmware S1–S4 safety findings.
+
+## 2026-07-24 — Vision pipeline: full audit + efficiency pass (15 fps water target)
+
+**Worked on:** user asked to fully check + optimize the vision code, find a water-vision library, and
+hit ~15 fps Tier-1 water detection with YOLO at a lower-but-high rate. Audited all of `pi5/cv/*` + the
+server MJPEG path statically (no Python interpreter/WSL available in this session — see caveat).
+**Root bottleneck found + fixed:** `StereoDepth.compute()` ran SGBM + `reprojectImageTo3D` at full
+1080p *inside* `vision_overlay._infer`, so every inference with a detection present collapsed detect
+FPS to ~1-2/s (this was the exact tradeoff flagged in the 2026-07-01 archive entry).
+**Changed:**
+- `pi5/cv/stereo.py` — `StereoDepth(calib, downscale=0.5)`: rectify at full res, then run SGBM +
+  reproject on a downscaled pair (~4× cheaper) with a **rescaled Q** (`Q[:, :3] /= s`, an exact
+  coordinate change → depth stays metrically correct) and a scale-matched disparity range; upsample
+  disp/depth back to full res so callers (bbox lookup, `/video?cam=disparity`) are unchanged.
+  `downscale=1.0` reproduces the old path exactly.
+- `pi5/cv/onnx_detector.py` — YOLO preproc now uses `cv2.dnn.blobFromImage` (one C++ call: swapRB +
+  /255 + HWC→NCHW) instead of manual cvtColor/astype/transpose copies. Geometry unchanged (letterbox
+  still applied first).
+- `pi5/cv/segmentation.py` — added an **ONNX water-seg backend** (onnxruntime, already a dep — no new
+  package) alongside the classical + TFLite paths, auto-selected by file extension. Handles WaSR/eWaSR-
+  style `(1,C,H,W)`/`(1,H,W,C)` class maps and single water-probability outputs; `seg_water_class` /
+  `seg_ignore_classes` / `seg_normalize` / `seg_input_size` are config-driven. Classical path (and its
+  tests) untouched. New `_seg_mask` reducer has 3 unit tests.
+- `pi5/config.yaml` — `stereo_downscale: 0.5`; `vision.tier1_max_fps 20→15` (the water target);
+  detection `imgsz 416→320`, `detect_max_fps 8→10` (keeps YOLO high but under the 15 fps screen);
+  seg model default `.tflite→.onnx` + the new seg knobs, documented.
+- `run_hardware.py` — passes `camera.stereo_downscale` into `StereoDepth`.
+- `pi5/scripts/benchmark_vision.py` (new) — per-stage FPS harness (Tier-1 seg / YOLO / stereo at each
+  downscale) for the Pi. `docs/water_vision.md` (new) — backend guide + eWaSR/WaSR recommendation.
+**Decisions / open questions:**
+- **Not executed/verified here** — no Python, WSL, conda, or ruff in this Windows session (the
+  2026-07-23 Py 3.14.4 env is gone). All edits are static-review only. Run `pytest pi5/tests` and
+  `python -m pi5.scripts.benchmark_vision` **on the Pi** to confirm. On a Pi 5 *CPU*, the classical
+  screen easily does 15 fps; a full seg DNN (eWaSR) does not — it's wired as an optional accuracy/
+  accelerator path, documented as such.
+- `pi5/cv/avoidance.py` + `detector.py` (`BoatDetector`) are **dead code** — never instantiated by
+  `run_hardware.py` (the pipeline + threat_assessor + radar are the live obstacle path). Left in place;
+  flagged as a consolidation candidate.
+**Next steps:** on the Pi — `pytest pi5/tests`, then `benchmark_vision.py`; tune `imgsz` /
+`tier1_max_fps` / `stereo_downscale` to the measured numbers. Optionally export an eWaSR model to
+`pi5/cv/models/water_seg.onnx` (see `docs/water_vision.md`) if HSV isn't robust enough in glare.
+
+**Follow-on (same session): hybrid Tier-1 (classical 15 fps screen + eWaSR spot-check).** User asked
+to "run eWaSR instead" and whether a Coral M.2 would work. Verified (web): Coral is a poor fit —
+INT8-TFLite-only (not ONNX), can't run eWaSR's transformer ops, no official Pi 5 support, pycoral
+stuck on Py 3.6-3.9 (repo is 3.14); **Hailo AI HAT+ is the right accelerator** (ONNX-native, 1st-party
+Pi 5). Also: eWaSR on the Pi CPU is ~2-8 fps, so it can't be the 15 fps primary. User chose the
+**hybrid**, which I built:
+- `pi5/cv/pipeline.py` — added `_confirm_seg` (optional DNN water model) on a **separate slow async
+  loop** (`_confirm_loop`, `seg_confirm_max_fps` ~2 Hz) so its ~200 ms inference never stalls the fast
+  15 fps classical loop. A fresh verdict (within `seg_confirm_ttl_s`) becomes the authoritative
+  `water_state` and can wake YOLO on obstacles HSV missed — **fail-safe: only ever ADDS triggers**.
+  `vision_state()` gains a `confirm` block. Hybrid is **off unless a real DNN model loads** (two
+  classical screens would be pointless), so existing behaviour/tests are unchanged.
+- `pi5/config.yaml` — `seg_model_path` now **empty** (classical primary); new `seg_confirm_model_path`
+  (`…/water_seg.onnx`), `seg_confirm_max_fps: 2`, `seg_confirm_ttl_s: 3`. (Supersedes this entry's
+  earlier "seg_model_path default → .onnx" bullet.)
+- `pi5/tests/test_vision_pipeline.py` — +3 hybrid tests (confirm wakes YOLO on clear water; stale
+  verdict ignored; hybrid off without a model). `docs/water_vision.md` — hybrid section + Coral-vs-Hailo.
+- `ml/export_ewasr.py` (new) — one-command eWaSR→ONNX exporter producing
+  `pi5/cv/models/water_seg.onnx` (+ tracked `water_seg_info.json`). Confirmed against the eWaSR repo
+  (tersekmatija/eWaSR): forces the single-input `ewasr_resnet18` variant (IMU variant is 2-input and
+  won't load), mirrors their `torch.onnx.export(model, {"x": {"image","imu_mask"}}, opset=12,
+  output_names=["prediction","intermediate"])` (non-IMU prunes imu_mask → 1 input), ImageNet norm,
+  MaSTr1325 class order 0=obstacle/1=water/2=sky (matches config). `--self-check` runs onnxruntime on a
+  water frame to confirm class order. Weights from the 0.1.0 GitHub release; run on a GPU box, scp the
+  .onnx to the Pi. Decided **Hailo AI HAT+** over Coral if acceleration is wanted (Coral = INT8-TFLite
+  only, no ONNX, no transformer ops, pycoral stuck on Py 3.6-3.9).
+**Still needs the Pi:** run `ml/export_ewasr.py` on a GPU box, scp `water_seg.onnx` to the Pi, then
+`pytest pi5/tests` + `benchmark_vision.py` to confirm. I did not fetch/train the model (no GPU/Python
+here, and shouldn't download weights unprompted).
+
+## 2026-07-23 — Verified the waypoint-driving sim already works (no code changes)
+
+**Worked on:** user asked whether a viewable sim of the boat driving waypoints could be created. It
+already exists end-to-end — confirmed it rather than building anything new.
+**Verified:** started `run_sim.py`, POSTed a 4-point PATH loop near the dock (`/api/mission?start=true`),
+and polled `/api/status`. The boat pivoted in place to each bearing (align-first `Navigator`), drove the
+leg, and advanced WP 0→1→2, ranging ~58 m from start; server stopped cleanly after. Deps present
+(Py 3.14.4, fastapi 0.135.3, uvicorn 0.44.0).
+**Notes for next time:**
+- Viewable UI = command center at `http://localhost:8000/` (Leaflet map, pulsing boat marker, track +
+  waypoint pins, `/ws/telemetry`). Draw/upload routes at `/planner`; sample missions in
+  `reference/waypoints.json`. Sim mode runs dev-mode auth (no API key needed).
+- Polling `/api/telemetry` and `/api/mission` every tick trips `rate_limit.py` (HTTP 429) — poll the
+  bundled `/api/status` at ≥2–3 s spacing instead.
+- DATA waypoints stall on the winch-down/sample/winch-up sequence (up to ~5 min each) — use PATH
+  waypoints or `POST /api/sim/speed` to watch it drive a route quickly.
+**Next steps:** none pending. Offered the user an optional zero-setup standalone animation (self-contained
+HTML canvas / matplotlib playback); build only if they ask. No repo files changed this session.
+
 ## 2026-07-21 — Single-hull test bench variant: spec + firmware (branch `single-hull-test-bench`)
 
 **Worked on:** user wants a single-hull "test bench" boat (two stern motors, differential steering, standard hobby ESCs instead of the VESC/CAN chain, 2× M18 series drive instead of 3×) to validate the stack on real hardware before the full catamaran. Produced a spec doc, then implemented the Boat Pico firmware on a new branch `single-hull-test-bench` (branched off `main`; `main` untouched). Mid-implementation the user chose to **keep both SHT41 air-temp sensors**, which forced a pin-plan revision (below).
@@ -48,137 +269,7 @@ describing what you did.
 - **Safety note:** dumb ESCs hold last PWM (no VESC-style self-timeout); the heartbeat-watchdog→estop→neutral path is the only motor kill. Must be bench-verified before water testing.
 **Next steps:** (1) branch is committed locally but **not pushed** — user chose local-only; (2) `docs/pin_map.md` still describes the production board — regenerate/annotate for the GP2/3/6/7 test-bench pinout if this branch is kept; (3) before first spin-up, verify the chosen hobby ESCs' arming sequence + pulse range vs the reused winch mapping, and wire the four relocated signals to the Pico breakout header (open items in the new doc).
 
-## 2026-07-21 — Commit/push three-tier survey vision pipeline
-
-**Worked on:** reviewed a pile of pending working-tree changes (from a prior session) and committed/pushed the intended ones; left tool clutter untracked.
-**Changed:**
-- `pi5/cv/pipeline.py`, `pi5/cv/segmentation.py`, `pi5/cv/threat_assessor.py` (new) — three-tier survey vision: Tier 1 cheap water-segmentation anomaly screen (classical OpenCV HSV/edge fallback, optional TFLite model), Tier 2 existing YOLO overlay now gated on the Tier-1 anomaly trigger, Tier 3 threat assessor turning detections into distance/approach-vector radar tracking + mission alerts.
-- `pi5/tests/test_vision_pipeline.py` (new) — unit tests for the pipeline.
-- `pi5/config.yaml` — added `vision:` block (seg model path, anomaly threshold, YOLO cooldown/gating, threat_tracking and survey_logging sub-configs).
-- `pi5/server/app.py`, `pi5/server/templates/command_center.html`, `run_hardware.py` — wired the vision pipeline into the server/UI and hardware runner.
-- `Boat_PCB/Boat_PCB.kicad_sch`, `Boat_PCB/Boat_PCB.kicad_pcb` — carried forward schematic/layout edits from the M18 three-domain battery migration (already decided in prior sessions; see `docs/battery_architecture.md`).
-- Left untracked and did NOT commit: PCB export zip duplicates (`Boat_PCB/Boat_PCB V1.zip`, `V2*.zip`, `V2/`) and various editor/AI-tool config dirs (`.cursor/`, `.gemini/`, `.kiro/`, `.qoder/`, `.opencode.json`) — user chose "only commit real project changes" when asked.
-**Decisions / open questions:** `.claude/` (hooks, settings, skills) and `.mcp.json` were also left untracked per the user's choice — worth a follow-up decision on whether Claude Code project config should be versioned in this repo.
-**Next steps:** if the vision pipeline needs the optional TFLite model (`pi5/cv/models/water_seg.tflite`), it isn't in the repo yet — classical fallback is active by default. Confirm the KiCad schematic resistor-divider values now match `docs/battery_architecture.md` (previous entries flagged the schematic as carrying old values).
-
-## 2026-07-07 — Stereo calibration 0.5m vs 0.32m — ROOT CAUSE & FIX
-
-**Worked on:** user reported stereo calibration finding 0.5m baseline instead of actual 0.32m. Diagnosed and resolved.
-**Changed:**
-- `pi5/config.yaml` line 156 — `fourcc: "YUY2"` → `"MJPG"` (Camera 2 only supports MJPG at 1920×1080; codify the actual format)
-- Identified root cause: Camera 0 negotiated YUY2, but Camera 2 fell back to MJPG (doesn't support YUY2 at 1920×1080)
-- Mismatched formats → MJPG artifacts → inconsistent corner detection → wrong T solved by stereoCalibrate
-**ROOT CAUSE:**
-- `pi5/config.yaml` line 156 set `fourcc: "YUY2"`
-- Camera 0: accepted YUY2 ✓
-- Camera 2: refused YUY2 @ 1920×1080, silently fell back to MJPG ✗
-- Calibration script also defaulted to `--fourcc YUY2`, so it captured left-camera (YUY2) vs right-camera (MJPG) mismatch
-- Different formats → different image artifacts → corners detected at different positions → stereoCalibrate solved for wrong T
-**Fix (two parts):**
-1. Re-run calibration with matched format: `python -m pi5.scripts.calibrate_stereo --baseline 0.32 --square 0.024 --width 1920 --height 1080 --fourcc MJPG --out pi5/cv/calibration.npz`
-2. Update `pi5/config.yaml` line 156: `fourcc: "MJPG"` (codify what Camera 2 actually uses; eliminates fallback mismatch)
-**Result:** ✓ FIXED baseline. Calibration printed `Baseline (||T||): 0.3163 m  (expected ~0.32)` — **1.2% error, excellent**. `pi5/cv/calibration.npz` baseline is correct.
-**New issue found (ROOT CAUSE OF 2.25× DEPTH ERROR):** still have format mismatch! Camera 0 refuses MJPG @ 1920×1080 and reverts to YUY2, while Camera 2 uses MJPG. This breaks corner detection again → wrong focal length in K → wrong Q → 2.25× depth error. The two cameras have **incompatible format support at 1920×1080** (Camera 0 wants YUY2, Camera 2 wants MJPG).
-**Fix attempted:** updated config to 1280×720 with YUY2.
-**New blocker:** Camera 0 refuses to downscale — stays at 1920×1080 while Camera 2 accepted 1280×720. Cameras now at different resolutions (breaks stereo).
-**Root cause:** Camera 0 likely only supports 1920×1080 (no binning modes), or driver won't allow resolution changes via OpenCV.
-**Current status:** stereo calibration impossible — cameras must be same resolution + same format.
-**Root cause (Windows-specific):** DirectShow backend (Windows) doesn't expose lower resolution modes that V4L2 (Linux) does. Camera 0 likely supports 1280×720 binning on Linux but DirectShow only advertises 1920×1080 modes, so Windows OpenCV can't request the lower res.
-**Decision:** use WSL2 (Windows Subsystem for Linux 2) for calibration instead of separate Linux machine. WSL2 has better USB support than Docker and V4L2 works properly.
-**Calibration on WSL2 (final command):**
-```bash
-python3 -m pi5.scripts.calibrate_stereo --baseline 0.32 --square 0.024 \
-    --width 1920 --height 1080 --fourcc YUY2 \
-    --rows 7 --cols 10 --left 0 --right 2 \
-    --out pi5/cv/calibration.npz
-```
-Checkerboard: 7×10 inner corners (8×11 squares). Cameras: left=0, right=2. Resulting `calibration.npz` shared between WSL2 and Windows, usable on both platforms.
-
-## 2026-07-06 — Three-tier vision pipeline (water seg → threat assessment → radar)
-
-**Worked on:** built the three-tier survey vision pipeline from
-`DREAMS_vision_pipeline_instruction`. The instruction is a generic template that overlapped heavily
-with code that already exists (YOLO detection, per-box stereo distance, and radar tracking are all
-already wired via `DetectionOverlay` + `RadarTracker`). Confirmed two reconciliations with the user
-before building: (1) **layer on the existing overlay** — do NOT run a second YOLO (Pi is
-inference-bound); (2) **in-memory + WebSocket** for threat/survey output — no cloud DB or `pico.write`
-exists in the runtime, and the framed serial protocol has no THREAT command.
-**Changed:**
-- `pi5/cv/segmentation.py` (NEW) — Tier 1 `WaterSegmentation`: classical OpenCV HSV/edge fallback
-  (no model needed) + a TFLite path if `water_seg.tflite` + a tflite runtime are present. Returns
-  `SegResult` (water_state, anomaly_score, anomaly_regions). Fixed the template's `frame.size` bug
-  (measures against H·W pixel count, not H·W·3).
-- `pi5/cv/threat_assessor.py` (NEW) — `ThreatLevel`/`THREAT_LEVELS`, `TrackedObject`, `ThreatAssessor`:
-  nearest-centroid identity across frames, approach-vector detection (APPROACHING/STATIC/RECEDING),
-  priority ordering, `should_engage_tracking`, `get_mission_alert`.
-- `pi5/cv/pipeline.py` (NEW) — `SurveyVisionPipeline` coordinator: own async loop subscribing to the
-  camera; Tier 1 seg **gates** the existing overlay's YOLO (with a cooldown hold so it doesn't
-  flicker); reads `overlay.boxes()` (label+conf+distance already there) as Tier 2/3; drives the
-  **existing** `RadarTracker` via `set_track_class`/`set_mode` (never rewrites it); `vision_state()`,
-  `threats()`, `annotate()` (water-state banner, anomaly bar, tier dots, threat highlight).
-- `pi5/server/app.py` — `configure(pipeline=)` + `_pipeline` global; `vision` block in the health
-  WS payload; `GET /vision/status`, `GET /vision/threats`, `POST /vision/{yolo,segmentation}/toggle`;
-  `_mjpeg_stream` now calls `pipeline.annotate()` on the left view; `/api/camera` `detection_enabled`
-  now routes to `pipeline.set_yolo_enabled` (pipeline owns `overlay.enabled` when gating).
-- `run_hardware.py` — constructs `SurveyVisionPipeline`, injects via `configure`, starts it after the
-  overlay and stops it before, all degrade-gracefully.
-- `pi5/config.yaml` — new `vision:` block (thresholds, `gate_yolo_on_anomaly`, threat_tracking,
-  survey_logging).
-- `pi5/server/templates/command_center.html` — new "◈ VISION PIPELINE" `.section` panel (water state,
-  anomaly bar, 3 tier dots, SEG/YOLO toggle buttons with high-CPU ⚠ warning, primary-threat readout,
-  survey counter); `renderVision(h.vision)` in `renderHealth`; CRITICAL threat folded into the
-  existing `showBanner` chain (auto-dismisses beyond 50 m). **Follow-up:** merged the camera-feed
-  control bar (`.cam-ctl`: SOURCE / DEV L·R / DETECT / TRACK / DET FPS / IMG / CONF / QUALITY /
-  STREAM FPS) out of the CAMERA FEED section and into this panel, renamed "◈ VISION & CAMERA
-  CONTROL" — one unified control area; CAMERA FEED is now just the live image. All element IDs
-  preserved so the JS is unchanged; verified div balance + no duplicate IDs.
-- `pi5/tests/test_vision_pipeline.py` (NEW) — 20 tests (segmentation, threat assessor, pipeline
-  engage/disengage, endpoints shape). Built as pytest, not the standalone script the instruction
-  sketched, to fit the repo.
-**Decisions / open questions:**
-- **`pi5/cv/camera.py` deliberately NOT modified** — the instruction said to replace a `model(frame)`
-  call there, but `camera.py` is only the `CameraProducer`; YOLO lives in `vision_overlay.py`. The
-  real integration point is `run_hardware.py` + `app.py`.
-- **Behaviour change to flag:** with `vision.gate_yolo_on_anomaly: true` (default) the pipeline now
-  owns `overlay.enabled`, so detection boxes appear only when Tier 1 sees an anomaly (real tiering,
-  saves CPU on clear water). Set it `false` to restore always-on YOLO.
-- **Deferred:** Pico mission-alert over serial — needs a new THREAT command in
-  `firmware/boat-pico/serial_handler.py` + `docs/serial-protocol.md` (instruction said don't touch
-  `firmware/`). CloudUploader isn't wired into `run_hardware.py`, so survey rows only increment an
-  in-memory counter today; `pipeline._push_survey` is ready to call `uploader.add_reading` if one is
-  injected later. No `water_seg.tflite` model exists — classical fallback is live.
-**Verified:** `py_compile` all files; `ruff check` clean; `pytest pi5/tests` → **117 passed** (97 prior
-+ 20 new); import/wiring smoke test (config accepts `pipeline=`, 4 `/vision/*` routes registered);
-end-to-end through the FastAPI `TestClient` — `/vision/status`, `/vision/threats`, and both toggle endpoints
-return correct shapes and flip state. Not yet run against a live camera.
-**Next steps:** run `run_hardware.py` on the Pi with cameras, confirm the VISION panel populates, the
-SEG/YOLO toggles work, and a real vessel/person triggers the threat banner + radar TRACK. If always-on
-detection boxes are preferred over tiering, set `vision.gate_yolo_on_anomaly: false`. Consider wiring
-a `CloudUploader` + a serial THREAT command if survey persistence / FSM alerts are wanted.
-
-## 2026-07-01 — Per-object distance on detection boxes (stereo depth)
-
-**Worked on:** user asked for each detected object's bounding box to show its distance (e.g. next to
-a detected person). Built on the just-fixed stereo pipeline (`StereoDepth`, `calibration.npz`).
-**Changed:**
-- `pi5/cv/vision_overlay.py` — `DetectionOverlay.__init__` gains an optional `stereo: StereoDepth`
-  param. `_infer(frame_bgr, right_bgr=None)` now runs one `StereoDepth.compute()` disparity pass per
-  inference cycle (not per box) when a stereo pair + calibration are available, then looks up each
-  box's `median_depth_in_bbox()`; box tuples grew an 8th field `distance_m` (`None` if unavailable —
-  confirmed backward-compatible with `radar_tracker.py`/`primary_target()`, which only read indices
-  0–6). `_loop` now passes `frame.right` through to `_infer` alongside `frame.left`. `draw()` renders
-  `"person 87% 3.2m"` when distance is known, else the old `"person 87%"`. `detections()` /
-  `primary_target()` dicts gained a `distance_m` key.
-- `run_hardware.py` — loads `pi5/cv/calibration.npz` at startup (only if a right camera is configured)
-  and constructs a `StereoDepth`, passed into `DetectionOverlay(..., stereo=stereo_depth)`. Degrades
-  gracefully: no calibration file or no right camera → no distance column, never a crash.
-**Decisions / open questions:** this adds one `StereoSGBM.compute()` per inference cycle (capped by
-`detect_max_fps`, default 8/s) on top of YOLO — real CPU cost at 1920×1080. Flagged to the user as a
-performance tradeoff; if the feed feels sluggish, lower `detect_max_fps` or `imgsz` in `config.yaml`.
-**Verified:** `py_compile` on both files; `pytest pi5/tests` → 97 passed (no test referenced the old
-7-tuple box shape by length, only by index, so the added field is safe).
-**Next steps:** user to restart `run_hardware.py` and confirm distances show up on the left camera feed
-for detected people/boats.
+**Follow-on (same session): whole-project context doc.** User asked for "a comprehensive document of everything going on in this project" for a Claude chat project page. Wrote `docs/PROJECT_CONTEXT.md` — a self-contained briefing synthesized from CLAUDE.md, pin_map, battery_architecture, serial-protocol, changelog_and_decisions, the ADRs, and the current code/git state (gathered via parallel Explore agents). Covers: compute architecture, repo layout, BOM, pin maps (incl. the Pi 5 radar-bar stepper GPIO exception and the GP12–15 as-built conflict), M18 power, VESC propulsion, serial protocol, full software-module inventory, the three-tier vision pipeline, UI/cloud/deploy, connectivity, run instructions, locked decisions, and a branch/open-items status section. Written while checked out on `single-hull-test-bench`, but it presents **`main` as the architecture-of-record** and the two branches (this one + the older `radar-bar-stepper`) as variants. Doc is **uncommitted** and lives on the current branch — decide whether it belongs on `main`. A verification agent fact-checked it against the repo (main-vs-branch attribution, battery values, pins, protocol, FSM, cloud endpoints, file paths) and found **one error, now fixed**: the 4th TEL health flag is the electronics battery (`E_BAT`), not DHT/temp — corrected to match the `main.py` health string `GPS,IMU,P_BAT,E_BAT,MOT,POD`. Everything else verified accurate.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

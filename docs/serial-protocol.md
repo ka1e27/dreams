@@ -342,7 +342,7 @@ $STATUS,<seq>,<state>,<health_flags>,<safety_overrides>*<cs>\n
 | Field | Type | Description |
 |-------|------|-------------|
 | state | string | `IDLE`, `ACTIVE`, `ESTOP`, `RC` |
-| health_flags | string | 6-char binary: GPS,CMP,BAT,DHT,MOT,POD (1=ok, 0=fault) |
+| health_flags | string | 6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD (1=ok, 0=fault) |
 | safety_overrides | string | `NONE` or `+`-joined list: `compass+gps` |
 
 **Example:**
@@ -402,7 +402,7 @@ $TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<h
 | hull | string | `DRY`, `L!`, `R!`, or `L!R!` |
 | mt_l | float | Left motor temperature (°C) |
 | mt_r | float | Right motor temperature (°C) |
-| health | string | 6-char binary: GPS,CMP,BAT,DHT,MOT,POD |
+| health | string | 6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD |
 
 **Example:**
 ```

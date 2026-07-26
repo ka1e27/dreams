@@ -27,6 +27,29 @@ _READ_FAIL_LIMIT = 5
 # promptly without hammering cv2.VideoCapture(open) faster than the interval.
 _DOWN_POLL_S = 0.2
 
+# Upper bound for a live left/right reassignment (set_devices) to finish. It has
+# to cover opening BOTH cameras back-to-back, and a single 1080p open over
+# Windows DirectShow can take 6-8s — two of them blow a 10s budget, which made
+# the right camera (always opened second) report "not responding" even though it
+# came up a second later. Give the whole swap generous headroom instead.
+_APPLY_TIMEOUT_S = 45.0
+
+
+def _capture_backend() -> int:
+    """OpenCV capture backend for this OS — shared by _open and _probe_device.
+
+    The producer and the device scanner MUST agree on the backend, or the scan
+    lists devices the producer can't actually open. On the Pi that's V4L2; on
+    Windows it's DirectShow. OpenCV's Windows default (MSMF) both enumerates
+    phantom indices that then fail to open under DShow AND is far slower to
+    probe, so pin DShow explicitly.
+    """
+    if sys.platform.startswith("linux"):
+        return cv2.CAP_V4L2
+    if sys.platform == "win32":
+        return cv2.CAP_DSHOW
+    return cv2.CAP_ANY
+
 
 def _device_name(index: int) -> str:
     """Human-readable name for a capture device (best effort)."""
@@ -42,10 +65,7 @@ def _device_name(index: int) -> str:
 def _probe_device(index: int) -> bool:
     """True if `index` opens AND delivers frames (filters UVC metadata nodes)."""
     try:
-        if sys.platform.startswith("linux"):
-            cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
-        else:
-            cap = cv2.VideoCapture(index)
+        cap = cv2.VideoCapture(index, _capture_backend())
         if not cap.isOpened():
             return False
         # Metadata-only /dev/video* nodes open fine but never grab a frame.
@@ -180,10 +200,7 @@ class CameraProducer:
         # over USB is only ~5 fps. Forcing V4L2 makes the format switch apply, so
         # the camera actually drops to the requested (binned, fast) mode.
         # On Windows, DirectShow is similarly unreliable — use CAP_DSHOW explicitly.
-        if sys.platform.startswith("linux"):
-            cap = cv2.VideoCapture(device, cv2.CAP_V4L2)
-        else:
-            cap = cv2.VideoCapture(device, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(device, _capture_backend())
         if not cap.isOpened():
             raise RuntimeError(f"camera {device} failed to open")
         # Request the pixel format (FourCC) before resolution/fps. MJPG is
@@ -334,7 +351,8 @@ class CameraProducer:
         self._devices_applied.clear()
         self._pending_devices = (left, right)
         try:
-            await asyncio.wait_for(self._devices_applied.wait(), timeout=10.0)
+            await asyncio.wait_for(
+                self._devices_applied.wait(), timeout=_APPLY_TIMEOUT_S)
         except asyncio.TimeoutError:
             logger.warning("set_devices(%s, %s): apply timed out", left, right)
         return self.device_map
@@ -367,23 +385,58 @@ class CameraProducer:
             except Exception as e:  # noqa: BLE001
                 logger.warning("Right camera %s failed to open: %s", right, e)
 
-    async def _read_or_drop(
-        self, loop: asyncio.AbstractEventLoop, cap: "cv2.VideoCapture", device: int
-    ) -> "tuple[cv2.Mat | None, cv2.VideoCapture | None]":
-        """Read one frame. Returns (frame|None, cap|None).
+    @staticmethod
+    def _grab_retrieve(
+        cap_l: "cv2.VideoCapture | None", cap_r: "cv2.VideoCapture | None"
+    ) -> "tuple[bool, cv2.Mat | None, bool, cv2.Mat | None]":
+        """Blocking: latch BOTH cameras near-simultaneously, then decode both.
 
-        cap.read() is blocking (grab + decode), so it runs in a worker thread —
-        that lets capture overlap the /video JPEG encode instead of serializing
-        on the event loop (cv2 releases the GIL inside read()). A single failed
-        read is a transient miss and the handle is kept; only after
-        _READ_FAIL_LIMIT failures in a row do we treat it as a real disconnect,
-        release the handle, and return cap=None so the loop reopens the device.
+        For a stereo pair the two images must be captured as close in time as
+        possible — any skew shows up as extra horizontal disparity on moving
+        targets (the vessels we most want to range), corrupting depth. cap.read()
+        is grab()+retrieve() fused, so reading left fully (grab + JPEG decode)
+        *before* grabbing right leaves a skew of one decode time (~10-20 ms at
+        1080p). Splitting the phases — grab() both back-to-back (each just latches
+        the driver's freshest buffered frame, sub-millisecond) then retrieve()
+        (decode) both — cuts the software skew to ~one grab call.
+
+        (The sensors are still free-running/un-genlocked, so up to ~1 frame-period
+        of inherent asynchrony remains; eliminating it needs hardware sync.)
+
+        Returns (l_ok, left, r_ok, right); either cap may be None.
         """
+        gl = gr = False
         try:
-            ok, frame = await loop.run_in_executor(None, cap.read)
-        except Exception as e:  # noqa: BLE001 — any read error counts as a miss
-            logger.debug("Camera %d read raised: %s", device, e)
-            ok, frame = False, None
+            if cap_l is not None:
+                gl = cap_l.grab()
+            if cap_r is not None:
+                gr = cap_r.grab()
+        except Exception:  # noqa: BLE001 — a grab error is just a miss
+            pass
+        l_ok, left, r_ok, right = False, None, False, None
+        try:
+            if gl:
+                l_ok, left = cap_l.retrieve()
+        except Exception:  # noqa: BLE001
+            l_ok, left = False, None
+        try:
+            if gr:
+                r_ok, right = cap_r.retrieve()
+        except Exception:  # noqa: BLE001
+            r_ok, right = False, None
+        return bool(l_ok), left, bool(r_ok), right
+
+    def _account(
+        self, ok: bool, frame: "cv2.Mat | None",
+        cap: "cv2.VideoCapture", device: int
+    ) -> "tuple[cv2.Mat | None, cv2.VideoCapture | None]":
+        """Fold one camera's grab/retrieve result into the fail/reconnect state.
+
+        Returns (frame|None, cap|None). A single failed read is a transient miss
+        and the handle is kept; only after _READ_FAIL_LIMIT failures in a row is
+        it treated as a real disconnect — released, returning cap=None so the
+        loop reopens the device.
+        """
         if ok and frame is not None:
             self._fail[device] = 0
             return frame, cap
@@ -444,12 +497,23 @@ class CameraProducer:
                 self._cap_r = await self._reconnect(loop, self._cfg.right_device)
 
             left = right = None
-            if self._cap_l is not None:
-                left, self._cap_l = await self._read_or_drop(
-                    loop, self._cap_l, self._cfg.left_device)
-            if self._cap_r is not None:
-                right, self._cap_r = await self._read_or_drop(
-                    loop, self._cap_r, self._cfg.right_device)
+            if self._cap_l is not None or self._cap_r is not None:
+                # Grab both handles back-to-back, then decode both, in one
+                # executor call — minimises the stereo capture skew and still
+                # overlaps the blocking decode with the /video JPEG encode.
+                try:
+                    l_ok, l_img, r_ok, r_img = await loop.run_in_executor(
+                        None, self._grab_retrieve, self._cap_l, self._cap_r)
+                except Exception as e:  # noqa: BLE001 — treat as a double miss
+                    logger.debug("Camera grab/retrieve raised: %s", e)
+                    l_ok = r_ok = False
+                    l_img = r_img = None
+                if self._cap_l is not None:
+                    left, self._cap_l = self._account(
+                        l_ok, l_img, self._cap_l, self._cfg.left_device)
+                if self._cap_r is not None:
+                    right, self._cap_r = self._account(
+                        r_ok, r_img, self._cap_r, self._cfg.right_device)
             if left is None:
                 # No left frame: a transient miss (handle kept) or the camera
                 # dropped and is awaiting reconnect. While down, poll quickly so

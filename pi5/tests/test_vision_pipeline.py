@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from pi5.cv.pipeline import SurveyVisionPipeline
-from pi5.cv.segmentation import WaterSegmentation, WaterState
+from pi5.cv.segmentation import SegResult, WaterSegmentation, WaterState
 from pi5.cv.threat_assessor import (
     APPROACHING,
     RECEDING,
@@ -108,6 +108,40 @@ def test_anomaly_regions_found_for_blob():
 def test_analyze_bad_frame_degrades():
     seg = WaterSegmentation()
     assert seg.analyze(None).water_state == WaterState.CLEAR
+
+
+# --- ONNX seg-output reducer (no model needed — pure numpy) ----------------- #
+def test_seg_mask_all_water_nchw_logits():
+    # (1, C=3, H=2, W=2); channel 1 (water) wins everywhere → no non-water.
+    out = np.zeros((1, 3, 2, 2), np.float32)
+    out[0, 1] = 1.0
+    nw, ig = WaterSegmentation._seg_mask(out, (2, 2), water_class=1,
+                                         ignore_classes=set())
+    assert nw.shape == (2, 2)
+    assert int((nw > 0).sum()) == 0
+    assert ig is None
+
+
+def test_seg_mask_non_water_and_ignored_sky():
+    # Pixel classes: [[water, obstacle], [sky, water]] with sky ignored.
+    out = np.zeros((1, 3, 2, 2), np.float32)
+    out[0, 1, 0, 0] = 1.0   # water
+    out[0, 0, 0, 1] = 1.0   # obstacle → non-water
+    out[0, 2, 1, 0] = 1.0   # sky → ignored
+    out[0, 1, 1, 1] = 1.0   # water
+    nw, ig = WaterSegmentation._seg_mask(out, (2, 2), water_class=1,
+                                         ignore_classes={2})
+    assert int((nw > 0).sum()) == 1        # only the obstacle pixel
+    assert ig is not None and int((ig > 0).sum()) == 1  # only the sky pixel
+
+
+def test_seg_mask_water_probability_map():
+    # (1, H, W) single water-probability channel; water = prob >= 0.5.
+    out = np.array([[[0.9, 0.1], [0.2, 0.8]]], np.float32)
+    nw, ig = WaterSegmentation._seg_mask(out, (2, 2), water_class=1,
+                                         ignore_classes=set())
+    assert int((nw > 0).sum()) == 2        # the two < 0.5 pixels
+    assert ig is None
 
 
 # --------------------------------------------------------------------------- #
@@ -254,6 +288,43 @@ def test_pipeline_resumes_scan_after_threat_clears():
     p._process(_frame(_img((140, 90, 30))), now=106.0)
     assert radar.modes[-1] == "SCAN"
     assert p.vision_state()["tracking_engaged"] is False
+
+
+def test_confirm_spotcheck_wakes_yolo_on_clear_water():
+    # Classical screen reads clear blue water (no trigger), but a fresh eWaSR-style
+    # confirm verdict flags an anomaly → YOLO must wake (fail-safe hybrid gate),
+    # and the DNN verdict is the authoritative water_state. Use a real monotonic
+    # stamp so vision_state()'s freshness check (which reads the live clock) agrees.
+    import time as _time
+    ov = FakeOverlay([_box("vessel", 40, 40, 120, 120, 0.9, 10.0)])
+    p = _pipeline(ov, FakeRadar())
+    p._confirm_seg = types.SimpleNamespace(backend="onnx")   # hybrid "on"
+    p._confirm_result = SegResult(water_state=WaterState.OBSTACLE, anomaly_score=0.9)
+    now = _time.monotonic()
+    p._confirm_t = now
+    p._process(_frame(_img((140, 90, 30))), now=now)         # clear-water frame
+    assert p._tier2_active is True                            # woken by the confirm
+    st = p.vision_state()
+    assert st["water_state"] == "obstacle"                    # DNN verdict wins
+    assert st["confirm"]["backend"] == "onnx" and st["confirm"]["fresh"] is True
+
+
+def test_confirm_stale_verdict_ignored():
+    # A confirm verdict older than the TTL must not override the classical screen.
+    ov = FakeOverlay([])
+    p = _pipeline(ov, FakeRadar())
+    p._confirm_seg = types.SimpleNamespace(backend="onnx")
+    p._confirm_result = SegResult(water_state=WaterState.OBSTACLE, anomaly_score=0.9)
+    p._confirm_t = 100.0
+    p._process(_frame(_img((140, 90, 30))), now=200.0)       # far past ttl (3 s)
+    assert p.vision_state()["water_state"] == "clear"        # classical stands
+
+
+def test_hybrid_off_without_model():
+    # No confirm model configured → confirm snapshot is None, classical only.
+    p = _pipeline(FakeOverlay(), FakeRadar())
+    assert p._confirm_seg is None
+    assert p.vision_state()["confirm"] is None
 
 
 def test_vision_state_has_expected_keys():

@@ -32,9 +32,9 @@ export default function SensorChart({ telemetry, environment }) {
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={history} margin={{ top: 4, right: 12, bottom: 4, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e2d3d" />
-          <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#64748b' }} interval="preserveStartEnd" />
-          <YAxis yAxisId="left" tick={{ fontSize: 9, fill: '#64748b' }} />
-          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: '#64748b' }} />
+          <XAxis dataKey="time" tick={{ fontSize: 9, fill: '#7d8aa0' }} interval="preserveStartEnd" />
+          <YAxis yAxisId="left" tick={{ fontSize: 9, fill: '#7d8aa0' }} />
+          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9, fill: '#7d8aa0' }} />
           <Tooltip
             contentStyle={{ background: '#111827', border: '1px solid #1e2d3d', fontSize: 11 }}
             labelStyle={{ color: '#94a3b8' }}

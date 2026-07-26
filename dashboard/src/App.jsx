@@ -41,15 +41,24 @@ export default function App() {
     <div className="dashboard">
       {/* Header */}
       <header className="header">
-        <h1>Autonomous Boat</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11 }}>
+        <div className="header-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.25" opacity="0.55" />
+            <path d="M12 3.5 L14.6 12 L12 20.5 L9.4 12 Z" fill="currentColor" />
+          </svg>
+          <h1>Autonomous Boat</h1>
+        </div>
+        <div className="header-status">
           {mission?.running && (
-            <span style={{ color: 'var(--accent)' }}>
+            <span className="mission-banner">
               {mission.name} — WP {mission.current_wp + 1}/{mission.total_wps} {mission.phase}
             </span>
           )}
           {network && (
-            <span title={network.active_interface || ''}>
+            <span
+              className={`net-badge net-badge--${network.active_kind}`}
+              title={network.active_interface || ''}
+            >
               {network.active_kind === 'wifi' && '📶 WiFi'}
               {network.active_kind === 'cellular' && '📡 4G'}
               {network.active_kind === 'offline' && '⚠ Offline'}
@@ -57,7 +66,7 @@ export default function App() {
               {network.online ? '' : ' (no cloud)'}
             </span>
           )}
-          <span>
+          <span className="conn-indicator">
             <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`}></span>
             {connected ? 'CONNECTED' : 'DISCONNECTED'}
           </span>
@@ -93,12 +102,12 @@ export default function App() {
 
       {/* Bottom panel */}
       <div className="bottom-panel">
-        <div style={{ background: 'var(--bg-card)' }}>
-          <div className="card-header">Sensors</div>
+        <div className="card panel-fill">
+          <div className="card-header card-header--nav">Sensors</div>
           <SensorChart telemetry={telemetry} environment={environment} />
         </div>
-        <div style={{ background: 'var(--bg-card)' }}>
-          <div className="card-header">Camera</div>
+        <div className="card panel-fill">
+          <div className="card-header card-header--sensor">Camera</div>
           <CameraFeed />
         </div>
       </div>

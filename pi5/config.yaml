@@ -34,6 +34,28 @@ navigation:
   turn_min_throttle: 15
   # Navigation update rate (Hz)
   update_rate_hz: 5
+  # ---- Line-of-sight (LOS) path following ----
+  # Steer to a lookahead point on the track line between waypoints instead of
+  # pointing straight at the next waypoint, so wind/current can't build up
+  # cross-track drift. See pi5/navigation/geo.py:los_course.
+  los_enabled: true
+  # Lookahead distance Δ (m): smaller = snap back to the track harder; larger =
+  # gentler. ~3–8 boat lengths is typical. At cross-track error = Δ the boat
+  # aims 45° back toward the line.
+  los_lookahead_m: 12.0
+  # Integral LOS (ILOS) gain — > 0 cancels steady cross-track bias from a
+  # constant current/wind (Lekkas & Fossen). 0 = pure lookahead LOS (no windup
+  # risk); enable a small value (e.g. 0.02) after field tuning on a flowing river.
+  los_integral_gain: 0.0
+  # Anti-windup clamp for the ILOS integrator (metre·seconds).
+  los_integral_clamp: 60.0
+  # ---- Per-motor thrust trim (mismatched motors) ----
+  # The twin 2814 drive motors may have different Kv, so equal command gives
+  # unequal thrust and the boat crabs. These gains scale each motor's command
+  # before it's sent. 1.0 = no trim. Bench-calibrate: run both at equal command,
+  # and lower the gain of whichever motor is faster until it tracks straight.
+  motor_gain_left: 1.0
+  motor_gain_right: 1.0
 
 mission:
   # Default max time at a data waypoint if not specified (seconds)
@@ -65,12 +87,16 @@ pod:
 
 battery:
   # Three fully isolated Milwaukee M18 domains — see docs/battery_architecture.md.
-  # Drive battery — 3× M18 in series (54 V nominal / 63 V full / 45 V cutoff)
+  # Drive battery — TEST BENCH: 2× M18 in PARALLEL (18 V nom / 21 V full / 15 V
+  # cutoff) for the twin 2814 motors. Parallel = one pack's voltage, double the
+  # current/runtime — NOT more voltage (so it's ~18 V, below 6S LiPo's 22 V).
+  # These thresholds are a SINGLE M18's (same as elec/winch). Firmware mirror:
+  # firmware/boat-pico/sensors.py P_* constants (the authoritative copy).
   drive:
-    full_v: 63.0
-    empty_v: 45.0
-    warn_v: 51.0
-    critical_v: 48.0
+    full_v: 21.0
+    empty_v: 15.0
+    warn_v: 17.0
+    critical_v: 16.0
   # Electronics battery — 1× M18 standalone (18 V nominal / 21 V full)
   elec:
     full_v: 21.0
@@ -129,6 +155,20 @@ camera:
   right_device: 2
   baseline_m: 0.32
   calibration_path: "pi5/cv/calibration.npz"
+  # StereoSGBM cost scales with resolution × disparity range, so at 1080p it
+  # dominates the whole inference budget on a Pi 5 (hundreds of ms/frame) and
+  # collapses detection FPS whenever an object is in view. Run the matcher at
+  # this fraction of full res — depth stays metrically correct (the reprojection
+  # matrix is rescaled, see pi5/cv/stereo.py) and mid-range (3-30 m) accuracy is
+  # essentially unchanged. 0.5 ≈ 4× faster; set 1.0 to force full resolution.
+  stereo_downscale: 0.5
+  # WLS disparity post-filter (needs opencv-contrib-python for cv2.ximgproc).
+  # Water is the worst case for block matching — textureless, specular — so raw
+  # SGBM leaves big invalid holes on the surface. WLS fills/smooths them via a
+  # left↔right consistency check, at the cost of a second matcher pass (~2×
+  # matching time). Off by default; enable on a rig that can spare the cycles
+  # (or drop stereo_downscale / stereo FPS to compensate). See pi5/cv/stereo.py.
+  stereo_wls: false
   # Capture settings (CameraProducer). Changing these needs a restart.
   # ---- Arducam 8MP IMX219 (fixed focus) notes ----
   # The IMX219 is a raw sensor (no onboard JPEG). Its native 8MP mode is
@@ -139,8 +179,8 @@ camera:
   # IMX219 binned modes that hit a high frame rate: 640x480, 1280x720 @ 30+,
   # 1640x1232 @ 30. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` to see the
   # exact modes/formats your module advertises, and set width/height/fps to one.
-  width: 1920
-  height: 1080
+  width: 640
+  height: 480
   fps: 30            # capture rate; the camera must support it at this res+format
   # NOTE: uncompressed YUY2 at 1080p30 needs ~1 Gbit/s per camera — USB 3.0
   # port/hub required for both cameras simultaneously. If frames stall or fps
@@ -176,9 +216,16 @@ camera:
     #   2. Otherwise drop a maritime .pt here, or an NCNN export dir
     #      (yolov8n_ncnn_model, ~2x faster on ARM). Ultralytics infers the format.
     model: "yolov8n.pt"
-    imgsz: 416            # inference size (mult of 32): 320 lighter, 640 better at distance
+    # Inference size (mult of 32). 320 is the sweet spot for the Pi 5 CPU: it's
+    # what keeps YOLO in the "lower but high" FPS band alongside the 15 fps Tier-1
+    # water screen. 416/640 see smaller/farther targets but cost proportionally
+    # more per frame (the real lever on detection FPS — detect_max_fps only caps).
+    imgsz: 320
     conf: 0.40            # min confidence to keep a detection
-    detect_max_fps: 8     # cap inference rate (decoupled from the video stream)
+    # Upper cap on inference rate (decoupled from Tier-1 seg and the video stream).
+    # Actual FPS = min(this, 1 / inference_time); on a Pi 5 CPU yolov8n@320 lands
+    # around 8-12 fps, so this cap just keeps it below the 15 fps water screen.
+    detect_max_fps: 10
     target_classes: []    # keep only these class names; [] = keep all
     # Highlighted (amber) classes — covers both the COCO fallback ('boat','person')
     # and the maritime model ('vessel','kayak'). Others are drawn muted.
@@ -194,9 +241,35 @@ vision:
   #   Tier 1  water segmentation  — cheap, always-on anomaly screen
   #   Tier 2  the existing YOLO overlay — gated ON only when Tier 1 sees an anomaly
   #   Tier 3  threat assessment    — distance + approach vector → drives the radar
-  # Optional TFLite segmentation model. If this file is absent (it is by default)
-  # the classical OpenCV HSV/edge fallback is used — no model, no extra packages.
-  seg_model_path: "pi5/cv/models/water_seg.tflite"
+  # --- Tier-1 water screen (PRIMARY, always-on, 15 fps target) ---
+  # Leave EMPTY for the classical OpenCV HSV/edge screen — the only backend that
+  # sustains 15 fps on a Pi 5 CPU, and the recommended primary. Set a path ONLY
+  # to replace the fast screen entirely (backend from the extension: .onnx →
+  # onnxruntime, .tflite → tflite_runtime/tensorflow).
+  seg_model_path: ""
+  # --- Tier-1b HYBRID confirmation (optional, slow, higher-accuracy) ---
+  # A DNN water model (eWaSR — see docs/water_vision.md) run on a SEPARATE slow
+  # loop so it never stalls the 15 fps screen. It becomes the authoritative
+  # water_state and can wake YOLO on obstacles the HSV screen misses (fail-safe:
+  # it only ever ADDS triggers, never suppresses them). Absent/empty file → hybrid
+  # off (pure classical). On a Pi 5 CPU keep the rate low (1-2 Hz); a Hailo
+  # accelerator (ONNX-native) would let it run much faster. Drop the eWaSR export
+  # at this path (gitignored) to activate — nothing else to change.
+  seg_confirm_model_path: "pi5/cv/models/water_seg.onnx"
+  seg_confirm_max_fps: 2      # spot-check cadence (Hz) — keep low on a CPU
+  seg_confirm_ttl_s: 3        # trust a verdict this long before it goes stale
+  # --- Segmentation model knobs (apply to whichever seg model loads; ignored by
+  #     the classical screen) ---
+  # Which output class index is "water"; non-water pixels drive the anomaly score.
+  # Default 1 matches WaSR/eWaSR (0=obstacle, 1=water, 2=sky).
+  seg_water_class: 1
+  # Class indices excluded from the anomaly ratio (e.g. sky) so they don't inflate
+  # it. For 3-class WaSR/eWaSR, [2] drops sky.
+  seg_ignore_classes: [2]
+  # Input normalisation: "imagenet" (WaSR/torchvision convention) or "01" (/255).
+  seg_normalize: "imagenet"
+  # Optional [w, h] input override when the model exports dynamic axes.
+  # seg_input_size: [512, 384]
   # Fraction of the frame that must read as non-water to wake Tier 2 (YOLO).
   anomaly_trigger_threshold: 0.15
   # Once triggered, keep YOLO active this many frames before it can idle again
@@ -206,9 +279,12 @@ vision:
   # the water is clear). Set false to keep the detection overlay always-on
   # (classic behaviour) and use the YOLO toggle as a simple on/off.
   gate_yolo_on_anomaly: true
-  # Tier-1 analysis rate cap (Hz). Segmentation is cheap (downscaled) so this can
-  # stay high; it's decoupled from the video stream + the YOLO detect rate.
-  tier1_max_fps: 20
+  # Tier-1 water-analysis rate cap (Hz) — the "water detection at 15 fps" target.
+  # The classical screen is cheap (downscaled HSV) and easily sustains this; it's
+  # fully decoupled from the video stream and the YOLO detect rate, so holding it
+  # at 15 (rather than higher) leaves more CPU for YOLO without starving the
+  # always-on water screen.
+  tier1_max_fps: 15
   # Camera horizontal FOV — for mapping a bbox to a bearing (bbox → radar angle).
   fov_degrees: 75
 
@@ -231,15 +307,27 @@ vision:
     min_anomaly_score: 0.20
     min_interval_s: 5.0             # per-class rate limit so a static dock doesn't spam
 
-avoidance:
-  # COCO class id for "boat" — used by the YOLO detector to filter
-  boat_class_id: 8
-  # Boats closer than this start a steer-away override (metres)
-  min_distance_m: 5.0
-  # Boats closer than this trigger full-severity evasion (metres)
-  crit_distance_m: 2.0
-  # Avoidance loop rate
-  update_rate_hz: 4
+  reactive_avoidance:
+    # When the primary threat (CRITICAL/WARNING) enters the envelope, the
+    # pipeline pushes a steer-away override into the navigator that overrides
+    # waypoint steering until the threat clears (pi5/cv/avoidance.py). This is
+    # what actually keeps the boat off obstacles — it reuses the threats the
+    # pipeline already tracks (no second YOLO). Range prefers stereo depth and
+    # falls back to a coarse monocular bbox-size proxy on a single-camera rig.
+    enabled: true
+    trigger_distance_m: 8.0    # start bearing away at this range (m)
+    critical_distance_m: 3.0   # full-authority hard turn at this range (m)
+    # cruise_throttle: defaults to navigation.cruise_throttle if unset.
+    max_steer: 65              # peak differential steer at full severity
+    head_on_deg: 8.0           # |bearing| under this = head-on → pass to starboard (COLREGS)
+    # Forward-throttle floor at full severity. A small floor makes the boat ARC
+    # around a hazard instead of stopping (stopping lets path-following pull it
+    # straight back at the obstacle — a reactive local minimum). 0 = may stop.
+    min_forward_frac: 0.2
+    # Bug-style escape (AvoidanceController): commit to a side and PASS the hazard
+    # rather than orbiting one sitting on the goal line.
+    pass_bearing_deg: 110.0    # |bearing| behind the beam → tracked hazard is passed → release
+    pass_hold_s: 6.0           # when sight is lost, hold the maneuver this long to finish the pass
 
 stepper:
   # Radar-bar pan stepper (A4988 + NEMA-17) driven from the Pi 5 GPIO header

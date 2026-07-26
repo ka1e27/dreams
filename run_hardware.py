@@ -33,7 +33,7 @@ from pi5.cv.radar_tracker import RadarTracker
 from pi5.cv.stepper import StepperMotor
 from pi5.cv.vision_overlay import DetectionConfig, DetectionOverlay
 from pi5.navigation.mission_manager import MissionManager
-from pi5.navigation.navigator import Navigator
+from pi5.navigation.navigator import NavConfig, Navigator
 from pi5.server.app import app, configure
 
 logging.basicConfig(
@@ -54,6 +54,36 @@ def _load_config() -> dict:
         return {}
 
 
+def _nav_config(nav_cfg: dict) -> NavConfig:
+    """Build a NavConfig from the ``navigation:`` block, falling back to the
+    dataclass defaults for any key that isn't set. Previously this block in
+    config.yaml was silently ignored — Navigator ran on hard-coded defaults."""
+    defaults = NavConfig()
+
+    def g(key: str):
+        return nav_cfg.get(key, getattr(defaults, key))
+
+    return NavConfig(
+        arrive_radius_m=float(g("arrive_radius_m")),
+        hold_drift_m=float(g("hold_drift_m")),
+        cruise_throttle=int(g("cruise_throttle")),
+        heading_tolerance_deg=float(g("heading_tolerance_deg")),
+        max_heading_error_deg=float(g("max_heading_error_deg")),
+        turn_min_throttle=int(g("turn_min_throttle")),
+        update_rate_hz=float(g("update_rate_hz")),
+        full_speed_dist_m=float(g("full_speed_dist_m")),
+        min_approach_throttle=int(g("min_approach_throttle")),
+        align_speed_cut_deg=float(g("align_speed_cut_deg")),
+        turn_authority_throttle=int(g("turn_authority_throttle")),
+        los_enabled=bool(g("los_enabled")),
+        los_lookahead_m=float(g("los_lookahead_m")),
+        los_integral_gain=float(g("los_integral_gain")),
+        los_integral_clamp=float(g("los_integral_clamp")),
+        motor_gain_left=float(g("motor_gain_left")),
+        motor_gain_right=float(g("motor_gain_right")),
+    )
+
+
 def main() -> None:
     cfg = _load_config()
     serial_cfg = cfg.get("serial", {})
@@ -68,7 +98,7 @@ def main() -> None:
 
     # --- Real hardware interfaces ---
     pico = PicoSerial(port=port, baud=baud)
-    nav = Navigator(pico)
+    nav = Navigator(pico, _nav_config(cfg.get("navigation", {})))
     pod = PodBridge(pico)
     mission = MissionManager(pico, nav, pod)
     # Left/right device assignment: config.yaml is the default, but a live
@@ -111,8 +141,15 @@ def main() -> None:
             calib_path = cam_cfg.get("calibration_path", "pi5/cv/calibration.npz")
             calib = load_calibration(calib_path)
             if calib is not None:
-                stereo_depth = StereoDepth(calib)
-                logger.info("Stereo distance enabled (calibration: %s)", calib_path)
+                # SGBM at full 1080p dominates the inference budget; run it at
+                # a downscaled resolution (metrically corrected) for a big FPS
+                # win. Tune via camera.stereo_downscale (1.0 = full res).
+                stereo_depth = StereoDepth(
+                    calib, downscale=float(cam_cfg.get("stereo_downscale", 0.5)),
+                    wls=bool(cam_cfg.get("stereo_wls", False)))
+                logger.info("Stereo distance enabled (calibration: %s, downscale=%.2f, wls=%s)",
+                            calib_path, float(cam_cfg.get("stereo_downscale", 0.5)),
+                            bool(cam_cfg.get("stereo_wls", False)))
             else:
                 logger.info("No stereo calibration at %s — detection boxes show no distance",
                             calib_path)
@@ -170,7 +207,7 @@ def main() -> None:
     # requirement is the camera producer.
     pipeline = SurveyVisionPipeline(
         camera, overlay=overlay, radar=radar,
-        config=vision_cfg, pico=pico,
+        config=vision_cfg, pico=pico, navigator=nav,
         fov_deg=step_cfg.get("fov_degrees", 75),
         frame_width=cam_cfg.get("width", 640),
     )
@@ -188,7 +225,7 @@ def main() -> None:
         camera=camera,            # real USB camera(s) → /video + /ws/camera
         overlay=overlay,          # live detection boxes on /video
         jpeg_quality=cam_cfg.get("jpeg_quality", 60),
-        stream_fps=cam_cfg.get("stream_fps", 15),
+        stream_fps=cam_cfg.get("stream_fps", 30),
         winch_mode=cfg.get("winch", {}).get("mode", "survey"),
         stepper=stepper,          # radar-bar pan (Pi 5 GPIO)
         radar=radar,              # tracker thread = the motor's motion authority

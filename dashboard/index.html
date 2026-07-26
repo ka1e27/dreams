@@ -4,11 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Boat Dashboard</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      crossorigin=""
-    />
+    <!-- Leaflet's CSS is now bundled via `import 'leaflet/dist/leaflet.css'` in
+         src/main.jsx instead of this CDN link — the dashboard/Pi 5 pairing can
+         run on a boat with no general internet (cellular-only, or WiFi-only at
+         the dock), so a required third-party CDN asset was a reliability risk. -->
   </head>
   <body>
     <div id="root"></div>

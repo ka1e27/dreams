@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 
 from ..comms.pico_serial import PicoSerial
-from .geo import bearing, haversine_distance, heading_diff
+from .geo import distance_and_bearing, haversine_distance, heading_diff, los_course
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,31 @@ class NavConfig:
     # speed and allowed to drive the inner motor into reverse down to
     # -turn_authority_throttle, so the boat can turn hard in place at any range.
     turn_authority_throttle: int = 55
+    # ---- Line-of-sight (LOS) path following ----
+    # When a leg start is known, steer to a lookahead point on the *track line*
+    # between the previous waypoint and the target instead of pointing straight
+    # at the target. This nulls cross-track error (the perpendicular drift a
+    # naive "aim at the waypoint" law lets wind/current build up) so the boat
+    # follows the intended line rather than curving in from wherever it drifted.
+    los_enabled: bool = True
+    # Lookahead distance Δ (metres): smaller = more aggressive return to the
+    # track; larger = gentler. ~3–8 boat lengths is typical. The desired course
+    # is chi_path - atan2(xte, Δ), so at xte = Δ the boat aims 45° back to track.
+    los_lookahead_m: float = 12.0
+    # Integral LOS (ILOS) gain — set > 0 to cancel the *steady* cross-track bias
+    # from a constant current/wind (Lekkas & Fossen). 0 = pure lookahead LOS
+    # (robust, no windup risk); enable with a small value after field tuning.
+    los_integral_gain: float = 0.0
+    # Anti-windup clamp for the ILOS integrator (metre·seconds).
+    los_integral_clamp: float = 60.0
+    # ---- Per-motor thrust trim (mismatched motors) ----
+    # Two different-Kv motors (e.g. the twin 2814s on the test bench) produce
+    # unequal thrust at equal command, so the boat crabs. These gains scale each
+    # motor's command just before it's sent, so equal *command* → equal *thrust*.
+    # 1.0 = no trim. Bench-calibrate until the boat runs straight at equal command
+    # (bias the faster motor's gain down); the heading loop mops up the remainder.
+    motor_gain_left: float = 1.0
+    motor_gain_right: float = 1.0
 
 
 @dataclass
@@ -58,6 +83,12 @@ class NavState:
     throttle_right: int = 0
     arrived: bool = False
     active: bool = False
+    # LOS path-following telemetry: signed cross-track error (m, +starboard) and
+    # the steering course actually commanded (may differ from bearing_deg when
+    # LOS is nulling drift). avoiding = a CV obstacle override is in effect.
+    cross_track_m: float = 0.0
+    course_deg: float = 0.0
+    avoiding: bool = False
 
 
 class Navigator:
@@ -85,16 +116,33 @@ class Navigator:
         self._avoid_left: int = 0
         self._avoid_right: int = 0
 
+        # LOS path-following: start of the current leg (previous waypoint, or the
+        # position where goto() was issued) + the ILOS cross-track integrator.
+        self._leg_lat: float | None = None
+        self._leg_lon: float | None = None
+        self._xte_integral: float = 0.0
+        self._last_xte: float = 0.0
+
         self._task: asyncio.Task[None] | None = None
         self._on_arrived: asyncio.Event = asyncio.Event()
 
-    def goto(self, lat: float, lon: float) -> None:
-        """Set a target waypoint and begin navigating."""
+    def goto(self, lat: float, lon: float,
+             from_lat: float | None = None, from_lon: float | None = None) -> None:
+        """Set a target waypoint and begin navigating.
+
+        ``from_lat``/``from_lon`` fix the start of the track line for LOS path
+        following (typically the previous waypoint). If omitted, the leg starts
+        from wherever the boat is on the first navigation tick, so a bare
+        ``goto()`` still follows a sensible straight line from the current spot.
+        """
         self.state.target_lat = lat
         self.state.target_lon = lon
         self.state.arrived = False
         self.state.active = True
         self._holding = False
+        self._leg_lat = from_lat
+        self._leg_lon = from_lon
+        self._xte_integral = 0.0
         self._on_arrived.clear()
         logger.info("NAV goto %.6f, %.6f", lat, lon)
 
@@ -114,6 +162,10 @@ class Navigator:
         self._holding = False
         self.state.throttle_left = 0
         self.state.throttle_right = 0
+        # Drop the LOS leg + integrator so the next goto() starts a fresh track.
+        self._leg_lat = None
+        self._leg_lon = None
+        self._xte_integral = 0.0
 
     def set_avoidance_override(self, left: int, right: int) -> None:
         """Set obstacle avoidance throttle override (from CV module).
@@ -137,16 +189,32 @@ class Navigator:
 
     def compute_throttle(
         self, lat: float, lon: float, hdg: float,
-        tgt_lat: float, tgt_lon: float
+        tgt_lat: float, tgt_lon: float,
+        from_lat: float | None = None, from_lon: float | None = None,
     ) -> tuple[int, int, float, float, float, bool]:
         """Pure function: compute throttle given current and target position.
 
-        Returns (left, right, distance, brg, error, arrived).
+        Returns (left, right, distance, brg, error, arrived), where ``brg`` is
+        the bearing to the target and ``error`` is the heading error against the
+        *steering course*. When a leg start (``from_lat``/``from_lon``) is given
+        and LOS is enabled, the steering course is the lookahead line-of-sight
+        course along the track line (which nulls cross-track drift); otherwise it
+        is the direct bearing to the target — preserving the legacy behaviour.
         """
         cfg = self._config
-        dist = haversine_distance(lat, lon, tgt_lat, tgt_lon)
-        brg = bearing(lat, lon, tgt_lat, tgt_lon)
-        err = heading_diff(hdg, brg)
+        dist, brg = distance_and_bearing(lat, lon, tgt_lat, tgt_lon)
+
+        # Steering course: LOS along the leg when a leg start is known, else
+        # straight at the target (the original point-and-go behaviour).
+        if from_lat is not None and from_lon is not None and cfg.los_enabled:
+            course, self._last_xte = los_course(
+                from_lat, from_lon, tgt_lat, tgt_lon, lat, lon,
+                lookahead_m=cfg.los_lookahead_m,
+                xte_integral=self._xte_integral,
+                integral_gain=cfg.los_integral_gain)
+        else:
+            course, self._last_xte = brg, 0.0
+        err = heading_diff(hdg, course)
 
         if dist < cfg.arrive_radius_m:
             return 0, 0, dist, brg, err, True
@@ -216,6 +284,17 @@ class Navigator:
 
         return left, right, dist, brg, err, False
 
+    def _trim(self, left: int, right: int) -> tuple[int, int]:
+        """Scale each motor command by its trim gain and re-clamp to [-100, 100].
+
+        Corrects the crab from two mismatched-Kv motors so equal command yields
+        equal thrust. A no-op when both gains are 1.0.
+        """
+        cfg = self._config
+        left = int(max(-100, min(100, round(left * cfg.motor_gain_left))))
+        right = int(max(-100, min(100, round(right * cfg.motor_gain_right))))
+        return left, right
+
     async def _nav_loop(self) -> None:
         """Background navigation loop — runs at update_rate_hz."""
         interval = 1.0 / self._config.update_rate_hz
@@ -234,14 +313,36 @@ class Navigator:
                             logger.info("HOLD reacquire, drift=%.1fm", drift)
 
                 if self.state.active and self.state.target_lat is not None:
+                    # Anchor the LOS track line: use the caller-supplied leg
+                    # start, else latch the boat's current position the first
+                    # tick so the leg runs from here to the target.
+                    if self._leg_lat is None or self._leg_lon is None:
+                        self._leg_lat, self._leg_lon = tel.lat, tel.lon
+
                     left, right, dist, brg, err, arrived = self.compute_throttle(
                         tel.lat, tel.lon, tel.heading,
                         self.state.target_lat, self.state.target_lon,
+                        self._leg_lat, self._leg_lon,
                     )
 
                     self.state.distance_m = dist
                     self.state.bearing_deg = brg
                     self.state.heading_error = err
+                    self.state.cross_track_m = self._last_xte
+                    self.state.course_deg = (tel.heading + err) % 360.0
+
+                    # ILOS: integrate cross-track error to cancel steady drift,
+                    # but freeze the integrator while pivoting hard or avoiding an
+                    # obstacle (both are transients that would otherwise wind it
+                    # up). Clamped for anti-windup.
+                    avoiding = self._avoid_left != 0 or self._avoid_right != 0
+                    if (self._config.los_integral_gain > 0.0
+                            and abs(err) < self._config.align_speed_cut_deg
+                            and not avoiding):
+                        self._xte_integral += self._last_xte * interval
+                        clamp = self._config.los_integral_clamp
+                        self._xte_integral = max(-clamp, min(clamp, self._xte_integral))
+                    self.state.avoiding = avoiding
 
                     if arrived:
                         self.state.arrived = True
@@ -261,6 +362,9 @@ class Navigator:
                             left = self._avoid_left
                             right = self._avoid_right
 
+                        # Per-motor trim for mismatched motors (applied last, to
+                        # whatever the final command is — nav or avoidance).
+                        left, right = self._trim(left, right)
                         self.state.throttle_left = left
                         self.state.throttle_right = right
                         try:

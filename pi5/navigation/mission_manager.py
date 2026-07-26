@@ -102,7 +102,6 @@ class MissionManager:
 
         # Callbacks
         self._on_mission_complete: asyncio.Event = asyncio.Event()
-        self._on_wp_arrived: list = []
 
     @property
     def waypoints(self) -> list[Waypoint]:
@@ -219,10 +218,27 @@ class MissionManager:
             logger.info("Mission paused at WP %d", self.state.current_wp)
 
     def resume_mission(self) -> None:
-        """Resume a paused mission."""
+        """Resume a paused mission.
+
+        pause() calls navigator.stop_nav(), which zeroes the throttle and
+        clears the navigator's target/hold state entirely — so without this,
+        resuming just released the pause gate while the navigator had
+        nothing to steer toward, and the mission would hang forever waiting
+        for an arrival that could never come. Re-engage the navigator at the
+        current waypoint, the same way it was being approached before the
+        pause: goto() during transit, hold() while stopped at a data site.
+        """
         if self.state.running and self.state.paused:
             self.state.paused = False
             self._pause_event.set()
+            if self._waypoints and self._nav is not None:
+                wp = self._waypoints[self.state.current_wp]
+                if self.state.phase == MissionPhase.TRANSIT:
+                    self._nav.goto(wp.lat, wp.lon)
+                elif self.state.phase in (
+                    MissionPhase.WINCH_DOWN, MissionPhase.SAMPLING, MissionPhase.WINCH_UP
+                ):
+                    self._nav.hold(wp.lat, wp.lon)
             logger.info("Mission resumed at WP %d", self.state.current_wp)
 
     def abort(self, reason: str = "ABORTED") -> None:
@@ -281,13 +297,20 @@ class MissionManager:
                 # Wait if paused
                 await self._pause_event.wait()
 
-                # Navigate to waypoint
+                # Navigate to waypoint. Anchor the LOS track line to the previous
+                # waypoint so the boat follows the planned leg (not a curved path
+                # in from wherever it drifted); the first leg latches the boat's
+                # current position instead.
                 logger.info("Transit to WP %d/%d: %.6f, %.6f [%s] %s",
                             idx, len(self._waypoints),
                             wp.lat, wp.lon,
                             "DATA" if wp.wp_type == WaypointType.DATA else "PATH",
                             wp.label)
-                self._nav.goto(wp.lat, wp.lon)
+                prev = self._waypoints[idx - 1] if idx > 0 else None
+                if prev is not None:
+                    self._nav.goto(wp.lat, wp.lon, prev.lat, prev.lon)
+                else:
+                    self._nav.goto(wp.lat, wp.lon)
 
                 # Wait for arrival
                 while not self._abort_event.is_set():

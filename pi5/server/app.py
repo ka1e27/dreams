@@ -67,6 +67,7 @@ _network = None    # comms.network.NetworkManager (optional)
 _stepper = None    # cv.stepper.StepperMotor (optional, radar-bar pan)
 _radar = None      # cv.radar_tracker.RadarTracker (optional)
 _pipeline = None   # cv.pipeline.SurveyVisionPipeline (optional, three-tier vision)
+_obstacles = None  # navigation.sim_obstacles.ObstacleField (simulator only)
 _winch_mode = "survey"
 _home_lat = None
 _home_lon = None
@@ -77,11 +78,12 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
               cors_origins=None, simulator=None, camera=None,
               network=None, winch_mode="survey", overlay=None,
               jpeg_quality=60, stream_fps=15, stepper=None, radar=None,
-              pipeline=None):
+              pipeline=None, obstacle_field=None):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
-    global _stepper, _radar, _pipeline
+    global _stepper, _radar, _pipeline, _obstacles
+    _obstacles = obstacle_field
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -168,6 +170,8 @@ def _nav_out() -> NavStateOut:
         heading_error=n.heading_error,
         throttle_left=n.throttle_left, throttle_right=n.throttle_right,
         arrived=n.arrived, active=n.active,
+        cross_track_m=n.cross_track_m, course_deg=n.course_deg,
+        avoiding=n.avoiding,
     )
 
 
@@ -443,6 +447,61 @@ async def get_sim_speed(_: str = Depends(auth.require_api_key)):
     return {"max_speed_mps": _sim._config.max_speed_mps}
 
 
+# ---- Simulated obstacles (simulator only) ----
+# Ground-truth obstacles the SimAvoider ranges to exercise reactive avoidance
+# end-to-end without a camera. Rendered on the command-center map; the boat
+# steers around them using the same override the vision pipeline uses on hardware.
+
+@app.get("/api/sim/obstacles")
+async def get_sim_obstacles(_: str = Depends(auth.require_api_key)):
+    """List simulated obstacles (empty when not in simulator mode)."""
+    if _obstacles is None:
+        return {"available": False, "obstacles": []}
+    return {"available": True, "obstacles": _obstacles.as_dicts()}
+
+
+@app.post("/api/sim/obstacles")
+async def add_sim_obstacle(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Add a simulated obstacle.
+
+    Body: ``{lat, lon, radius_m?, label?}`` to place at a point, OR
+    ``{ahead_m, radius_m?}`` to drop one that many metres ahead of the boat's
+    current heading (what the command center's DROP OBSTACLE button uses).
+    """
+    if _obstacles is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Not in simulator mode")
+    radius = float(payload.get("radius_m", 4.0))
+    label = str(payload.get("label", "obstacle"))
+    lat, lon = payload.get("lat"), payload.get("lon")
+    if lat is None or lon is None:
+        # Project a point ahead of the boat along its heading.
+        import math
+        ahead = float(payload.get("ahead_m", 15.0))
+        t = _pico.telemetry
+        hr = t.heading * (math.pi / 180.0)
+        dlat = ahead * math.cos(hr) / 6_371_000.0 * (180.0 / math.pi)
+        dlon = (ahead * math.sin(hr) / (6_371_000.0 * math.cos(t.lat * math.pi / 180.0))
+                * (180.0 / math.pi))
+        lat, lon = t.lat + dlat, t.lon + dlon
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="invalid coordinates")
+    o = _obstacles.add(float(lat), float(lon), radius, label)
+    return {"status": "added", "obstacle": o.to_dict(),
+            "count": len(_obstacles.obstacles)}
+
+
+@app.delete("/api/sim/obstacles")
+async def clear_sim_obstacles(_: str = Depends(auth.require_api_key)):
+    """Remove all simulated obstacles."""
+    if _obstacles is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Not in simulator mode")
+    _obstacles.clear()
+    return {"status": "cleared"}
+
+
 @app.post("/api/nav/throttle")
 async def set_cruise_throttle(
     payload: dict,
@@ -461,6 +520,70 @@ async def set_cruise_throttle(
 async def get_cruise_throttle(_: str = Depends(auth.require_api_key)):
     """Get current cruise throttle."""
     return {"cruise_throttle": _navigator._config.cruise_throttle}
+
+
+@app.get("/api/nav/motor-trim")
+async def get_motor_trim(_: str = Depends(auth.require_api_key)):
+    """Get per-motor trim gains (for mismatched-Kv motors)."""
+    cfg = _navigator._config
+    return {"left": cfg.motor_gain_left, "right": cfg.motor_gain_right}
+
+
+@app.post("/api/nav/motor-trim")
+async def set_motor_trim(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Set per-motor trim gains. Each command is scaled by its gain before send,
+    so equal command → equal thrust on two different-Kv motors. Range 0.5–1.5."""
+    from fastapi import HTTPException
+    cfg = _navigator._config
+    for side, attr in (("left", "motor_gain_left"), ("right", "motor_gain_right")):
+        if payload.get(side) is not None:
+            try:
+                v = float(payload[side])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{side} must be a number")
+            if not (0.5 <= v <= 1.5):
+                raise HTTPException(status_code=400, detail=f"{side} must be 0.5–1.5")
+            setattr(cfg, attr, v)
+    return {"left": cfg.motor_gain_left, "right": cfg.motor_gain_right}
+
+
+@app.post("/api/esc/passthrough")
+async def esc_passthrough(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Arm AM32 ESC passthrough on the Boat Pico (EXPERIMENTAL — see
+    docs/esc_passthrough.md). Sends ESC_PASS, then releases the serial link so
+    am32.ca / the passthrough tool can take /dev/ttyACM0. Hardware only; refuses
+    during a mission."""
+    from fastapi import HTTPException
+    if _sim is not None:
+        raise HTTPException(status_code=400,
+                            detail="ESC passthrough is hardware-only (not in simulator)")
+    if _pico is None or not getattr(_pico, "connected", False):
+        raise HTTPException(status_code=503, detail="No Boat Pico link")
+    if _mission is not None and _mission.state.running:
+        raise HTTPException(status_code=409, detail="Stop the mission first")
+    esc = 1 if str(payload.get("esc", "left")).lower() in ("1", "right", "r") else 0
+    try:
+        baud = int(payload.get("baud", 19200))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="baud must be an integer")
+    # Stop motors, arm the bridge, then drop the link so the port frees.
+    _navigator.stop_nav()
+    try:
+        await _pico.emergency_stop()
+        await _pico.esc_passthrough(esc, baud)
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Pico did not accept ESC_PASS: {e}")
+    try:
+        await _pico.disconnect()
+    except Exception:  # noqa: BLE001
+        pass
+    return {
+        "status": "armed", "esc": "right" if esc else "left", "baud": baud,
+        "message": ("Pico is now bridging the %s ESC. Open am32.ca (Chromium) and "
+                    "connect to the Pico serial port to configure it, then restart "
+                    "the boat stack. See docs/esc_setup.md / esc_passthrough.md."
+                    % ("right" if esc else "left")),
+    }
 
 
 @app.post("/api/winch/speed")
@@ -762,8 +885,12 @@ def _parse_eq_float(text: str | None) -> float | None:
         return None
 
 
-# Order of the 6-char health-flags string in TEL / GET_STATUS (serial-protocol.md).
-_HEALTH_FLAG_NAMES = ("GPS", "CMP", "BAT", "DHT", "MOT", "POD")
+# Order of the 6-char health-flags string in TEL / GET_STATUS. This must match
+# what the Boat Pico firmware actually emits in _health_flags()
+# (firmware/boat-pico/main.py): GPS, IMU, drive battery, electronics battery,
+# motor, pod. The older serial-protocol.md label "DHT" for byte 4 was stale —
+# byte 4 is the electronics-battery health bit, not a temp sensor.
+_HEALTH_FLAG_NAMES = ("GPS", "IMU", "P_BAT", "E_BAT", "MOT", "POD")
 
 
 def _boat_health() -> dict:
@@ -848,11 +975,20 @@ async def _gather_health() -> dict:
     except Exception as e:  # noqa: BLE001 — psutil missing/unavailable is non-fatal
         logger.debug("psutil unavailable: %s", e)
 
-    temp_c = _parse_eq_float(await _vcgencmd("measure_temp"))
-    throttled_raw, throttled = _decode_throttled(await _vcgencmd("get_throttled"))
-    clock_hz = _parse_eq_float(await _vcgencmd("measure_clock", "arm"))
-    volts = {src: _parse_eq_float(await _vcgencmd("measure_volts", src))
-             for src in ("core", "sdram_c", "sdram_i", "sdram_p")}
+    # Run the vcgencmd probes concurrently — each is an independent subprocess
+    # spawn with its own bounded timeout, so awaiting them one at a time only
+    # added latency (up to ~7x) to this once-a-second background loop.
+    volt_srcs = ("core", "sdram_c", "sdram_i", "sdram_p")
+    temp_raw, throttled_raw_out, clock_raw, *volt_raws = await asyncio.gather(
+        _vcgencmd("measure_temp"),
+        _vcgencmd("get_throttled"),
+        _vcgencmd("measure_clock", "arm"),
+        *(_vcgencmd("measure_volts", src) for src in volt_srcs),
+    )
+    temp_c = _parse_eq_float(temp_raw)
+    throttled_raw, throttled = _decode_throttled(throttled_raw_out)
+    clock_hz = _parse_eq_float(clock_raw)
+    volts = {src: _parse_eq_float(v) for src, v in zip(volt_srcs, volt_raws)}
     if not any(v is not None for v in volts.values()):
         volts = None
 
@@ -1224,6 +1360,16 @@ async def toggle_segmentation(_: str = Depends(auth.require_api_key)):
             "message": "Segmentation %s" % ("enabled" if state else "disabled")}
 
 
+@app.post("/vision/avoidance/toggle")
+async def toggle_avoidance(_: str = Depends(auth.require_api_key)):
+    """Toggle reactive obstacle avoidance (steer-away override) on/off."""
+    if _pipeline is None:
+        return Response(status_code=503, content="vision pipeline not available")
+    state = _pipeline.set_avoidance_enabled(not _pipeline.avoidance_enabled)
+    return {"avoidance_enabled": state,
+            "message": "Avoidance %s" % ("enabled" if state else "disabled")}
+
+
 # ---- Camera device assignment (which /dev/video* is LEFT / RIGHT) ----
 # The command center's SOURCES controls hit these. Assignments are persisted
 # to a JSON file next to this module so run_hardware.py restores them on
@@ -1475,14 +1621,21 @@ async def ws_pico(ws: WebSocket):
     out_q: asyncio.Queue[dict] = asyncio.Queue()
 
     async def pump():
-        # Single writer task — avoids concurrent sends on one socket.
+        # Single writer task — avoids concurrent sends on one socket. Guarded
+        # so a broken/closing socket stops this task cleanly (the outer
+        # receive loop notices the disconnect and cleans up in `finally`)
+        # instead of dying with an unretrieved exception.
         state: dict = {}
         while True:
-            while not out_q.empty():
-                await ws.send_json(out_q.get_nowait())
-            for line in _pico_status_lines(state):
-                await ws.send_json({"line": line, "ts": time.time()})
-            await asyncio.sleep(0.4)
+            try:
+                while not out_q.empty():
+                    await ws.send_json(out_q.get_nowait())
+                for line in _pico_status_lines(state):
+                    await ws.send_json({"line": line, "ts": time.time()})
+                await asyncio.sleep(0.4)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Pico terminal writer stopped: %s", e)
+                break
 
     writer = asyncio.create_task(pump())
     try:
@@ -1496,6 +1649,12 @@ async def ws_pico(ws: WebSocket):
         logger.debug("WS pico error: %s", e)
     finally:
         writer.cancel()
+
+
+# Serializes hardware-reflash operations (/pico/files, /pico/file, /pico/push)
+# so two concurrent admin requests can't both release+reacquire the physical
+# serial port at once and race mpremote against each other.
+_pico_port_lock = asyncio.Lock()
 
 
 def _pico_reflash_available() -> tuple[bool, str]:
@@ -1515,14 +1674,15 @@ async def pico_files(_: str = Depends(auth.require_api_key)):
     if not ok:
         return {"available": False, "files": [], "reason": reason}
     port = getattr(_pico, "_port", "/dev/ttyACM0")
-    was_connected = bool(getattr(_pico, "connected", False))
-    if was_connected:
-        await _pico.disconnect()
-    try:
-        rc, out = await _mpremote(port, "fs", "ls")
-    finally:
+    async with _pico_port_lock:
+        was_connected = bool(getattr(_pico, "connected", False))
         if was_connected:
-            await _reconnect_pico()
+            await _pico.disconnect()
+        try:
+            rc, out = await _mpremote(port, "fs", "ls")
+        finally:
+            if was_connected:
+                await _reconnect_pico()
     if not rc:
         return {"available": True, "files": [], "reason": out}
     files = []
@@ -1544,14 +1704,15 @@ async def pico_file(name: str = "main.py", _: str = Depends(auth.require_api_key
     if not ok:
         return {"available": False, "name": name, "content": "", "reason": reason}
     port = getattr(_pico, "_port", "/dev/ttyACM0")
-    was_connected = bool(getattr(_pico, "connected", False))
-    if was_connected:
-        await _pico.disconnect()
-    try:
-        rc, out = await _mpremote(port, "fs", "cat", ":" + name)
-    finally:
+    async with _pico_port_lock:
+        was_connected = bool(getattr(_pico, "connected", False))
         if was_connected:
-            await _reconnect_pico()
+            await _pico.disconnect()
+        try:
+            rc, out = await _mpremote(port, "fs", "cat", ":" + name)
+        finally:
+            if was_connected:
+                await _reconnect_pico()
     if not rc:
         return {"available": True, "name": name, "content": "", "reason": out}
     return {"available": True, "name": name, "content": out}
@@ -1586,14 +1747,15 @@ async def pico_push(payload: dict, force: bool = False,
     try:
         tmp.write(content)
         tmp.close()
-        await _pico.disconnect()
-        try:
-            cp_ok, cp_msg = await _mpremote(port, "fs", "cp", tmp.name, ":" + filename)
-            if not cp_ok:
-                return {"ok": False, "error": "copy failed: " + cp_msg}
-            rst_ok, rst_msg = await _mpremote(port, "reset")
-        finally:
-            await _reconnect_pico()
+        async with _pico_port_lock:
+            await _pico.disconnect()
+            try:
+                cp_ok, cp_msg = await _mpremote(port, "fs", "cp", tmp.name, ":" + filename)
+                if not cp_ok:
+                    return {"ok": False, "error": "copy failed: " + cp_msg}
+                rst_ok, rst_msg = await _mpremote(port, "reset")
+            finally:
+                await _reconnect_pico()
         if not rst_ok:
             return {"ok": False, "error": "reset failed: " + rst_msg}
         return {"ok": True, "message": "pushed %s and reset Pico" % filename}

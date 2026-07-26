@@ -155,8 +155,10 @@ class OnnxYolo:
             logger.warning("onnxruntime not installed — ONNX detector off (%s)", e)
             return
         try:
+            from .ort_utils import ort_providers, ort_session_options
             self.session = ort.InferenceSession(
-                model_path, providers=["CPUExecutionProvider"])
+                model_path, sess_options=ort_session_options(ort),
+                providers=ort_providers(ort))
             inp = self.session.get_inputs()[0]
             self.input_name = inp.name
             # input shape is [1, 3, H, W]; H may be a string if dynamic.
@@ -181,9 +183,12 @@ class OnnxYolo:
             import cv2
             h, w = frame_bgr.shape[:2]
             canvas, ratio, pad_x, pad_y = letterbox(frame_bgr, self.imgsz)
-            rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
-            blob = rgb.astype(np.float32) / 255.0
-            blob = np.transpose(blob, (2, 0, 1))[np.newaxis, ...]  # NCHW
+            # blobFromImage does BGR→RGB (swapRB), /255 scale, and HWC→NCHW in
+            # one C++ call — no intermediate float copies or numpy transpose.
+            # canvas is already imgsz², so size is a no-op (no distortion).
+            blob = cv2.dnn.blobFromImage(
+                canvas, scalefactor=1.0 / 255.0,
+                size=(self.imgsz, self.imgsz), swapRB=True, crop=False)
             out = self.session.run(None, {self.input_name: blob})[0]
             return decode(np.asarray(out), self.names,
                           conf if conf is not None else self.conf, self.iou,

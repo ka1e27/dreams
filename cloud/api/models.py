@@ -29,7 +29,7 @@ class SensorReading(Base):
     air_temp = Column(Float)
     air_humidity = Column(Float)
     batt_v = Column(Float)
-    mission_name = Column(String(100))
+    mission_name = Column(String(100), index=True)
     waypoint_idx = Column(Integer)
 
     # Spatial index for bounding box queries
@@ -54,4 +54,7 @@ class MissionTrack(Base):
 
     __table_args__ = (
         Index("idx_track_geom", geom, postgresql_using="gist"),
+        # Covers query_track's WHERE mission_name = ? AND timestamp BETWEEN ?
+        # ORDER BY timestamp pattern with one index scan instead of two.
+        Index("idx_track_mission_time", "mission_name", "timestamp"),
     )

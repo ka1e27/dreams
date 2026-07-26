@@ -18,15 +18,22 @@ test bench taps them directly on the Pico breakout header. Both drive ESCs share
 PWM slice 1 (channels A/B): same 50 Hz frequency, independent duty — which is
 exactly what two ESCs need. See docs/hardware_changes_v2_to_testbench.md.
 
-⚠ Safety: unlike a VESC, a dumb ESC has no command-timeout — it holds the last
-  pulse indefinitely, so the motors keep running if commands stop. The safety net
-  is the Pico's own heartbeat watchdog (watchdog.py, 3 s) → motor_control.estop()
-  → this module drives both ESCs back to neutral.
+Test-bench ESCs: NeutronRC 70A-G071 (STM32G071, AM32 firmware, 2-8S). AM32 is
+configurable firmware, not a "dumb" ESC — it auto-detects the 50 Hz servo PWM
+signal this module sends, and it supports a REVERSIBLE (bidirectional) mode, so
+the negative-throttle pivots/avoidance the navigator commands actually reverse
+the inner motor. See docs/esc_setup.md for the required AM32 configuration.
 
-Standard hobby ESC pulse range (shared with the winch ESC):
+⚠ Safety: the ESC holds the last pulse if commands stop (AM32's own signal-loss
+  behaviour aside). The primary safety net is the Pico's heartbeat watchdog
+  (watchdog.py, 3 s) → motor_control.estop() → this module drives both ESCs back
+  to neutral.
+
+Servo-PWM pulse range (shared with the winch ESC), with AM32 bidirectional mode:
   1.0 ms = full reverse, 1.5 ms = neutral/stop, 2.0 ms = full forward, at 50 Hz.
-⚠ Confirm against your ESC's datasheet before first spin-up — some ESCs are
-  forward-only or use a different neutral point.
+⚠ Reverse only works with AM32 **Bi-directional mode enabled** (docs/esc_setup.md).
+  With it off the ESC is forward-only and a <1.5 ms pulse just idles — the boat
+  then can't pivot in place or reverse to bear away. Confirm before first spin-up.
 
 Note: GP0/GP1 are dead — do not use.
 """

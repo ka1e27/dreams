@@ -59,7 +59,7 @@ def main() -> None:
 
     # --- CPU inference benchmark @ imgsz 320 (Pi-5 proxy) ---
     print("\n=== CPU inference benchmark (imgsz=320) ===")
-    cpu_fps = _benchmark_cpu(YOLO, str(WEIGHTS))
+    cpu_fps = _benchmark_cpu(model)
     print(f"  mean FPS (CPU): {cpu_fps:.1f}")
 
     # --- Pass/fail ---
@@ -78,9 +78,10 @@ def main() -> None:
           else "some thresholds FAILED — more data/epochs may be needed")
 
 
-def _benchmark_cpu(YOLO, weights: str, runs: int = 50) -> float:
+def _benchmark_cpu(model, runs: int = 50) -> float:
+    """Benchmark the already-loaded model — avoids re-reading best.pt from disk
+    and reconstructing it a second time just for timing."""
     import numpy as np
-    model = YOLO(weights)
     dummy = (np.random.rand(640, 640, 3) * 255).astype("uint8")
     for _ in range(5):  # warmup
         model.predict(dummy, imgsz=320, device="cpu", verbose=False)

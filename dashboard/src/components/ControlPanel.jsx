@@ -2,15 +2,20 @@ import { useState } from 'react'
 
 export default function ControlPanel({ api, mission, waypoints, onClearWaypoints }) {
   const [status, setStatus] = useState('')
+  const [pending, setPending] = useState(false)
 
   async function exec(action, name) {
+    if (pending) return
     try {
+      setPending(true)
       setStatus(`${name}...`)
       await action()
       setStatus(`${name} OK`)
       setTimeout(() => setStatus(''), 2000)
     } catch (e) {
       setStatus(`${name} FAILED: ${e.message}`)
+    } finally {
+      setPending(false)
     }
   }
 
@@ -19,17 +24,17 @@ export default function ControlPanel({ api, mission, waypoints, onClearWaypoints
 
   return (
     <div className="card">
-      <div className="card-header">Controls</div>
+      <div className="card-header card-header--controls">Controls</div>
       <div className="card-body">
         {/* Emergency */}
         <div className="btn-group" style={{ marginBottom: 8 }}>
-          <button className="btn btn-danger" onClick={() => exec(api.estop, 'ESTOP')}>
+          <button className="btn btn-danger" disabled={pending} onClick={() => exec(api.estop, 'ESTOP')}>
             ESTOP
           </button>
-          <button className="btn" onClick={() => exec(api.resumeEstop, 'Resume')}>
+          <button className="btn" disabled={pending} onClick={() => exec(api.resumeEstop, 'Resume')}>
             Resume
           </button>
-          <button className="btn btn-accent" onClick={() => exec(api.returnHome, 'RTH')}>
+          <button className="btn btn-accent" disabled={pending} onClick={() => exec(api.returnHome, 'RTH')}>
             RTH
           </button>
         </div>
@@ -37,7 +42,7 @@ export default function ControlPanel({ api, mission, waypoints, onClearWaypoints
         {/* Mission */}
         <div className="btn-group" style={{ marginBottom: 8 }}>
           {!running && waypoints?.length > 0 && (
-            <button className="btn btn-success" onClick={() => {
+            <button className="btn btn-success" disabled={pending} onClick={() => {
               const m = { name: 'Dashboard Mission', waypoints }
               exec(() => api.uploadAndStart(m), 'Start Mission')
               onClearWaypoints?.()
@@ -46,17 +51,17 @@ export default function ControlPanel({ api, mission, waypoints, onClearWaypoints
             </button>
           )}
           {running && !paused && (
-            <button className="btn" onClick={() => exec(api.pauseMission, 'Pause')}>
+            <button className="btn" disabled={pending} onClick={() => exec(api.pauseMission, 'Pause')}>
               Pause
             </button>
           )}
           {running && paused && (
-            <button className="btn btn-accent" onClick={() => exec(api.resumeMission, 'Resume')}>
+            <button className="btn btn-accent" disabled={pending} onClick={() => exec(api.resumeMission, 'Resume')}>
               Resume
             </button>
           )}
           {running && (
-            <button className="btn btn-danger" onClick={() => exec(api.abortMission, 'Abort')}>
+            <button className="btn btn-danger" disabled={pending} onClick={() => exec(api.abortMission, 'Abort')}>
               Abort
             </button>
           )}
@@ -102,17 +107,16 @@ export default function ControlPanel({ api, mission, waypoints, onClearWaypoints
 
         {/* Status */}
         {status && (
-          <div style={{
-            marginTop: 8, fontSize: 11, padding: '4px 8px',
-            background: status.includes('FAIL') ? 'var(--danger-dim)' : 'rgba(56,189,248,0.1)',
-            borderRadius: 4,
-            color: status.includes('FAIL') ? 'var(--danger)' : 'var(--accent)',
-          }}>
+          <div
+            className={`toast ${status.includes('FAIL') ? 'toast--error' : 'toast--ok'}`}
+            role="status"
+            aria-live="polite"
+          >
             {status}
           </div>
         )}
 
-        <div style={{ marginTop: 8, fontSize: 10, color: 'var(--text-dim)' }}>
+        <div className="hint-text">
           Click map to place waypoints
         </div>
       </div>

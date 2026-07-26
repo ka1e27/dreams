@@ -19,7 +19,7 @@ from database import get_db, init_db
 from fastapi import Depends, FastAPI, HTTPException, Query, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
-from geoalchemy2.functions import ST_MakeEnvelope, ST_MakePoint, ST_Within
+from geoalchemy2.functions import ST_MakeEnvelope, ST_MakePoint, ST_SetSRID, ST_Within
 from models import MissionTrack, SensorReading
 from schemas import (
     BatchIngestIn,
@@ -41,6 +41,12 @@ _api_key = os.environ.get("CLOUD_API_KEY", "")
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database tables created/verified")
+    if not _api_key:
+        logger.warning(
+            "CLOUD_API_KEY is not set - write/query endpoints are running in "
+            "OPEN dev-mode (no API key required). Set CLOUD_API_KEY before "
+            "exposing this API outside local development."
+        )
     yield
 
 
@@ -68,7 +74,7 @@ async def require_api_key(key: str | None = Security(_api_key_header)) -> str:
 # ---- Health ----
 
 @app.get("/health")
-async def health(db: Session = Depends(get_db)):
+def health(db: Session = Depends(get_db)):
     """Health check — verifies database connectivity."""
     try:
         db.execute(select(func.now()))
@@ -80,7 +86,7 @@ async def health(db: Session = Depends(get_db)):
 # ---- Sensor Readings ----
 
 @app.post("/api/v1/readings", response_model=BatchIngestOut)
-async def ingest_readings(
+def ingest_readings(
     payload: BatchIngestIn,
     db: Session = Depends(get_db),
     _: str = Depends(require_api_key),
@@ -92,7 +98,7 @@ async def ingest_readings(
             timestamp=r.timestamp,
             lat=r.lat,
             lon=r.lon,
-            geom=ST_MakePoint(r.lon, r.lat, type_=None),
+            geom=ST_SetSRID(ST_MakePoint(r.lon, r.lat), 4326),
             water_temp=r.water_temp,
             salinity_ec=r.salinity_ec,
             light_pct=r.light_pct,
@@ -110,7 +116,7 @@ async def ingest_readings(
 
 
 @app.get("/api/v1/readings", response_model=list[SensorReadingOut])
-async def query_readings(
+def query_readings(
     min_lat: float = Query(ge=-90, le=90),
     max_lat: float = Query(ge=-90, le=90),
     min_lon: float = Query(ge=-180, le=180),
@@ -145,7 +151,7 @@ async def query_readings(
 # ---- Track Points ----
 
 @app.post("/api/v1/track", response_model=BatchIngestOut)
-async def ingest_track(
+def ingest_track(
     points: list[TrackPointIn],
     db: Session = Depends(get_db),
     _: str = Depends(require_api_key),
@@ -157,7 +163,7 @@ async def ingest_track(
             timestamp=p.timestamp,
             lat=p.lat,
             lon=p.lon,
-            geom=ST_MakePoint(p.lon, p.lat, type_=None),
+            geom=ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326),
             heading=p.heading,
             speed_knots=p.speed_knots,
             mission_name=p.mission_name,
@@ -169,7 +175,7 @@ async def ingest_track(
 
 
 @app.get("/api/v1/track", response_model=list[TrackPointOut])
-async def query_track(
+def query_track(
     mission_name: str | None = None,
     start: str | None = None,
     end: str | None = None,
@@ -197,7 +203,7 @@ async def query_track(
 # ---- Missions ----
 
 @app.get("/api/v1/missions")
-async def list_missions(
+def list_missions(
     db: Session = Depends(get_db),
     _: str = Depends(require_api_key),
 ):

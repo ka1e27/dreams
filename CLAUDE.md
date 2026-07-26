@@ -89,9 +89,9 @@ The KiCad 10 project lives in the repo (schematic format version `20260306`, gen
 | Group | Refs | Notes |
 |-------|------|-------|
 | Compute | A1 | RaspberryPi_Pico |
-| Batteries | 3× M18 (drive, series), 1× M18 (electronics), 1× M18 (winch) | Three fully isolated domains — see `docs/battery_architecture.md` |
+| Batteries | 2× M18 (drive, parallel — test bench), 1× M18 (electronics), 1× M18 (winch) | Three fully isolated domains — see `docs/battery_architecture.md` |
 | Fuses | Drive 200A ANL + 100A ANL per ESC; elec 15A blade; winch 20A blade | Per-pack overcurrent handled by M18 REDLINK BMS |
-| Battery dividers | Drive 200k/10k → GP26, Elec 56k/10k → GP27, Winch 56k/10k → GP28 | All ×ratio to ≤3.18 V at the Boat Pico ADC |
+| Battery dividers | Drive 130k/10k → GP26 (test bench, ×14; 21 V→1.5 V), Elec 56k/10k → GP27, Winch 56k/10k → GP28 | All ≤3.18 V at the Boat Pico ADC — see `docs/battery_architecture.md` |
 | Drive output | J4/J5 (XT90, VESC L/R), J6 (XT60, tow-ESC stub) | |
 | VESC comms | J2 ("CAN chain", 7-pin) → Pico UART0 GP12/13 | |
 | Winch | J8 (M18 power), J9 (PWM, GP14) | |
@@ -113,16 +113,16 @@ together. Quick orientation only:
 
 - **Boat Pico:** GP0/GP1 dead. GP4/5 UART1 (GPS M10Q + Pod, shared 9600). GP8/9 I²C0 (BNO085 @ 0x4A).
   GP10 status NeoPixel. GP12/13 UART0 (VESC master, 115200). GP14 winch PWM. GP15 SBUS (PIO).
-  GP16 DHT11. GP17/18 hull leak. GP26 ADC drive (3× M18), GP27 ADC electronics (M18), GP28 ADC winch (M18).
+  GP16 DHT11. GP17/18 hull leak. GP26 ADC drive (2× M18 parallel), GP27 ADC electronics (M18), GP28 ADC winch (M18).
 - **Pod Pico:** GP0/1 UART to Boat Pico (slip ring). GP17 EC drive, GP20 leak, GP21 bottom contact,
   GP22 pressure, GP26 water-temp NTC, GP27 EC sense, GP28 light.
 
-> **Battery dividers (M18 three-domain).** Firmware and docs now agree: drive **200k/10k** (×21.0,
-> 63 V → 3.00 V) → GP26, electronics **56k/10k** (×6.6, 21 V → 3.18 V) → GP27, winch **56k/10k**
-> (×6.6) → GP28. All three rails are monitored (`firmware/boat-pico/sensors.py`). This supersedes the
-> old 12S/3S/4S divider values and resolves the previous firmware↔schematic discrepancy. The KiCad
-> schematic still carries the *old* resistor values and needs updating in KiCad Tool to match — see
-> `docs/battery_architecture.md`.
+> **Battery dividers (M18 three-domain).** Test bench: drive **130k/10k** (×14.0) → GP26 — the packs
+> are now **2× M18 parallel** (21 V max → ~1.5 V at the pin, reads correctly at ×14, no resistor rework
+> for the parallel swap; fit 56k/10k + set `INV_P_RATIO=6.6` only if you want full ADC range),
+> electronics **56k/10k** (×6.6, 21 V → 3.18 V) → GP27, winch **56k/10k** (×6.6) → GP28. All three rails
+> are monitored (`firmware/boat-pico/sensors.py`, the authoritative thresholds). The KiCad schematic
+> still carries older resistor values and needs updating in KiCad Tool — see `docs/battery_architecture.md`.
 
 ---
 
@@ -230,15 +230,22 @@ Three **fully isolated Milwaukee M18 domains** — no shared ground except a sin
 logic PCB. Full spec (dividers, thresholds, fusing, runtimes) in **`docs/battery_architecture.md`**.
 
 ```
-3× M18 (series) ──► DRIVE rail (54V nom / 63V max) ─[200A ANL]─► PDB ─┬─[100A]─► J4 VESC left  (XT90)
-                                                                      ├─[100A]─► J5 VESC right (XT90)
-                                                                      └─[100A]─► J6 tow-ESC stub (XT60)
+2× M18 (parallel) ─► DRIVE rail (18V nom / 21V max) ─[100A ANL]─┬─[80A]─► ESC L (GP2) → 2814 motor
+  (test bench)                                                   ├─[80A]─► ESC R (GP3) → 2814 motor
+                                                                 └─[80A]─► tow-ESC stub (unpop.)
 
 1× M18 ──► ELECTRONICS rail (18V nom) ─[15A]─► 5V UBEC → Pi 5 (USB-C)
                                              └─► 3.3V → Boat Pico, sensors
 
-1× M18 ──► WINCH rail (18V nom) ─[20A]─► MOSFET kill → Winch ESC (J8)
+1× M18 ──► WINCH rail (18V nom) ─[20A]─► MOSFET kill → Winch ESC (GP6)
 ```
+
+> **Test-bench drive:** two **NeutronRC 70A-G071 (AM32)** ESCs driven directly by the Pico as 50 Hz
+> servo PWM (GP2/GP3, `firmware/boat-pico/escs.py`) — **no VESC / CAN chain** on this branch. Powered by
+> 2× M18 in **parallel** (18V nom, ~double current/runtime — *not* more voltage, so below 6S). AM32 must
+> have **Bi-directional mode ON** (the navigator commands reverse for pivots/avoidance) and a 5S LVC —
+> see `docs/esc_setup.md`. The pack (~90 A pair) is the tighter limit vs the 70 A ESCs; BMS + ANL fuses +
+> Pico watchdog are the backstops. Kv-mismatch via `navigation.motor_gain_*` + firmware `COMP_L/COMP_R`.
 
 Per-pack overcurrent/short/over-discharge is handled by each M18's REDLINK BMS, so no individual pack
 fuses are needed. There is **no 12S-midpoint tap** — the winch is a dedicated standalone pack, which

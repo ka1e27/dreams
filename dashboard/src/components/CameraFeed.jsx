@@ -18,6 +18,7 @@ export default function CameraFeed() {
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
     ws.binaryType = 'arraybuffer'
+    let lastUrl = null
 
     ws.onopen = () => setActive(true)
 
@@ -26,17 +27,23 @@ export default function CameraFeed() {
         const blob = new Blob([event.data], { type: 'image/jpeg' })
         const url = URL.createObjectURL(blob)
         if (imgRef.current) {
-          const prev = imgRef.current.src
           imgRef.current.src = url
-          if (prev.startsWith('blob:')) URL.revokeObjectURL(prev)
         }
+        if (lastUrl) URL.revokeObjectURL(lastUrl)
+        lastUrl = url
       }
     }
 
     ws.onclose = () => setActive(false)
     ws.onerror = () => ws.close()
 
-    return () => ws.close()
+    // Revoke the last outstanding blob: URL too — otherwise every
+    // mount/unmount cycle (tab switch, HMR, etc.) leaked the final frame's
+    // object URL, since only *previous* frames were revoked on swap.
+    return () => {
+      ws.close()
+      if (lastUrl) URL.revokeObjectURL(lastUrl)
+    }
   }, [])
 
   return (

@@ -150,34 +150,42 @@ class CloudUploader:
         # If a NetworkManager is wired in and reports offline, don't even
         # try — saves cellular bytes during known dropouts.
         if self._network is not None and not self._network.is_online():
-            self._save_buffer()
+            await asyncio.to_thread(self._save_buffer)
             return
 
         async with aiohttp.ClientSession() as session:
-            # Upload readings in batches of 500
+            # Upload readings in batches of 500. The batch is popped off the
+            # front of the buffer *before* the network await (no await
+            # between the read and the removal), so a concurrent
+            # add_reading() — which can truncate the buffer once it exceeds
+            # max_buffer_size — can never race with this loop and cause it to
+            # drop the wrong (never-uploaded) items afterwards.
             while self._readings:
                 batch = self._readings[:500]
+                del self._readings[:500]
                 ok = await self._upload_batch(
                     session, "/api/v1/readings", {"readings": batch}
                 )
                 if ok:
-                    self._readings = self._readings[500:]
                     logger.info("Uploaded %d readings (%d remaining)",
                                 len(batch), len(self._readings))
                 else:
+                    # Put the un-uploaded batch back at the front so it's
+                    # retried, in order, on the next flush — then stop.
+                    self._readings[:0] = batch
                     logger.info("Upload failed — %d readings buffered", len(self._readings))
                     break
 
-            # Upload track points
+            # Upload track points (same pop-before-await pattern as above).
             while self._track:
                 batch = self._track[:500]
+                del self._track[:500]
                 ok = await self._upload_batch(session, "/api/v1/track", batch)
-                if ok:
-                    self._track = self._track[500:]
-                else:
+                if not ok:
+                    self._track[:0] = batch
                     break
 
-        self._save_buffer()
+        await asyncio.to_thread(self._save_buffer)
 
     async def _upload_loop(self) -> None:
         """Background loop — flush buffer periodically."""
@@ -186,7 +194,7 @@ class CloudUploader:
                 await self.flush()
             except Exception as e:
                 logger.warning("Upload loop error: %s", e)
-                self._save_buffer()
+                await asyncio.to_thread(self._save_buffer)
             await asyncio.sleep(self._interval)
 
     async def start(self) -> None:
@@ -201,4 +209,4 @@ class CloudUploader:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        self._save_buffer()
+        await asyncio.to_thread(self._save_buffer)

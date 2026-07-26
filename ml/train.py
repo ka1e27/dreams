@@ -65,6 +65,12 @@ def main() -> None:
             # COCO knowledge while the head adapts to maritime classes.
             freeze=10,
             pretrained=True,
+            # Reproducibility — pinned explicitly (these match ultralytics'
+            # own defaults today, so this is not a behavior change; it just
+            # stops a future ultralytics default change from silently
+            # de-pinning training runs).
+            seed=0,
+            deterministic=True,
         )
 
     # Summary.

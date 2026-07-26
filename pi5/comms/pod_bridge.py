@@ -106,7 +106,11 @@ class PodBridge:
 
         async def _poll_loop() -> None:
             while True:
-                await self.poll_once()
+                try:
+                    await self.poll_once()
+                except Exception as e:  # noqa: BLE001 — one bad poll must not kill the loop
+                    logger.warning("Pod poll loop error: %s", e)
+                    self._pod_ok = False
                 await asyncio.sleep(self._poll_interval)
 
         self._task = asyncio.create_task(_poll_loop())

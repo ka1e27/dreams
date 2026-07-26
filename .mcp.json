@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "C:\\Python314\\python.exe",
+      "args": [
+        "-m",
+        "code_review_graph",
+        "serve"
+      ],
+      "cwd": "C:\\Users\\kyleg\\Desktop\\Python\\COE 2 Autonomous Boat",
+      "type": "stdio"
+    }
+  }
+}

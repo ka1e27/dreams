@@ -356,14 +356,20 @@ class PicoSerial:
             logger.debug("ENV parse error: %s", e)
 
     def _handle_alert(self, msg: ParsedFrame) -> None:
-        """Handle an ALERT message."""
+        """Handle an ALERT message.
+
+        `detail` can itself be multiple comma-separated sub-fields per
+        serial-protocol.md §4.3 (e.g. BATT_LOW's <voltage>,<pct> or
+        MOTOR_OVERHEAT's <side>,<temp_c>) — rejoin everything after
+        severity/code so no sub-field is silently dropped.
+        """
         f = msg.fields
         if len(f) < 2:
             return
         alert = Alert(
             severity=f[0],
             code=f[1],
-            detail=f[2] if len(f) > 2 else "",
+            detail=",".join(f[2:]) if len(f) > 2 else "",
         )
         self.last_alert = alert
         logger.warning("ALERT [%s] %s: %s", alert.severity, alert.code, alert.detail)
@@ -442,6 +448,12 @@ class PicoSerial:
     async def get_status(self) -> ParsedFrame:
         """Send GET_STATUS command."""
         return await self._send_command("GET_STATUS")
+
+    async def esc_passthrough(self, esc_id: int, baud: int) -> ParsedFrame:
+        """Send ESC_PASS — put the Boat Pico into AM32 ESC passthrough (the Pico
+        then hands its USB-CDC to the ESC one-wire; disconnect right after so the
+        port is free for am32.ca / the passthrough tool). See docs/esc_passthrough.md."""
+        return await self._send_command("ESC_PASS", int(esc_id), int(baud))
 
     async def start_heartbeat(self, interval: float = 1.0) -> None:
         """Start sending periodic heartbeat messages.

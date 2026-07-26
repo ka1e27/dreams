@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 const API_KEY = localStorage.getItem('boat_api_key') || ''
 
@@ -46,10 +46,21 @@ export function useApi() {
 
   const getNetworkStatus = useCallback(() => apiFetch('/api/network'), [])
 
-  return {
+  // Memoize the returned object so its identity is stable across renders.
+  // Every method above is itself stable (useCallback, []), but the plain
+  // object literal that wrapped them was recreated on every render, which
+  // gave consumers (e.g. useNetwork's effect, keyed on `[api]`) a "new"
+  // api reference on every App re-render — restarting that effect (and its
+  // 10s poll interval) on every telemetry tick instead of once on mount.
+  return useMemo(() => ({
     estop, resumeEstop, returnHome,
     pauseMission, resumeMission, abortMission, startMission,
     uploadMission, uploadAndStart, goto, getPodHistory,
     getNetworkStatus,
-  }
+  }), [
+    estop, resumeEstop, returnHome,
+    pauseMission, resumeMission, abortMission, startMission,
+    uploadMission, uploadAndStart, goto, getPodHistory,
+    getNetworkStatus,
+  ])
 }

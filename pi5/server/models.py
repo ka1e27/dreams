@@ -78,6 +78,10 @@ class NavStateOut(BaseModel):
     throttle_right: int
     arrived: bool
     active: bool
+    # LOS path-following telemetry.
+    cross_track_m: float = 0.0
+    course_deg: float = 0.0
+    avoiding: bool = False
 
 
 class GotoIn(BaseModel):

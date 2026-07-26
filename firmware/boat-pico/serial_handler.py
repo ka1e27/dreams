@@ -34,6 +34,10 @@ _rx_pos = 0
 # async loop to the bare REPL so the USB CDC is free for mpremote to reflash.
 reflash_requested = False
 
+# Set to (esc_id, baud) when the Pi sends ESC_PASS. The main loop polls this and
+# hands the USB CDC to esc_passthrough.bridge() for AM32 ESC configuration.
+passthrough_requested = None
+
 # Non-blocking poll on stdin (USB CDC). A blocking read(N) stalls until N bytes
 # arrive, which delays heartbeats/commands and can starve the 3 s watchdog.
 _stdin_poll = select.poll()
@@ -217,6 +221,23 @@ def _dispatch(payload):
         ack(seq, "REFLASH")
         global reflash_requested
         reflash_requested = True
+
+    elif cmd == "ESC_PASS" and len(parts) >= 4:
+        # Pi wants to configure a drive ESC through us (AM32 passthrough). Fields:
+        # <esc 0=L,1=R>,<baud>. ACK, then flag the main loop to stop the motors,
+        # cancel tasks, and hand the USB-CDC to esc_passthrough.bridge(). The bridge
+        # resets the Pico when it ends, so we always return to normal firmware.
+        try:
+            esc_id = int(parts[2])
+            baud = int(parts[3])
+            if esc_id not in (0, 1) or not (1200 <= baud <= 1_000_000):
+                nak(seq, "ESC_PASS", "RANGE")
+            else:
+                ack(seq, "ESC_PASS", str(esc_id), str(baud))
+                global passthrough_requested
+                passthrough_requested = (esc_id, baud)
+        except:
+            nak(seq, "ESC_PASS", "PARSE")
 
     elif cmd == "SET_TRIM" and len(parts) >= 3:
         try:

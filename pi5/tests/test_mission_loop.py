@@ -43,7 +43,8 @@ class FakeNav:
         self.arrive = True       # whether wait_arrived reports arrival
         self.arrive_delay = 0.0  # delay before responding
 
-    def goto(self, lat: float, lon: float) -> None:
+    def goto(self, lat: float, lon: float,
+             from_lat: float | None = None, from_lon: float | None = None) -> None:
         self.goto_calls.append((lat, lon))
 
     def hold(self, lat: float, lon: float) -> None:

@@ -39,6 +39,7 @@ collides with them. See docs/hardware_changes_v2_to_testbench.md.
 """
 import uasyncio as asyncio
 import time
+import machine
 
 import motor_control
 import gps
@@ -547,10 +548,10 @@ async def main():
         asyncio.create_task(task_status_led()),
     ]
 
-    # Run until the Pi requests a reflash (REFLASH command), then stop the
-    # motors, cancel all tasks and return — this drops us to the bare REPL so
-    # the Pi's mpremote can take the USB-CDC port.
-    while not serial.reflash_requested:
+    # Run until the Pi requests a reflash (REFLASH → drop to REPL for mpremote)
+    # or an ESC passthrough (ESC_PASS → bridge the USB-CDC to an ESC one-wire).
+    # Both first stop the motors and cancel every task.
+    while not serial.reflash_requested and serial.passthrough_requested is None:
         await asyncio.sleep(0.1)
 
     try:
@@ -559,7 +560,18 @@ async def main():
         pass
     for t in tasks:
         t.cancel()
-    print("REFLASH requested — dropping to REPL")
+
+    if serial.passthrough_requested is not None:
+        esc_id, baud = serial.passthrough_requested
+        print("ESC_PASS: bridging ESC %d @ %d baud (motors stopped)" % (esc_id, baud))
+        try:
+            import esc_passthrough
+            esc_passthrough.bridge(esc_id, baud)   # repurposes CDC; resets on exit
+        except Exception as e:
+            print("ESC passthrough error: %s" % e)
+            machine.reset()
+    else:
+        print("REFLASH requested — dropping to REPL")
 
 
 asyncio.run(main())

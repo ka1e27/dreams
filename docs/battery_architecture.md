@@ -20,9 +20,17 @@
 
 | Domain | Pack count | Configuration | Voltage (nom / max / cutoff) | Load |
 |---|---|---|---|---|
-| DRIVE | 3× M18 in series | Series chain | 54 V / 63 V / 45 V | Both drive ESCs + motors |
+| DRIVE (test bench) | 2× M18 in **parallel** | Parallel | 18 V / 21 V / 15 V | Both drive ESCs + twin 2814 motors |
 | ELECTRONICS | 1× M18 standalone | Single pack | 18 V / 21 V / 15 V | Pi · GPS · compass · radio · camera |
 | WINCH | 1× M18 standalone | Single pack | 18 V / 21 V / 15 V | Winch ESC + 2006 motor |
+
+> **Drive rail — test bench (2× M18 parallel).** Parallel packs share **one pack's
+> voltage** (18 V nom / 21 V max) with **double the current capacity and runtime** —
+> it is *not* a voltage boost. Note this is **below 6S LiPo (22 V)**: the 2814 motors
+> rated ~1330 W on 6S will make proportionally less power here (lower voltage → lower
+> max RPM), so expect roughly 700–1000 W/motor depending on the prop. All three domains
+> are now the same single-M18 voltage. Earlier drive variants were 3× series (54 V,
+> dual-hull) and 2× series (36 V, first test bench) — both superseded on this bench.
 
 **Critical: three completely isolated domains. No shared ground between domains except the star
 point on the logic PCB.**
@@ -36,12 +44,20 @@ RP2040's 3.3 V limit.
 
 | Ref | Domain | R_high | R_low | Reconstruct × | ADC pin | Full-charge V at pin |
 |---|---|---|---|---|---|---|
-| R_H1, R_L1 | Drive (3× series) | 200 kΩ | 10 kΩ | 21.0 | GP26 | 63 V → 3.00 V |
+| R_H1, R_L1 | Drive (2× parallel) | 130 kΩ (as-built) | 10 kΩ | 14.0 | GP26 | 21 V → **1.5 V** |
 | R_H2, R_L2 | Electronics | 56 kΩ | 10 kΩ | 6.6 | GP27 | 21 V → 3.18 V |
 | R_H3, R_L3 | Winch | 56 kΩ | 10 kΩ | 6.6 | GP28 | 21 V → 3.18 V |
 
 Reconstruct × = (R_high + R_low) / R_low. Firmware multiplies the measured pin voltage by this to
-recover the pack voltage (`INV_P_RATIO = 21.0`, `INV_E_RATIO = INV_W_RATIO = 6.6` in `sensors.py`).
+recover the pack voltage (`INV_P_RATIO`, `INV_E_RATIO = INV_W_RATIO = 6.6` in `sensors.py`).
+
+> **Drive divider — no rework needed for the parallel swap.** The bench's as-built drive divider is
+> 130k/10k (×14, sized for the old 36 V series rail). At the new 21 V max it reads only ~1.5 V at the
+> pin, which reconstructs **correctly** at `INV_P_RATIO = 14.0` — resolution is ~0.01 V, ample for a
+> gauge. So paralleling the packs needs only a firmware **threshold** change, not a resistor change.
+> *Optional:* fit a 56k/10k divider to match elec/winch and use the full ADC range, then set
+> `INV_P_RATIO = 6.6`. **Do not** set 6.6 while the 130k/10k divider is still fitted — the reading
+> would drop to ~10 V and trip an instant ESTOP.
 
 **PCB component notes:** all resistors through-hole axial DIN0207, 1 % tolerance, 0.25 W. Add a 1 kΩ
 series resistor and a 100 nF ceramic filter cap on every ADC input line.
@@ -58,10 +74,14 @@ Mirrored in `firmware/boat-pico/sensors.py` (drive = `P_*`, elec = `E_*`, winch 
 reference only, in `pi5/config.yaml` under `battery:`.
 
 ```
-DRIVE  (3× M18 series):  full 63.0  nominal 54.0  warn 51.0  critical 48.0 (→ RTH)  cutoff 45.0 (→ ESTOP)
-ELEC   (1× M18):         full 21.0  nominal 18.0  warn 17.0  critical 16.0 (→ alert) cutoff 15.0 (→ shutdown)
-WINCH  (1× M18):         full 21.0  nominal 18.0  warn 17.0  critical 16.0 (→ disable) cutoff 15.0 (→ kill)
+DRIVE  (2× M18 parallel): full 21.0  nominal 18.0  warn 17.0  critical 16.0 (→ RTH)   cutoff 15.0 (→ ESTOP)
+ELEC   (1× M18):          full 21.0  nominal 18.0  warn 17.0  critical 16.0 (→ alert) cutoff 15.0 (→ shutdown)
+WINCH  (1× M18):          full 21.0  nominal 18.0  warn 17.0  critical 16.0 (→ disable) cutoff 15.0 (→ kill)
 ```
+
+All three domains are now the same single-M18 thresholds. **This threshold change is the one edit the
+parallel swap *requires*** — on the old 42 V (2× series) thresholds a full 21 V parallel pack reads as
+"empty" and ESTOPs on boot.
 
 Percentage is `100 × (v − cutoff) / (full − cutoff)`, clamped 0–100.
 
@@ -70,12 +90,19 @@ Percentage is `100 × (v − cutoff) / (full − cutoff)`, clamped 0–100.
 ## Fusing Architecture
 
 ```
-DRIVE:  3× M18 series ─[200A ANL]─► PDB ─┬─[100A ANL]─► ESC port
-                                          ├─[100A ANL]─► ESC stbd
-                                          └─[100A ANL]─► tow-ESC stub (unpopulated)
+DRIVE:  2× M18 parallel ─[100A ANL]─► PDB ─┬─[80A ANL]─► ESC port  (2814 motor)
+                                            ├─[80A ANL]─► ESC stbd  (2814 motor)
+                                            └─[80A ANL]─► tow-ESC stub (unpopulated)
 ELEC:   1× M18 ─[15A blade]─► logic PCB ─► 5V UBEC → Pi 5;  12V boost → GPS · radio · sensors
 WINCH:  1× M18 ─[20A blade]─► MOSFET kill ─► winch ESC ─► 2006 motor
 ```
+
+> **Drive current budget (2× M18 parallel + twin 2814).** The 2814 motors can pull ~1330 W each on
+> 6S — at 18–21 V that's ~63–74 A **per motor** if the VESC lets them, so two of them (~130–150 A)
+> would exceed two parallel M18 packs' continuous output. **You must cap the VESC battery current per
+> motor** (see below) so the pair stays within the pack. With each motor limited to ~45 A the drive
+> node sees ≤ ~90 A continuous, hence the 100 A main / 80 A per-ESC ANL fuses (down from 200 A / 100 A;
+> a smaller fuse actually protects the thinner parallel-pack wiring). Use High Output packs.
 
 Per-pack overcurrent, short-circuit, and over-discharge are handled by each M18's REDLINK BMS — no
 individual pack fuses required.
@@ -84,10 +111,14 @@ individual pack fuses required.
 
 | Run | Gauge | Fuse |
 |---|---|---|
-| Drive series main | 6 AWG (testing) / 4 AWG (full perf) | 150 A / 200 A ANL |
-| Each ESC feed | 8 AWG | 100 A ANL |
+| Each M18 → parallel node | 10 AWG | (BMS-protected; no pack fuse) |
+| Drive parallel main | 8 AWG | 100 A ANL |
+| Each ESC feed | 8 AWG | 80 A ANL |
 | Electronics adapter | 18 AWG | 15 A blade |
 | Winch adapter | 14 AWG | 20 A blade |
+
+> Size each pack's lead for the pack's own share (~half the total), and the common node for the sum.
+> Keep the two parallel leads the **same length/gauge** so the packs share current evenly.
 
 ---
 
@@ -113,16 +144,35 @@ from the previous PDB design.
 
 ---
 
-## VESC Current Limits by M18 Pack Type
+## Drive current — AM32 ESCs (no VESC on this bench)
 
-Set in VESC Tool before first run; match to the weakest pack in the series chain.
+The test bench runs **two NeutronRC 70A-G071 ESCs** (STM32G071, **AM32** firmware, 70 A) off the Pico
+(50 Hz servo PWM, GP2/GP3 — `firmware/boat-pico/escs.py`), not VESCs. AM32 is *configurable* firmware —
+see **`docs/esc_setup.md`** for the full config (bidirectional mode, LVC, low-RPM/stall tuning). On
+current, the key facts:
 
-```
-XC 5Ah  : 20 A   (testing only)
-HO 6Ah  : 45 A
-HO 12Ah : 70 A
-MAX     : 88 A   (full performance, proper LiPo only)
-```
+- **The pack, not the ESC, is the tighter limit.** Each ESC is 70 A continuous, but two at 70 A is 140 A
+  — well over a 2× M18 parallel HO-6Ah pair's ~90 A continuous. So **prop the motors so the *combined*
+  draw stays under ~90 A**; each ESC's 70 A only bounds a single motor.
+- **Cap it in AM32 if you can.** Newer AM32 exposes a current-limit setting — if yours does, set
+  ~45 A/motor as a hard cap; otherwise the prop choice is the limit. Set the AM32 LVC for a **5S M18**
+  (~3.0 V/cell ≈ 15 V), not a 6S setting. (These ESCs also output current telemetry, not wired to the
+  Pico today.)
+- **The pack BMS + ANL fuses are the backstop**, not a current controller: the M18 REDLINK BMS trips on
+  its own overcurrent, and the **80 A per-ESC** ANL protects each 70 A-continuous ESC feed while the
+  **100 A main** ANL + BMS protect the parallel pack. Use High Output packs (HO 6Ah+) — an XC pack pair
+  can't feed two 2814s.
+- The 2814s only reach ~1330 W at 6S; at 18–21 V they top out lower (more runtime, not more power).
+
+> ⚠ **Reverse:** the navigator commands *negative* throttle to pivot in place and to bear away during
+> avoidance. AM32 supports it, but you must **enable Bi-directional mode** in the configurator (1.0 ms
+> reverse / 1.5 ms neutral / 2.0 ms forward). With it off the ESC is forward-only and reverse pulses just
+> idle — the boat can't pivot or back away. Verify on the bench before first spin-up. See `docs/esc_setup.md`.
+
+**Different-Kv motors.** The two 2814s may spin at different RPM for the same pulse. On the PWM path there
+is no per-motor ERPM cap, so correct it in software: the Pi-side feed-forward trim
+`navigation.motor_gain_left/right` (`config.yaml` — lower the faster motor until it tracks straight at
+equal command), the firmware's `COMP_L/COMP_R` in `motor_control.py`, and the closed-loop heading control.
 
 ---
 
@@ -153,3 +203,6 @@ MAX     : 88 A   (full performance, proper LiPo only)
 ---
 
 *June 2026 — three-domain M18 architecture. Supersedes all previous battery documentation.*
+*July 2026 — test-bench drive rail switched to 2× M18 **parallel** (18 V) for the twin 2814 motors:
+single-M18 thresholds, existing 130k/10k divider kept (INV_P_RATIO = 14.0), VESC current capped per
+motor, per-motor trim for Kv mismatch. Firmware (`sensors.py`), `config.yaml`, and the simulator updated.*

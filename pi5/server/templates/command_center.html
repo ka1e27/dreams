@@ -11,10 +11,14 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
-    --bg:#0a0d0f; --panel:#0e1316; --panel-2:#11181c;
-    --amber:#ff8c00; --amber-dim:rgba(255,140,0,.35);
-    --cyan:#00d4ff; --grid:rgba(255,140,0,.10);
-    --ok:#3ad37a; --warn:#ffb02e; --crit:#ff3b3b; --muted:#5b6b72;
+    /* Abyssal Indigo — indigo primary chrome, sky-cyan live data, cool ink
+       panels. Semantic tokens: --accent = chrome/labels/borders, --cyan =
+       values/telemetry, --ok/--warn/--crit = traffic-light status. */
+    --bg:#080810; --panel:#0e1018; --panel-2:#12141f;
+    --accent:#8b8cff; --accent-dim:rgba(129,140,248,.30);
+    --accent-glow:rgba(129,140,248,.10);
+    --cyan:#38bdf8; --grid:rgba(129,140,248,.08);
+    --ok:#3ad37a; --warn:#ffb02e; --crit:#ff3b3b; --muted:#8a97ad;
     --mono:'IBM Plex Mono',ui-monospace,monospace;
     --display:'Orbitron',sans-serif;
   }
@@ -22,9 +26,10 @@
   html,body{margin:0;height:100%}
   body{
     background:
-      radial-gradient(1200px 600px at 50% -10%, rgba(255,140,0,.06), transparent 60%),
+      radial-gradient(1100px 560px at 50% -12%, rgba(129,140,248,.10), transparent 62%),
+      radial-gradient(900px 500px at 90% 8%, rgba(56,189,248,.05), transparent 60%),
       var(--bg);
-    color:#cfe3ea; font-family:var(--mono); font-size:13px;
+    color:#cfe0ec; font-family:var(--mono); font-size:13px;
     background-attachment:fixed;
   }
   .grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;
@@ -35,28 +40,28 @@
     min-height:100vh;max-width:1700px;margin:0 auto}
   /* ---- header ---- */
   header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
-    padding:10px 16px;border:1px solid var(--amber-dim);border-radius:8px;
-    background:linear-gradient(180deg,rgba(255,140,0,.08),transparent);
-    box-shadow:0 0 24px rgba(255,140,0,.08) inset}
+    padding:10px 16px;border:1px solid var(--accent-dim);border-radius:8px;
+    background:linear-gradient(180deg,rgba(129,140,248,.08),transparent);
+    box-shadow:0 0 24px rgba(129,140,248,.08) inset}
   header h1{font-family:var(--display);font-weight:900;letter-spacing:.18em;
-    margin:0;font-size:20px;color:#fff;text-shadow:0 0 18px var(--amber-dim)}
-  header h1 b{color:var(--amber)}
+    margin:0;font-size:20px;color:#fff;text-shadow:0 0 18px var(--accent-dim)}
+  header h1 b{color:var(--accent)}
   header .sub{color:var(--muted);letter-spacing:.3em;font-size:10px;margin-left:14px}
   .links a{color:var(--muted);text-decoration:none;margin-left:8px;font-size:11px;letter-spacing:.12em;
-    text-transform:uppercase;padding:5px 11px;border:1px solid var(--amber-dim);border-radius:5px;transition:.15s}
-  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.06)}
+    text-transform:uppercase;padding:5px 11px;border:1px solid var(--accent-dim);border-radius:5px;transition:.15s}
+  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(56,189,248,.06)}
   /* ---- dashboard grid / draggable dropdown sections ---- */
   .dash-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;align-items:stretch}
-  .section{grid-column:span var(--span,12);border:1px solid var(--amber-dim);border-radius:8px;
-    background:var(--panel);box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(255,140,0,.05) inset;
+  .section{grid-column:span var(--span,12);border:1px solid var(--accent-dim);border-radius:8px;
+    background:var(--panel);box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(129,140,248,.05) inset;
     display:flex;flex-direction:column;min-height:0;overflow:hidden;transition:opacity .15s}
   .section.dragging{opacity:.35}
   .section.drag-over{outline:2px dashed var(--cyan);outline-offset:-2px}
   .section.collapsed{align-self:start}
   .section.collapsed .sec-body{display:none}
-  .sec-hd{font-family:var(--display);font-weight:700;letter-spacing:.22em;font-size:11px;color:var(--amber);
-    padding:8px 12px;border-bottom:1px solid var(--amber-dim);display:flex;align-items:center;gap:9px;
-    background:rgba(255,140,0,.04);cursor:pointer;user-select:none}
+  .sec-hd{font-family:var(--display);font-weight:700;letter-spacing:.22em;font-size:11px;color:var(--accent);
+    padding:8px 12px;border-bottom:1px solid var(--accent-dim);display:flex;align-items:center;gap:9px;
+    background:rgba(129,140,248,.04);cursor:pointer;user-select:none}
   .sec-hd .drag-handle{display:none;color:var(--muted);font-size:14px;letter-spacing:0;cursor:grab}
   body.customize .sec-hd .drag-handle{display:inline-block}
   body.customize .sec-hd{cursor:grab}
@@ -66,8 +71,8 @@
   .sec-body{display:flex;flex-direction:column;flex:1;min-height:0}
   @media(max-width:1000px){.section{--span:12 !important}}
   /* ---- panels (legacy alias — kept for any nested .panel usage) ---- */
-  .panel{border:1px solid var(--amber-dim);border-radius:8px;background:var(--panel);
-    box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(255,140,0,.05) inset;
+  .panel{border:1px solid var(--accent-dim);border-radius:8px;background:var(--panel);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(129,140,248,.05) inset;
     display:flex;flex-direction:column;min-height:0;overflow:hidden}
   /* ---- status dot ---- */
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--crit);
@@ -82,10 +87,10 @@
     background:repeating-linear-gradient(180deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.18) 2px 3px);
     mix-blend-mode:multiply}
   .cam-frame{position:absolute;inset:0;pointer-events:none;
-    box-shadow:0 0 0 1px var(--amber-dim) inset,0 0 60px rgba(0,0,0,.6) inset}
+    box-shadow:0 0 0 1px var(--accent-dim) inset,0 0 60px rgba(0,0,0,.6) inset}
   .cam-fps{position:absolute;right:8px;bottom:8px;font-size:11px;color:var(--cyan);
     background:rgba(0,0,0,.55);padding:2px 8px;border-radius:4px;letter-spacing:.1em}
-  .cam-tag{position:absolute;left:8px;top:8px;font-size:10px;color:var(--amber);
+  .cam-tag{position:absolute;left:8px;top:8px;font-size:10px;color:var(--accent);
     background:rgba(0,0,0,.55);padding:2px 8px;border-radius:4px;letter-spacing:.2em}
   .nosignal{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     flex-direction:column;gap:6px;color:var(--crit);font-family:var(--display);
@@ -96,15 +101,15 @@
     max-width:62%;text-align:right}
   /* vision control bar under the camera */
   .cam-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:8px 12px;
-    border-top:1px solid var(--amber-dim);background:var(--panel-2);flex-shrink:0}
+    border-top:1px solid var(--accent-dim);background:var(--panel-2);flex-shrink:0}
   .cam-ctl .cs{display:flex;align-items:center;gap:6px}
   .cam-ctl .csv{color:var(--cyan);min-width:30px;font-size:11px;text-align:right}
-  .cam-ctl input[type=range]{width:88px;accent-color:var(--amber);cursor:pointer}
-  .cam-ctl .imgsel{background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);border-radius:5px;
+  .cam-ctl input[type=range]{width:88px;accent-color:var(--accent);cursor:pointer}
+  .cam-ctl .imgsel{background:#080812;color:#dbeef5;border:1px solid var(--accent-dim);border-radius:5px;
     padding:3px 6px;font-family:var(--mono);font-size:11px;outline:none;cursor:pointer}
   .cam-ctl .imgsel:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .tg{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;
-    letter-spacing:.12em;color:var(--amber)}
+    letter-spacing:.12em;color:var(--accent)}
   /* ---- health ---- */
   .health{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:14px;flex:1;min-height:0}
   .temp-row{display:flex;align-items:baseline;gap:10px}
@@ -118,36 +123,36 @@
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.crit{color:var(--crit);animation:pulse 1s infinite}
   .cpu-bars{display:flex;gap:8px;align-items:flex-end;height:74px}
   .cpu-bars .core{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}
-  .cpu-bars .track{flex:1;width:100%;background:var(--panel-2);border:1px solid var(--amber-dim);
+  .cpu-bars .track{flex:1;width:100%;background:var(--panel-2);border:1px solid var(--accent-dim);
     border-radius:3px;position:relative;overflow:hidden;display:flex;align-items:flex-end}
-  .cpu-bars .fill{width:100%;background:linear-gradient(180deg,var(--cyan),rgba(0,212,255,.35));
-    transition:height .5s ease;box-shadow:0 0 12px rgba(0,212,255,.4)}
+  .cpu-bars .fill{width:100%;background:linear-gradient(180deg,var(--cyan),rgba(56,189,248,.35));
+    transition:height .5s ease;box-shadow:0 0 12px rgba(56,189,248,.4)}
   .cpu-bars .cn{font-size:9px;color:var(--muted)}
-  .bar{height:14px;background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:4px;overflow:hidden}
-  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--amber),rgba(255,140,0,.4));
-    transition:width .5s ease;box-shadow:0 0 12px var(--amber-dim)}
+  .bar{height:14px;background:var(--panel-2);border:1px solid var(--accent-dim);border-radius:4px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),rgba(129,140,248,.4));
+    transition:width .5s ease;box-shadow:0 0 12px var(--accent-dim)}
   .vgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 16px}
   .vgrid .kv .lbl{font-size:9px}
   .sec-ttl{color:var(--muted);font-size:10px;letter-spacing:.2em;margin-bottom:4px}
   /* ---- pico ---- */
   .pico-inner{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(360px,1fr);min-height:0}
-  .editor-col{display:flex;flex-direction:column;border-right:1px solid var(--amber-dim);min-width:0;min-height:0}
+  .editor-col{display:flex;flex-direction:column;border-right:1px solid var(--accent-dim);min-width:0;min-height:0}
   #editor{flex:1;min-height:0}
-  .editor-bar{display:flex;gap:8px;align-items:center;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2);flex-shrink:0}
+  .editor-bar{display:flex;gap:8px;align-items:center;padding:8px;border-top:1px solid var(--accent-dim);background:var(--panel-2);flex-shrink:0}
   .mon-col{display:flex;flex-direction:column;min-width:0;min-height:0}
-  .term{flex:1 1 0;min-height:0;overflow-y:auto;padding:8px 10px;font-size:12px;line-height:1.5;background:#06090b}
+  .term{flex:1 1 0;min-height:0;overflow-y:auto;padding:8px 10px;font-size:12px;line-height:1.5;background:#080812}
   .term .ln{white-space:pre-wrap;word-break:break-word}
   .term .ts{color:var(--muted)}
-  .term .pico{color:var(--cyan)} .term .err{color:var(--crit)} .term .echo{color:var(--amber)}
-  .term-bar{display:flex;gap:8px;padding:8px;border-top:1px solid var(--amber-dim);background:var(--panel-2)}
+  .term .pico{color:var(--cyan)} .term .err{color:var(--crit)} .term .echo{color:var(--accent)}
+  .term-bar{display:flex;gap:8px;padding:8px;border-top:1px solid var(--accent-dim);background:var(--panel-2)}
   input,select,button{font-family:var(--mono);font-size:12px}
-  input[type=text],select{background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
+  input[type=text],select{background:#080812;color:#dbeef5;border:1px solid var(--accent-dim);
     border-radius:5px;padding:7px 9px;outline:none}
   input[type=text]:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .cmd{flex:1}
-  button{cursor:pointer;background:rgba(255,140,0,.1);color:var(--amber);
-    border:1px solid var(--amber);border-radius:5px;padding:7px 14px;letter-spacing:.12em;transition:.15s}
-  button:hover{background:var(--amber);color:#0a0d0f;box-shadow:0 0 16px var(--amber-dim)}
+  button{cursor:pointer;background:rgba(129,140,248,.1);color:var(--accent);
+    border:1px solid var(--accent);border-radius:5px;padding:7px 14px;letter-spacing:.12em;transition:.15s}
+  button:hover{background:var(--accent);color:#0a0a14;box-shadow:0 0 16px var(--accent-dim)}
   button.ghost{background:transparent;color:var(--muted);border-color:var(--muted)}
   button.ghost:hover{color:var(--cyan);border-color:var(--cyan);box-shadow:none;background:transparent}
   button[disabled]{opacity:.5;cursor:wait}
@@ -161,7 +166,7 @@
     box-shadow:0 6px 24px rgba(255,59,59,.4)}
   #banner.show{transform:translateY(0)}
   #toast{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;flex-direction:column;gap:8px}
-  .toast{padding:10px 14px;border-radius:6px;border:1px solid;background:#0e1316;letter-spacing:.06em;
+  .toast{padding:10px 14px;border-radius:6px;border:1px solid;background:#0e1018;letter-spacing:.06em;
     animation:tin .25s ease;max-width:360px}
   .toast.ok{border-color:var(--ok);color:var(--ok)} .toast.bad{border-color:var(--crit);color:var(--crit)}
   @keyframes tin{from{transform:translateY(8px);opacity:0}}
@@ -169,41 +174,42 @@
   .cmd-bar{display:flex;flex-wrap:wrap;gap:12px 22px;padding:12px 14px;align-items:center}
   .cmd-group{display:flex;align-items:center;gap:6px}
   .cmd-glabel{font-size:9px;letter-spacing:.2em;color:var(--muted);margin-right:2px}
-  .cmd-div{width:1px;align-self:stretch;background:var(--amber-dim);margin:0 2px}
-  .cbtn{cursor:pointer;background:rgba(255,140,0,.1);color:var(--amber);border:1px solid var(--amber);
+  .cmd-div{width:1px;align-self:stretch;background:var(--accent-dim);margin:0 2px}
+  .cbtn{cursor:pointer;background:rgba(129,140,248,.1);color:var(--accent);border:1px solid var(--accent);
     border-radius:5px;padding:7px 12px;letter-spacing:.1em;font-size:11px;transition:.15s;white-space:nowrap}
-  .cbtn:hover{background:var(--amber);color:#0a0d0f;box-shadow:0 0 14px var(--amber-dim)}
+  .cbtn:hover{background:var(--accent);color:#0a0a14;box-shadow:0 0 14px var(--accent-dim)}
   .cbtn.danger{color:var(--crit);border-color:var(--crit);background:rgba(255,59,59,.08)}
   .cbtn.danger:hover{background:var(--crit);color:#fff;box-shadow:0 0 14px rgba(255,59,59,.45)}
   .cbtn.warn{color:var(--warn);border-color:var(--warn);background:rgba(255,176,46,.08)}
-  .cbtn.warn:hover{background:var(--warn);color:#0a0d0f}
+  .cbtn.warn:hover{background:var(--warn);color:#0a0a14}
   .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}
   .cbtn.ghost2:hover{color:var(--cyan);border-color:var(--cyan);background:transparent;box-shadow:none}
-  .cbtn.active{background:var(--cyan);color:#0a0d0f;border-color:var(--cyan);box-shadow:0 0 14px rgba(0,212,255,.4)}
+  .cbtn.active{background:var(--cyan);color:#0a0a14;border-color:var(--cyan);box-shadow:0 0 14px rgba(56,189,248,.4)}
   /* ---- vision pipeline panel ---- */
   .cbtn.btn-off{background:transparent;color:var(--muted);border-color:var(--muted)}
   .cbtn.btn-green{background:rgba(58,211,122,.14);color:var(--ok);border-color:var(--ok);box-shadow:0 0 12px rgba(58,211,122,.25)}
-  .cbtn.btn-green:hover{background:var(--ok);color:#0a0d0f}
-  .cbtn.btn-amber{background:rgba(255,140,0,.16);color:var(--amber);border-color:var(--amber);box-shadow:0 0 12px var(--amber-dim)}
+  .cbtn.btn-green:hover{background:var(--ok);color:#0a0a14}
+  .cbtn.btn-amber{background:rgba(129,140,248,.16);color:var(--accent);border-color:var(--accent);box-shadow:0 0 12px var(--accent-dim)}
+  .cbtn.btn-crit{background:rgba(255,59,59,.16);color:var(--crit);border-color:var(--crit);box-shadow:0 0 12px rgba(255,59,59,.35)}
   @keyframes vpulse{0%,100%{opacity:1}50%{opacity:.6}}
   .cbtn.pulse{animation:vpulse 1.8s ease-in-out infinite}
   .vis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;padding:12px 14px}
   .vis-col{display:flex;flex-direction:column;gap:5px;min-width:0}
   .vis-state{font-family:var(--display);font-size:22px;color:var(--cyan);letter-spacing:.06em}
   .vis-state.alert{color:var(--warn)}
-  .vis-anom{height:12px;background:var(--panel-2);border:1px solid var(--amber-dim);border-radius:4px;overflow:hidden}
+  .vis-anom{height:12px;background:var(--panel-2);border:1px solid var(--accent-dim);border-radius:4px;overflow:hidden}
   .vis-anom .fill{height:100%;width:0;background:var(--cyan);transition:width .3s,background .3s}
   .vis-tiers{display:flex;gap:8px}
   .tier-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     font-size:11px;font-family:var(--mono);background:var(--panel-2);border:1px solid var(--muted);color:var(--muted)}
-  .tier-dot.on{border-color:var(--cyan);color:#0a0d0f;background:var(--cyan)}
-  .tier-dot.on.amber{border-color:var(--amber);background:var(--amber)}
+  .tier-dot.on{border-color:var(--cyan);color:#0a0a14;background:var(--cyan)}
+  .tier-dot.on.amber{border-color:var(--accent);background:var(--accent)}
   .tier-dot.on.crit{border-color:var(--crit);background:var(--crit);color:#fff}
   .vis-toggles{display:flex;align-items:center;gap:7px;margin-top:6px}
   .vis-warn{display:none;color:var(--warn);font-size:14px}
   .vis-threat-body{font-size:12px;line-height:1.6}
   .vis-threat-body b{letter-spacing:.06em}
-  .cmd-in{width:96px;background:#06090b;color:#dbeef5;border:1px solid var(--amber-dim);
+  .cmd-in{width:96px;background:#080812;color:#dbeef5;border:1px solid var(--accent-dim);
     border-radius:5px;padding:7px 9px;font-family:var(--mono);font-size:12px;outline:none}
   .cmd-in:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   /* commands panel: one group per row with a fixed-width label column so the
@@ -215,10 +221,10 @@
   .radar-inner{display:grid;grid-template-columns:170px 1fr;gap:16px;padding:12px 14px;align-items:center}
   .rose-wrap{display:flex;align-items:center;justify-content:center}
   .rose{width:150px;height:150px}
-  .rose-ring{fill:none;stroke:var(--amber-dim);stroke-width:1.5}
-  .rose-ring2{fill:none;stroke:rgba(255,140,0,.15);stroke-width:1}
-  .rose-sweep{fill:rgba(0,212,255,.10);stroke:rgba(0,212,255,.30);stroke-width:1}
-  .rose .tick{stroke:var(--amber-dim);stroke-width:1}
+  .rose-ring{fill:none;stroke:var(--accent-dim);stroke-width:1.5}
+  .rose-ring2{fill:none;stroke:rgba(129,140,248,.15);stroke-width:1}
+  .rose-sweep{fill:rgba(56,189,248,.10);stroke:rgba(56,189,248,.30);stroke-width:1}
+  .rose .tick{stroke:var(--accent-dim);stroke-width:1}
   .rose-card{fill:var(--muted);font-size:11px;font-family:var(--mono);text-anchor:middle;dominant-baseline:middle}
   #rose-needle{transform-box:view-box;transform-origin:100px 100px;transition:transform .35s ease-out}
   .needle{stroke:var(--cyan);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--cyan))}
@@ -234,28 +240,28 @@
   .srcbtn{cursor:pointer;background:transparent;color:var(--muted);border:1px solid var(--muted);
     border-radius:4px;padding:3px 9px;font-size:11px;letter-spacing:.1em;transition:.15s}
   .srcbtn:hover{color:var(--cyan);border-color:var(--cyan)}
-  .srcbtn.active{color:#0a0d0f;background:var(--amber);border-color:var(--amber)}
+  .srcbtn.active{color:#0a0a14;background:var(--accent);border-color:var(--accent)}
   .srcbtn[disabled]{opacity:.4;cursor:not-allowed}
   .srcbtn[disabled]:hover{color:var(--muted);border-color:var(--muted)}
   .cam-track{position:absolute;left:8px;top:30px;font-size:11px;color:var(--cyan);display:none;
     background:rgba(0,0,0,.6);padding:2px 8px;border-radius:4px;letter-spacing:.08em;
-    border:1px solid rgba(0,212,255,.4)}
+    border:1px solid rgba(56,189,248,.4)}
   /* ---- boat health ---- */
   .boat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
-    gap:1px;background:var(--amber-dim)}
+    gap:1px;background:var(--accent-dim)}
   .boat-grid .stat{background:var(--panel);padding:8px 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
   .boat-grid .stat .sv{font-family:var(--display);font-weight:700;font-size:17px;color:#eaf6fb;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .boat-grid .stat .bar{margin-top:2px}
-  .boat-flags{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--amber-dim)}
+  .boat-flags{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-top:1px solid var(--accent-dim)}
   .flagchip{font-size:10px;letter-spacing:.1em;padding:3px 9px;border-radius:10px;border:1px solid currentColor}
   .flagchip.ok{color:var(--ok)} .flagchip.bad{color:var(--crit);animation:pulse 1.4s infinite}
   .boat-alert{padding:0 12px 10px;font-size:11px;letter-spacing:.05em;min-height:14px}
   /* ---- map ---- */
   .map-wrap{position:relative;flex:1;min-height:420px}
-  #map{position:absolute;inset:0;background:#06090b}
-  .leaflet-container{background:#06090b !important;font-family:var(--mono) !important}
-  .leaflet-control-zoom a{background:var(--panel) !important;color:#cfe3ea !important;border-color:var(--amber-dim) !important}
+  #map{position:absolute;inset:0;background:#080812}
+  .leaflet-container{background:#080812 !important;font-family:var(--mono) !important}
+  .leaflet-control-zoom a{background:var(--panel) !important;color:#cfe3ea !important;border-color:var(--accent-dim) !important}
   .leaflet-control-zoom a:hover{background:var(--panel-2) !important;color:var(--cyan) !important}
   .leaflet-control-attribution{background:rgba(6,9,11,.85) !important;color:var(--muted) !important;font-size:9px !important}
   .leaflet-control-attribution a{color:var(--muted) !important}
@@ -269,16 +275,16 @@
     justify-content:center;font-family:var(--mono);font-size:8px;font-weight:700;color:#fff;position:relative}
   .wp-marker.data{background:rgba(255,59,59,.3);border-color:var(--crit)}
   .wp-marker.path{background:rgba(255,176,46,.3);border-color:var(--warn)}
-  .wp-marker.active{box-shadow:0 0 12px var(--cyan);border-color:var(--cyan);background:rgba(0,212,255,.3)}
+  .wp-marker.active{box-shadow:0 0 12px var(--cyan);border-color:var(--cyan);background:rgba(56,189,248,.3)}
   .wp-marker.done{opacity:.4}
   .wp-label{position:absolute;top:-20px;left:50%;transform:translateX(-50%);font-family:var(--mono);
     font-size:9px;color:#eaf6fb;white-space:nowrap;background:rgba(6,9,11,.85);padding:1px 5px;
-    border:1px solid var(--amber-dim);letter-spacing:.05em}
+    border:1px solid var(--accent-dim);letter-spacing:.05em}
   .map-coords{position:absolute;top:.6rem;left:.6rem;z-index:500;font-family:var(--mono);font-size:11px;
-    color:var(--cyan);background:rgba(6,9,11,.85);padding:.35rem .6rem;border:1px solid var(--amber-dim);
+    color:var(--cyan);background:rgba(6,9,11,.85);padding:.35rem .6rem;border:1px solid var(--accent-dim);
     letter-spacing:.03em}
   .compass-overlay{position:absolute;bottom:1rem;right:1rem;z-index:500;width:88px;height:88px;pointer-events:none}
-  .compass-mini{width:100%;height:100%;border-radius:50%;border:1.5px solid var(--amber-dim);
+  .compass-mini{width:100%;height:100%;border-radius:50%;border:1.5px solid var(--accent-dim);
     background:rgba(6,9,11,.85);position:relative;backdrop-filter:blur(6px);box-shadow:0 0 20px rgba(0,0,0,.5)}
   .compass-mini .cardinal{position:absolute;font-family:var(--mono);font-size:7px;font-weight:700;
     color:var(--muted);transform:translate(-50%,-50%)}
@@ -296,7 +302,7 @@
   .compass-mini .center{position:absolute;top:50%;left:50%;width:5px;height:5px;background:var(--cyan);
     border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 6px var(--cyan)}
   .hdg-readout{text-align:center;margin-top:.25rem;font-family:var(--mono);font-size:11px;font-weight:700;
-    color:var(--cyan);text-shadow:0 0 8px rgba(0,212,255,.4);letter-spacing:.05em}
+    color:var(--cyan);text-shadow:0 0 8px rgba(56,189,248,.4);letter-spacing:.05em}
   /* ---- telemetry (ported dashboard data) ---- */
   .tele-body{padding:10px 14px 14px;overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
   .tele-sub{margin-top:2px}
@@ -306,62 +312,90 @@
   .d-lbl{color:var(--muted);font-size:11px;letter-spacing:.05em}
   .d-val{font-family:var(--mono);font-size:13px;font-weight:600;color:#eaf6fb}
   .d-val.accent{color:var(--cyan)}
-  .d-val.warn{color:var(--warn)}
   .d-unit{font-size:10px;color:var(--muted);margin-left:3px;font-weight:400}
-  .batt-bar-wrap{width:100%;height:5px;background:var(--panel-2);border:1px solid var(--amber-dim);
+  .batt-bar-wrap{width:100%;height:5px;background:var(--panel-2);border:1px solid var(--accent-dim);
     border-radius:3px;margin-top:4px;overflow:hidden}
   .batt-bar-fill{height:100%;background:var(--ok);transition:width .5s,background .5s}
   .batt-bar-fill.mid{background:var(--warn)} .batt-bar-fill.low{background:var(--crit)}
   .mbadge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;
     font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
     border:1px solid var(--muted);color:var(--muted)}
-  .mbadge.active{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,.06)}
+  .mbadge.active{border-color:var(--cyan);color:var(--cyan);background:rgba(56,189,248,.06)}
   .mbadge.paused{border-color:var(--warn);color:var(--warn);background:rgba(255,176,46,.06)}
   .thr-wrap{display:flex;gap:10px;margin-top:4px;align-items:flex-end;height:52px}
   .thr-col{display:flex;flex-direction:column;align-items:center;flex:1;height:100%}
   .thr-lbl{font-size:9px;color:var(--muted);font-family:var(--mono);margin-bottom:3px;letter-spacing:.1em}
-  .thr-track{flex:1;width:100%;background:#06090b;border:1px solid var(--amber-dim);position:relative;
+  .thr-track{flex:1;width:100%;background:#080812;border:1px solid var(--accent-dim);position:relative;
     overflow:hidden;border-radius:3px}
   .thr-fill{position:absolute;bottom:0;left:0;right:0;background:var(--cyan);transition:height .3s;opacity:.75}
   .thr-val{font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:3px}
   .depth-wrap{display:flex;align-items:center;gap:12px;margin-top:4px}
-  .depth-track{width:28px;height:82px;background:#06090b;border:1px solid var(--amber-dim);
+  .depth-track{width:28px;height:82px;background:#080812;border:1px solid var(--accent-dim);
     position:relative;overflow:hidden;border-radius:3px;flex-shrink:0}
   .depth-fill{position:absolute;top:0;left:0;right:0;
-    background:linear-gradient(180deg,rgba(0,212,255,.5),rgba(0,120,255,.6),rgba(0,50,150,.9));
+    background:linear-gradient(180deg,rgba(56,189,248,.5),rgba(0,120,255,.6),rgba(0,50,150,.9));
     transition:height .5s ease-out}
   .depth-marker{position:absolute;left:0;right:0;height:2px;background:var(--warn);
     transition:top .5s ease-out;box-shadow:0 0 4px var(--warn)}
   .depth-info{flex:1}
   .depth-big{font-family:var(--display);font-size:26px;font-weight:900;color:var(--cyan);
-    line-height:1;text-shadow:0 0 12px rgba(0,212,255,.4)}
+    line-height:1;text-shadow:0 0 12px rgba(56,189,248,.4)}
   .depth-big .u{font-size:12px;color:var(--muted);font-weight:400;margin-left:5px}
   .depth-phase{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.1em;
     text-transform:uppercase;margin-top:5px}
   .depth-phase.active{color:var(--warn)}
   .spd-ctl{display:flex;align-items:center;gap:8px;margin-top:5px}
-  .spd-ctl input[type=range]{flex:1;accent-color:var(--amber);cursor:pointer}
+  .spd-ctl input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
   .spd-val{font-family:var(--mono);font-size:12px;color:var(--cyan);min-width:5ch;text-align:right}
   /* ---- modal ---- */
   .modal-bg{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
   .modal-bg.show{display:flex}
-  .modal{background:var(--panel);border:1px solid var(--amber);border-radius:8px;padding:18px;
-    width:90%;max-width:480px;box-shadow:0 0 40px rgba(255,140,0,.15)}
-  .modal h3{font-family:var(--display);letter-spacing:.2em;color:var(--amber);margin:0 0 14px;font-size:14px}
+  .modal{background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:18px;
+    width:90%;max-width:480px;box-shadow:0 0 40px rgba(129,140,248,.15)}
+  .modal h3{font-family:var(--display);letter-spacing:.2em;color:var(--accent);margin:0 0 14px;font-size:14px}
   .modal input[type=text],.modal textarea{width:100%;margin-bottom:10px}
-  .modal textarea{min-height:130px;resize:vertical;background:#06090b;color:#dbeef5;
-    border:1px solid var(--amber-dim);border-radius:5px;padding:8px;font-family:var(--mono);font-size:12px;outline:none}
+  .modal textarea{min-height:130px;resize:vertical;background:#080812;color:#dbeef5;
+    border:1px solid var(--accent-dim);border-radius:5px;padding:8px;font-family:var(--mono);font-size:12px;outline:none}
   .modal textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
   .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
   .modal label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin-bottom:10px}
   .path-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;
     cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05)}
-  .path-row:hover{background:rgba(0,212,255,.05)}
-  .path-row.sel{background:rgba(0,212,255,.1);box-shadow:inset 2px 0 0 var(--cyan)}
+  .path-row:hover{background:rgba(56,189,248,.05)}
+  .path-row.sel{background:rgba(56,189,248,.1);box-shadow:inset 2px 0 0 var(--cyan)}
   .path-row .pn{color:#eaf6fb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .path-row .pc{color:var(--muted);font-size:10px;flex-shrink:0}
   .path-empty{padding:12px;color:var(--muted);font-size:11px;text-align:center}
+  /* ---- cross-cutting polish: focus states, disabled/active feedback,
+     themed checkboxes/scrollbars/selection, narrow-viewport pico layout,
+     reduced-motion support ---- */
+  input[type=checkbox]{accent-color:var(--accent);cursor:pointer}
+  a:focus-visible,button:focus-visible,input[type=checkbox]:focus-visible{
+    outline:2px solid var(--cyan);outline-offset:2px;border-radius:4px}
+  button:disabled:hover{background:rgba(129,140,248,.1);box-shadow:none}
+  button:not([disabled]):active{transform:translateY(1px)}
+  .sec-hd:hover{background:rgba(129,140,248,.07)}
+  .sec-hd:active{background:rgba(129,140,248,.09)}
+  body.customize .sec-hd .drag-handle:hover{color:var(--cyan)}
+  ::selection{background:rgba(56,189,248,.35);color:#eaf6fb}
+  *{scrollbar-width:thin;scrollbar-color:var(--accent-dim) transparent}
+  *::-webkit-scrollbar{width:8px;height:8px}
+  *::-webkit-scrollbar-track{background:transparent}
+  *::-webkit-scrollbar-thumb{background:var(--accent-dim);border-radius:4px}
+  *::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+  @media(max-width:1000px){
+    .pico-inner{grid-template-columns:1fr;grid-template-rows:minmax(280px,1fr) minmax(220px,1fr)}
+    .editor-col{border-right:none;border-bottom:1px solid var(--accent-dim)}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{
+      animation-duration:.001ms !important;
+      animation-iteration-count:1 !important;
+      transition-duration:.001ms !important;
+      scroll-behavior:auto !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -380,9 +414,9 @@
       <span class="links"><a href="/docs">API</a><a href="/planner">◈ PLANNER</a></span>
       <button class="cbtn ghost2" id="customizeBtn" onclick="toggleCustomize()">✎ CUSTOMIZE</button>
       <button class="cbtn ghost2" onclick="resetLayout()">⟳ RESET LAYOUT</button>
-      <span class="lbl">PI5</span><span id="dot-health" class="dot"></span>
-      <span class="lbl">CAM</span><span id="dot-cam" class="dot"></span>
-      <span class="lbl">PICO</span><span id="dot-pico" class="dot"></span>
+      <span class="lbl">PI5</span><span id="dot-health" class="dot" title="Pi 5 health link"></span>
+      <span class="lbl">CAM</span><span id="dot-cam" class="dot" title="Camera producer link"></span>
+      <span class="lbl">PICO</span><span id="dot-pico" class="dot" title="Boat Pico serial monitor link"></span>
       <span class="lbl">POD</span><span id="dot-pod" class="dot" title="Pod Pico link"></span>
     </div>
   </header>
@@ -391,8 +425,8 @@
 
     <!-- CAMERA -->
     <div class="section" data-id="camera" style="--span:7">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>◉ CAMERA FEED</span>
-        <span class="sp"></span><span class="lbl" id="cam-meta">LEFT · MJPEG</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>◉ CAMERA FEED</span>
+        <span class="sp"></span><span class="lbl" id="cam-meta">LEFT · MJPEG</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="cam-wrap">
           <img id="cam" alt="camera">
@@ -408,8 +442,8 @@
 
     <!-- SYSTEM HEALTH -->
     <div class="section" data-id="health" style="--span:5">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>▤ SYSTEM HEALTH</span>
-        <span class="sp"></span><span class="lbl" id="hb-age">—</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>▤ SYSTEM HEALTH</span>
+        <span class="sp"></span><span class="lbl" id="hb-age">—</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="health">
           <div>
@@ -453,8 +487,8 @@
 
     <!-- VISION PIPELINE + CAMERA CONTROL -->
     <div class="section" data-id="vision" style="--span:12">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>◈ VISION &amp; CAMERA CONTROL</span>
-        <span class="sp"></span><span class="lbl" id="vis-backend">—</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>◈ VISION &amp; CAMERA CONTROL</span>
+        <span class="sp"></span><span class="lbl" id="vis-backend">—</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="vis-grid">
           <div class="vis-col">
@@ -475,6 +509,8 @@
               <button class="cbtn btn-off" id="seg-toggle" onclick="toggleSegmentation()">SEG --</button>
               <span class="vis-warn" id="vis-warn" title="YOLO with no segmentation trigger runs every frame — high CPU">⚠</span>
               <button class="cbtn btn-off" id="yolo-toggle" onclick="toggleYolo()">YOLO --</button>
+              <button class="cbtn btn-off" id="avoid-toggle" onclick="toggleAvoidance()"
+                title="Reactive obstacle avoidance — steer away from a near threat, overriding waypoint steering until it clears">AVOID --</button>
             </div>
           </div>
           <div class="vis-col vis-threat" id="vis-threat-col">
@@ -518,8 +554,8 @@
 
     <!-- MAP -->
     <div class="section" data-id="map" style="--span:7">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>◈ MAP · BOAT POSITION</span>
-        <span class="sp"></span><span class="lbl" id="map-meta">—</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>◈ MAP · BOAT POSITION</span>
+        <span class="sp"></span><span class="lbl" id="map-meta">—</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="map-wrap">
           <div id="map"></div>
@@ -538,8 +574,8 @@
 
     <!-- TELEMETRY & MISSION (ported dashboard data) -->
     <div class="section" data-id="telemetry" style="--span:5">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>▤ TELEMETRY &amp; MISSION</span>
-        <span class="sp"></span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>▤ TELEMETRY &amp; MISSION</span>
+        <span class="sp"></span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body tele-body">
 
         <div class="tele-sub">
@@ -599,6 +635,7 @@
           <div class="d-row"><span class="d-lbl">Distance</span><span class="d-val" id="t-navDist">—<span class="d-unit">m</span></span></div>
           <div class="d-row"><span class="d-lbl">Bearing</span><span class="d-val" id="t-navBrg">—<span class="d-unit">&deg;</span></span></div>
           <div class="d-row"><span class="d-lbl">Hdg Error</span><span class="d-val" id="t-navErr">—<span class="d-unit">&deg;</span></span></div>
+          <div class="d-row"><span class="d-lbl" title="Perpendicular distance off the LOS track line (+starboard / −port)">Cross-Track</span><span class="d-val" id="t-navXte">—<span class="d-unit">m</span></span></div>
         </div>
 
         <div class="tele-sub">
@@ -620,8 +657,8 @@
 
     <!-- COMMANDS -->
     <div class="section" data-id="commands" style="--span:6">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>⌘ COMMANDS</span>
-        <span class="sp"></span><span class="lbl">one-click → /api</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⌘ COMMANDS</span>
+        <span class="sp"></span><span class="lbl">one-click → /api</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="cmd-bar cmd-rows">
           <div class="cmd-group">
@@ -647,6 +684,15 @@
             <input id="setHdg" class="cmd-in" type="number" step="any" min="0" max="360" placeholder="deg" style="width:70px">
             <button class="cbtn" onclick="cmd('rth','Returning home')">RTH</button>
           </div>
+          <div class="cmd-group" id="simObstGroup">
+            <span class="cmd-glabel">SIM OBST</span>
+            <button class="cbtn" onclick="dropObstacle()" title="Drop a simulated obstacle ~15 m ahead of the boat so reactive avoidance kicks in (simulator only)">DROP OBSTACLE</button>
+            <button class="cbtn ghost2" onclick="clearObstacles()">CLEAR OBST</button>
+          </div>
+          <div class="cmd-group">
+            <span class="cmd-glabel">DRIVE</span>
+            <button class="cbtn" onclick="openMotorModal()" title="Configure the drive motors: per-motor trim (Kv mismatch) and AM32 ESC setup">⚙ MOTORS</button>
+          </div>
           <div class="cmd-group">
             <span class="cmd-glabel">CAMERA</span>
             <button class="cbtn" onclick="swapCam()">⇄ SWAP VIEW</button>
@@ -670,8 +716,8 @@
 
     <!-- BOAT / PICO HEALTH -->
     <div class="section" data-id="boat" style="--span:6">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>⛵ BOAT HEALTH</span>
-        <span class="sp"></span><span class="lbl" id="boat-link">PICO —</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⛵ BOAT HEALTH</span>
+        <span class="sp"></span><span class="lbl" id="boat-link">PICO —</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="boat-grid">
           <div class="stat"><span class="lbl">DRIVE 3×M18</span><span class="sv" id="b-batt12">--</span>
@@ -698,8 +744,8 @@
 
     <!-- RADAR BAR / STEPPER -->
     <div class="section" data-id="radar">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>⊙ RADAR BAR · STEPPER</span>
-        <span class="sp"></span><span class="lbl" id="rdr-meta">PI5 GPIO · A4988</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⊙ RADAR BAR · STEPPER</span>
+        <span class="sp"></span><span class="lbl" id="rdr-meta">PI5 GPIO · A4988</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="radar-inner">
           <div class="rose-wrap">
@@ -766,8 +812,8 @@
 
     <!-- PICO TERMINAL -->
     <div class="section" data-id="pico">
-      <div class="sec-hd"><span class="drag-handle">⠿</span><span>⌨ PICO TERMINAL</span>
-        <span class="sp"></span><span class="lbl">RP2040 · USB CDC · 115200</span><span class="chev">▾</span></div>
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⌨ PICO TERMINAL</span>
+        <span class="sp"></span><span class="lbl">RP2040 · USB CDC · 115200</span><span class="chev" aria-hidden="true">▾</span></div>
       <div class="sec-body">
         <div class="pico-inner">
           <!-- editor -->
@@ -806,13 +852,58 @@
   <div class="modal">
     <h3>LOAD PATH → BOAT</h3>
     <div id="pathList" style="max-height:260px;overflow-y:auto;margin-bottom:10px;
-      border:1px solid var(--amber-dim);border-radius:5px"></div>
+      border:1px solid var(--accent-dim);border-radius:5px"></div>
     <label class="chk"><input type="checkbox" id="mStart" checked> start immediately</label>
     <div class="modal-actions">
       <button class="cbtn ghost2" onclick="location.href='/planner'">✎ EDIT IN PLANNER</button>
       <span style="flex:1"></span>
       <button class="cbtn" onclick="closeModal('mUpload')">CANCEL</button>
       <button class="cbtn" onclick="sendMission()">UPLOAD</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOTOR / ESC CONFIGURATION -->
+<div class="modal-bg" id="mMotors">
+  <div class="modal" style="max-width:540px">
+    <h3>⚙ MOTOR CONFIGURATION</h3>
+
+    <div class="sec-ttl">PER-MOTOR TRIM</div>
+    <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 8px">
+      Two different-Kv motors give unequal thrust at equal command, so the boat crabs. Lower the
+      <i>faster</i> motor's gain until it tracks straight (1.00 = no trim). The heading loop nulls the rest.
+    </div>
+    <div style="display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap">
+      <label style="display:flex;flex-direction:column;gap:4px">
+        <span class="lbl">LEFT GAIN</span>
+        <input type="number" id="trimL" class="cmd-in" min="0.5" max="1.5" step="0.01" value="1.00">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:4px">
+        <span class="lbl">RIGHT GAIN</span>
+        <input type="number" id="trimR" class="cmd-in" min="0.5" max="1.5" step="0.01" value="1.00">
+      </label>
+      <button class="cbtn" onclick="applyMotorTrim()">APPLY TRIM</button>
+      <span class="lbl" id="trimMsg"></span>
+    </div>
+
+    <div class="sec-ttl" style="margin-top:18px">ESC CONFIGURATION (AM32)</div>
+    <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 8px">
+      ⚠ <b>Experimental / hardware-only.</b> Hands the selected ESC's signal line to the AM32
+      configurator through the Pico. This <b>stops the boat</b> and drops the serial link — then open
+      <b>am32.ca</b> in Chromium on the Pi and connect to the Pico port. Restart the boat stack when done.
+      See <code>docs/esc_setup.md</code>. Props off, out of the water.
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="lbl">ESC</span>
+      <select id="escSel" class="imgsel"><option value="left">LEFT (GP2)</option><option value="right">RIGHT (GP3)</option></select>
+      <span class="lbl">BAUD</span>
+      <input type="number" id="escBaud" class="cmd-in" style="width:90px" value="19200">
+      <button class="cbtn warn" onclick="escConfig()">ENTER ESC CONFIG MODE</button>
+    </div>
+    <div id="escMsg" style="font-size:11px;line-height:1.5;margin-top:8px;color:var(--cyan)"></div>
+
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="cbtn" onclick="closeModal('mMotors')">CLOSE</button>
     </div>
   </div>
 </div>
@@ -888,12 +979,14 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 }).addTo(map);
 const boatIcon = L.divIcon({ className: '', html: '<div class="boat-ping"></div>', iconSize: [16,16], iconAnchor: [8,8] });
 const boatMarker = L.marker([51.506726, -0.071438], { icon: boatIcon, zIndex: 1000 }).addTo(map);
-const trackLine = L.polyline([], { color: '#00d4ff', weight: 2, opacity: .5, dashArray: '4 6' }).addTo(map);
+const trackLine = L.polyline([], { color: '#38bdf8', weight: 2, opacity: .5, dashArray: '4 6' }).addTo(map);
 const trackPoints = [];
 const MAX_TRACK = 2000;
 const wpLayer = L.layerGroup().addTo(map);
 let wpMarkers = [];
-const targetLine = L.polyline([], { color: '#ff8c00', weight: 1.5, opacity: .6, dashArray: '6 4' }).addTo(map);
+const targetLine = L.polyline([], { color: '#8b8cff', weight: 1.5, opacity: .6, dashArray: '6 4' }).addTo(map);
+// Simulated-obstacle layer (only populated in simulator mode).
+const obstacleLayer = L.layerGroup().addTo(map);
 let following = true;
 map.on('mousedown', () => { following = false; });
 map.on('contextmenu', (e) => {
@@ -985,11 +1078,21 @@ function renderTelemetry(d){
     $('t-navDist').innerHTML = n.distance_m.toFixed(1) + '<span class="d-unit">m</span>';
     $('t-navBrg').innerHTML = n.bearing_deg.toFixed(0) + '<span class="d-unit">&deg;</span>';
     $('t-navErr').innerHTML = n.heading_error.toFixed(1) + '<span class="d-unit">&deg;</span>';
+    // Cross-track error: sign → side of the track (S starboard / P port). Turns
+    // amber past ~5 m off the line; shows AVOID while a threat override is active.
+    const xte = (n.cross_track_m != null) ? n.cross_track_m : 0;
+    const side = Math.abs(xte) < 0.05 ? '' : (xte > 0 ? ' S' : ' P');
+    const xEl = $('t-navXte');
+    xEl.innerHTML = (n.avoiding ? '<span style="color:var(--crit)">AVOID</span> ' : '')
+      + Math.abs(xte).toFixed(1) + side + '<span class="d-unit">m</span>';
+    xEl.style.color = n.avoiding ? 'var(--crit)' : (Math.abs(xte) > 5 ? 'var(--warn)' : '');
     targetLine.setLatLngs([pos, [n.target_lat, n.target_lon]]);
   } else {
     $('t-navDist').innerHTML = '—<span class="d-unit">m</span>';
     $('t-navBrg').innerHTML = '—<span class="d-unit">&deg;</span>';
     $('t-navErr').innerHTML = '—<span class="d-unit">&deg;</span>';
+    $('t-navXte').innerHTML = '—<span class="d-unit">m</span>';
+    $('t-navXte').style.color = '';
     targetLine.setLatLngs([]);
   }
 }
@@ -1207,6 +1310,7 @@ function renderVision(v){
   // toggle buttons reflect server-authoritative state
   updateSegButton(v.segmentation_enabled);
   updateYoloButton(v.yolo_enabled);
+  updateAvoidButton(v.avoidance_enabled, v.avoiding);
   // high-load warning: YOLO on with segmentation off = every-frame inference
   $('vis-warn').style.display = (v.yolo_enabled && !v.segmentation_enabled) ? 'inline' : 'none';
   // water state
@@ -1257,6 +1361,21 @@ function updateYoloButton(enabled){
   b.textContent = enabled ? 'YOLO ON' : 'YOLO OFF';
   b.className = 'cbtn ' + (enabled ? 'btn-amber pulse' : 'btn-off');
 }
+function updateAvoidButton(enabled, avoiding){
+  const b = $('avoid-toggle');
+  if (enabled === undefined || enabled === null){ b.textContent = 'AVOID --'; b.className = 'cbtn btn-off'; return; }
+  // Flashes red while actively steering around a threat; green when armed & clear.
+  b.textContent = avoiding ? 'AVOID ●' : (enabled ? 'AVOID ON' : 'AVOID OFF');
+  b.className = 'cbtn ' + (avoiding ? 'btn-crit pulse' : (enabled ? 'btn-green pulse' : 'btn-off'));
+}
+async function toggleAvoidance(){
+  try{
+    const r = await fetch('/vision/avoidance/toggle', { method:'POST', headers: apiHeaders() });
+    if (!r.ok){ toast('Vision pipeline not available', false); return; }
+    const d = await r.json(); updateAvoidButton(d.avoidance_enabled, false);
+    toast(d.message || 'avoidance toggled', true);
+  }catch(e){ toast('toggle failed', false); }
+}
 async function toggleSegmentation(){
   try{
     const r = await fetch('/vision/segmentation/toggle', { method:'POST', headers: apiHeaders() });
@@ -1274,7 +1393,7 @@ async function toggleYolo(){
   }catch(e){ toast('toggle failed', false); }
 }
 // ---- boat / pico health panel --------------------------------------------
-const FLAG_LABELS = { GPS:'GPS', CMP:'COMPASS', BAT:'BATT', DHT:'TEMP', MOT:'MOTOR', POD:'POD' };
+const FLAG_LABELS = { GPS:'GPS', IMU:'IMU', P_BAT:'DRIVE BATT', E_BAT:'ELEC BATT', MOT:'MOTOR', POD:'POD' };
 // one battery tile: voltage · % + coloured bar; <=0.5 V reads as no sensor
 function setBatt(vId, barId, v, pct){
   const el = $(vId), bar = $(barId);
@@ -1392,7 +1511,7 @@ let editor = null;
 require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
 require(['vs/editor/editor.main'], function(){
   monaco.editor.defineTheme('dreams', { base:'vs-dark', inherit:true, rules:[],
-    colors:{ 'editor.background':'#06090b', 'editor.lineHighlightBackground':'#0e1316' } });
+    colors:{ 'editor.background':'#080812', 'editor.lineHighlightBackground':'#0e1018' } });
   editor = monaco.editor.create($('editor'), {
     value: DEFAULT_CODE, language:'python', theme:'dreams', fontFamily:'IBM Plex Mono',
     fontSize:13, minimap:{enabled:false}, automaticLayout:true, scrollBeyondLastLine:false,
@@ -1471,6 +1590,29 @@ async function sendGoto(){
   try{ await postApi('goto', {lat, lon}); toast(`✓ Going to ${lat.toFixed(4)}, ${lon.toFixed(4)}`, true); following = true; }
   catch(e){ toast('✗ ' + e.message, false); }
 }
+// ---- simulated obstacles (sim mode only) ----
+async function refreshObstacles(){
+  try{
+    const r = await getApi('sim/obstacles');
+    const grp = $('simObstGroup');
+    if (!r || !r.available){ if (grp) grp.style.display = 'none'; obstacleLayer.clearLayers(); return; }
+    if (grp) grp.style.display = '';
+    obstacleLayer.clearLayers();
+    (r.obstacles || []).forEach(o => {
+      L.circle([o.lat, o.lon], { radius: o.radius_m, color: '#ff3b3b', weight: 1.5,
+        fillColor: '#ff3b3b', fillOpacity: .18, dashArray: '4 4' }).addTo(obstacleLayer);
+    });
+  }catch(e){ /* not in sim mode / transient — leave layer as-is */ }
+}
+async function dropObstacle(){
+  try{ await postApi('sim/obstacles', { ahead_m: 15 }); toast('✓ Obstacle dropped ahead', true); refreshObstacles(); }
+  catch(e){ toast('✗ simulator only', false); }
+}
+async function clearObstacles(){
+  try{ await fetch('/api/sim/obstacles', { method: 'DELETE', headers: apiHeaders() }); toast('✓ Obstacles cleared', true); refreshObstacles(); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+setInterval(refreshObstacles, 3000); refreshObstacles();
 function swapCam(){ setCam(camView === 'left' ? 'right' : 'left'); }
 function toggleDetect(){
   // Detection is Tier 2 of the vision pipeline — the YOLO toggle owns it.
@@ -1503,6 +1645,37 @@ async function sendHeading(){
   if (isNaN(h) || h < 0 || h > 360){ toast('enter a heading 0–360°', false); return; }
   try{ await postApi('heading', {heading: h}); toast('✓ Holding heading ' + Math.round(h) + '°', true); }
   catch(e){ toast('✗ ' + e.message, false); }
+}
+// ---- motor / ESC configuration -------------------------------------------
+async function openMotorModal(){
+  openModal('mMotors');
+  $('escMsg').textContent = '';
+  $('trimMsg').textContent = '';
+  try{
+    const t = await getApi('nav/motor-trim');
+    $('trimL').value = (t.left != null ? t.left : 1).toFixed(2);
+    $('trimR').value = (t.right != null ? t.right : 1).toFixed(2);
+  }catch(e){ /* leave defaults */ }
+}
+async function applyMotorTrim(){
+  const left = parseFloat($('trimL').value), right = parseFloat($('trimR').value);
+  if (isNaN(left) || isNaN(right)){ $('trimMsg').textContent = 'enter numbers'; return; }
+  try{
+    const r = await postApi('nav/motor-trim', {left, right});
+    $('trimMsg').textContent = '✓ L=' + r.left.toFixed(2) + ' R=' + r.right.toFixed(2);
+    toast('✓ Motor trim applied', true);
+  }catch(e){ $('trimMsg').textContent = '✗ ' + e.message; toast('✗ ' + e.message, false); }
+}
+async function escConfig(){
+  const esc = $('escSel').value, baud = parseInt($('escBaud').value, 10) || 19200;
+  if (!confirm('This STOPS the boat and drops the serial link so you can configure the '
+      + esc.toUpperCase() + ' ESC with am32.ca. Continue?')) return;
+  $('escMsg').textContent = 'Arming…';
+  try{
+    const r = await postApi('esc/passthrough', {esc, baud});
+    $('escMsg').textContent = '✓ ' + (r.message || 'armed');
+    toast('✓ ESC config mode armed', true);
+  }catch(e){ $('escMsg').textContent = '✗ ' + e.message; toast('✗ ' + e.message, false); }
 }
 // ---- saved-path picker (paths are created/edited in /planner) --------------
 let savedPaths = [], selPath = null;

@@ -122,7 +122,19 @@ class NetworkManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await proc.communicate()
+            # Bounded wait — a slow/hung association must not stall start()
+            # (and therefore the rest of boat startup) indefinitely. nmcli
+            # keeps running in the background on timeout; the probe loop's
+            # auto/cellular fallback takes over regardless.
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "nmcli wifi connect to %s timed out after 30s — continuing "
+                    "startup, association may still complete in the background",
+                    wifi.ssid,
+                )
+                return
             if proc.returncode != 0:
                 logger.warning("nmcli wifi connect failed: %s",
                                stderr.decode(errors="ignore").strip())
