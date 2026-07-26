@@ -150,6 +150,7 @@ def _tel_out() -> TelemetryOut:
         lat=t.lat, lon=t.lon, heading=t.heading,
         speed_knots=t.speed_knots, batt_v=t.batt_v, batt_pct=t.batt_pct,
         hull=t.hull, mt_left=t.mt_left, mt_right=t.mt_right, health=t.health,
+        curr_left=t.curr_left, curr_right=t.curr_right,
     )
 
 
@@ -923,6 +924,7 @@ def _boat_health() -> dict:
         "hull_left": "L!" in (t.hull or ""),
         "hull_right": "R!" in (t.hull or ""),
         "mt_left": t.mt_left, "mt_right": t.mt_right,
+        "curr_left": t.curr_left, "curr_right": t.curr_right,
         "health": t.health,
         "health_flags": health_flags,
         # Two SHT41s: open air (#A) and electronics enclosure (#B).

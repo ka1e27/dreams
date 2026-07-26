@@ -72,19 +72,23 @@ def nak(seq, cmd, reason):
 
 
 def send_tel(lat, lon, heading, speed, batt_v, batt_pct, hull,
-             mt_l, mt_r, health):
-    """Send unsolicited telemetry (TEL). Seq=0."""
-    _send("TEL,0,%.6f,%.6f,%.1f,%.1f,%.1f,%d,%s,%.0f,%.0f,%s" % (
+             mt_l, mt_r, health, curr_l=0.0, curr_r=0.0):
+    """Send unsolicited telemetry (TEL). Seq=0.
+
+    curr_l/curr_r (per-motor current, A, from AM32 KISS telemetry) are appended
+    fields — older Pi parsers that read only fields 0-9 ignore them; newer ones
+    read them when present (see serial-protocol.md §TEL)."""
+    _send("TEL,0,%.6f,%.6f,%.1f,%.1f,%.1f,%d,%s,%.0f,%.0f,%s,%.1f,%.1f" % (
         lat, lon, heading, speed, batt_v, batt_pct, hull,
-        mt_l, mt_r, health))
+        mt_l, mt_r, health, curr_l, curr_r))
 
 
 def send_tel_with_seq(seq, lat, lon, heading, speed, batt_v, batt_pct, hull,
-                      mt_l, mt_r, health):
+                      mt_l, mt_r, health, curr_l=0.0, curr_r=0.0):
     """Send telemetry with a specific sequence number (response to REQ_TEL)."""
-    _send("TEL,%d,%.6f,%.6f,%.1f,%.1f,%.1f,%d,%s,%.0f,%.0f,%s" % (
+    _send("TEL,%d,%.6f,%.6f,%.1f,%.1f,%.1f,%d,%s,%.0f,%.0f,%s,%.1f,%.1f" % (
         seq, lat, lon, heading, speed, batt_v, batt_pct, hull,
-        mt_l, mt_r, health))
+        mt_l, mt_r, health, curr_l, curr_r))
 
 
 def send_env(air_t, air_h, water_t, water_ec, water_light, bottom,

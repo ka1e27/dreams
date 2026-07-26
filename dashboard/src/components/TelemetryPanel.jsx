@@ -109,6 +109,12 @@ export default function TelemetryPanel({ telemetry, environment, navigation, con
               L:{(t.mt_left || 0).toFixed(0)}° R:{(t.mt_right || 0).toFixed(0)}°
             </span>
           </div>
+          <div className="data-row">
+            <span className="data-label">Motor current</span>
+            <span className="data-value">
+              L:{(t.curr_left || 0).toFixed(1)}A R:{(t.curr_right || 0).toFixed(1)}A
+            </span>
+          </div>
           {vescFault && (
             <div className="data-row">
               <span className="data-label">VESC fault</span>

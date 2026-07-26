@@ -221,9 +221,14 @@ class MockPicoSerial:
 
     @property
     def telemetry(self) -> Telemetry:
-        """Build telemetry from simulator state. batt_v is the 3× M18 drive rail."""
+        """Build telemetry from simulator state. batt_v is the 2× M18 drive rail."""
         s = self._sim
         batt_pct = self._pct(s.batt_v, 15.0, 21.0)   # 2× M18 parallel (cutoff..full)
+        # Synthetic per-motor load so temp/current read live in sim: ~35 °C and a
+        # couple of amps at idle, rising with throttle magnitude (mirrors the AM32
+        # KISS telemetry the real firmware now forwards).
+        load_l = abs(getattr(s, "_thr_left", 0)) / 100.0
+        load_r = abs(getattr(s, "_thr_right", 0)) / 100.0
         return Telemetry(
             lat=s.lat,
             lon=s.lon,
@@ -232,9 +237,11 @@ class MockPicoSerial:
             batt_v=s.batt_v,
             batt_pct=batt_pct,
             hull="DRY",
-            mt_left=45.0,
-            mt_right=44.0,
+            mt_left=round(35.0 + 40.0 * load_l, 1),
+            mt_right=round(35.0 + 40.0 * load_r, 1),
             health="111111",
+            curr_left=round(1.0 + 44.0 * load_l, 1),
+            curr_right=round(1.0 + 44.0 * load_r, 1),
         )
 
     @property
@@ -310,6 +317,7 @@ class MockPicoSerial:
             str(t.lat), str(t.lon), str(t.heading), str(t.speed_knots),
             str(t.batt_v), str(t.batt_pct), t.hull, str(t.mt_left),
             str(t.mt_right), t.health,
+            str(t.curr_left), str(t.curr_right),
         ], raw="")
 
     async def poll_pod(self) -> ParsedFrame:

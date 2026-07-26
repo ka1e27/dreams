@@ -388,7 +388,7 @@ These are sent periodically or on events. They always use SEQ=0.
 Sent every 1000 ms.
 
 ```
-$TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<health>*<cs>\n
+$TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<health>[,<curr_l>,<curr_r>]*<cs>\n
 ```
 
 | Field | Type | Description |
@@ -403,11 +403,19 @@ $TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<h
 | mt_l | float | Left motor temperature (°C) |
 | mt_r | float | Right motor temperature (°C) |
 | health | string | 6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD |
+| curr_l | float | Left motor current (A) — TEL v1.1, optional |
+| curr_r | float | Right motor current (A) — TEL v1.1, optional |
 
 **Example:**
 ```
 < $TEL,0,51.506726,-0.071438,185.3,1.2,15.4,92,DRY,52.1,49.3,111100*33\n
 ```
+
+**TEL v1.1 appendix (optional trailing fields).** `curr_l,curr_r` (per-motor
+current in amps, from AM32 KISS ESC telemetry via `esc_telem.py`) are appended
+after `health` and are backward compatible — a v1.0 parser stops at `health`, and
+firmware without ESC telemetry omits them (or sends `0.0`). The `mt_l/mt_r`
+temperatures are also sourced from the same KISS stream. See `docs/esc_telemetry.md`.
 
 ### 4.2 ENV — Environment Telemetry
 

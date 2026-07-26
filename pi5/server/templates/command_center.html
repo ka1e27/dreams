@@ -1424,9 +1424,10 @@ function renderBoat(b){
   setHull('b-hullR', !!b.hull_right);
   $('b-hdg').textContent = fmt(b.heading, '°', 0);
   $('b-spd').textContent = fmt(b.speed_knots, ' kn', 1);
-  // motor temps
+  // motor temps + per-motor current (AM32 KISS telemetry)
   const mEl = $('b-mot');
-  mEl.textContent = fmt(b.mt_left, '', 0) + ' / ' + fmt(b.mt_right, '', 0) + ' °C';
+  mEl.textContent = fmt(b.mt_left, '', 0) + ' / ' + fmt(b.mt_right, '', 0) + ' °C   '
+    + fmt(b.curr_left, '', 1) + ' / ' + fmt(b.curr_right, '', 1) + ' A';
   const hot = Math.max(b.mt_left||0, b.mt_right||0);
   mEl.style.color = hot >= 70 ? 'var(--crit)' : hot >= 60 ? 'var(--warn)' : '#eaf6fb';
   // gps

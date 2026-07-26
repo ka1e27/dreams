@@ -87,7 +87,7 @@ class HalfDuplexUART:
     the transmitter never records its own echo.
     """
 
-    def __init__(self, gpio, baud, sm_tx=0, sm_rx=4):
+    def __init__(self, gpio, baud, sm_tx=6, sm_rx=7):   # PIO1 SM2/3 — SM0=SBUS, SM4/5=esc_telem
         self._gpio = gpio
         self._baud = int(baud)
         self._pin = machine.Pin(gpio, machine.Pin.IN, machine.Pin.PULL_UP)
@@ -156,6 +156,13 @@ def bridge(esc_id, baud):
     gpio = _esc_gpio(esc_id)
     uart = HalfDuplexUART(gpio, int(baud))
 
+    # Hardware-watchdog safety net. If ANY part of this bridge hangs — a blocking
+    # stdin read (select.poll on the USB-CDC is unreliable on rp2), a PIO stall —
+    # the WDT stops being fed and the RP2040 hard-resets back to normal firmware in
+    # ~8 s. So the bridge can NEVER permanently strand the Pico (no power-cycle).
+    # Fed at the top of the loop, so a hang inside the loop body trips it.
+    wdt = machine.WDT(timeout=8000)
+
     # Make the USB-CDC a raw byte pipe: no REPL, no Ctrl-C interception.
     micropython.kbd_intr(-1)
     try:
@@ -172,14 +179,22 @@ def bridge(esc_id, baud):
     last_activity = time.ticks_ms()
 
     while True:
+        wdt.feed()               # hang anywhere below → WDT not fed → auto-reset
         # Idle-timeout guard so a dead host can't strand us here.
         if time.ticks_diff(time.ticks_ms(), last_activity) > _IDLE_TIMEOUT_MS:
             break
 
-        # PC → ESC: drain everything the host has queued, then transmit it as one
-        # burst (half-duplex: send, then listen).
+        # PC → ESC: drain everything the host currently has queued and transmit it
+        # as one burst (half-duplex: send, then listen). Drain byte-at-a-time under
+        # poll() — a fixed stdin.read(64) BLOCKS until 64 bytes arrive, which strands
+        # the bridge on any shorter command (and defeats the escape/idle-timeout).
         if poll.poll(5):
-            chunk = stdin.read(64)
+            chunk = bytearray()
+            while poll.poll(0):
+                b = stdin.read(1)
+                if not b:
+                    break
+                chunk += b
             if chunk:
                 last_activity = time.ticks_ms()
                 esc_tail += chunk

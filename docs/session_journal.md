@@ -31,6 +31,64 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-25 — Full on-Pi review (9 agents) + ESC KISS telemetry (temp + current)
+
+**Worked on:** first review actually **run on the Pi** (prior 3 sessions were Windows/static-only).
+Then built per-motor ESC telemetry end-to-end at the user's request.
+**Review (executed):** baseline healthy — `pytest pi5/tests` **164 green**, ruff clean, firmware
+py_compiles, both Vite builds pass. 9 parallel subsystem agents + own pass on scripts/services/CI/deploy.
+Findings relayed to user; **nothing auto-fixed**. Headline:
+- **CRITICAL firmware (verified by hand):** (S2) `serial_handler._send()` `sys.stdout.write` is
+  unguarded — a hung Pi fills the USB TX buffer, stalls the single asyncio loop, watchdog never ESTOPs
+  (read path IS guarded, write path isn't). (S1) UART1 double-drain — `gps.read()` in `task_fast_sensors`
+  (main.py:209) races `task_uart1_reader`, shredding GPS **and** `$POD` leak frames; fix = delete line 209.
+- **HIGH:** pod-leak only alerts (no ESTOP/decision); single-hull hull-leak ESTOP needs *both* sensors so
+  never fires; watchdog ESTOP is one-shot under `except: pass`.
+- **MED:** cloud `list_missions` unbounded; server blocking file IO in async save/delete; `pod_bridge`
+  `_pod_ok` not cleared on parse error; uploader overflow truncation; `detector.py` dead; doc rot
+  (`main.py`/`pin_map.md` "2× M18 series"→parallel; pin_map still production board); orphaned
+  `mission:`/`pod:`/`logging:` config; Caddyfile only proxies /api+/ws.
+- **Rejected on verify:** rate-limiter "race" (no `await` in critical section → atomic single-worker) and
+  SBUS S3 "9 cycles/bit" (it's 8, correct). *But* SBUS uses an 8-byte PIO FIFO < a 25-byte frame → likely
+  under-drains too (bench-check).
+**ESC telemetry (built; runs in sim; UNTESTED on hardware):** new `firmware/boat-pico/esc_telem.py` — PIO
+UART RX ×2 (**GP16** L / **GP19** R), KISS 10-byte frames (CRC-8, big-endian), **32-byte FIFO**
+(`push_thresh=32` — the fix SBUS lacks). `escs.py` telemetry stubs now delegate to it; `main.py` inits +
+100 Hz drain task + edge-triggered `MOTOR_HOT` WARN (80 °C, WARN-only by choice — one-liner to ESTOP).
+Current appended to `TEL` as `curr_l,curr_r` (backward-compat v1.1 appendix) → `pico_serial`
+(parse-if-present) → server model/status dict → command center + `TelemetryPanel.jsx`. Simulator emits
+synthetic load-based temp/current. Fixed the "series"→"parallel" doc rot in `main.py`/`sensors`/`simulator`
+while here. Docs: new `docs/esc_telemetry.md` (+ `esc_setup.md`, `serial-protocol.md §4.1`).
+**Verified:** 164 tests still green, ruff clean, firmware compiles, KISS parser unit-checked
+(CRC/scaling/resync/reject); **booted the sim on the Pi** — a `goto` drove the boat and `/api/status`
+showed `curr 12.0/3.2 A`, `temp 45/37 °C` tracking throttle.
+**Decisions / open questions:** ESC telem has 3 bench unknowns (AM32 emitting telem in PWM mode; PIO byte
+order `_BYTE_ORDER_LE`; drain cadence via `esc_telem.stats()`) — see the doc. Review fixes NOT applied —
+awaiting user's pick.
+**Next steps:** (1) fix S1 (1-line) + S2 (writer-queue) — top safety value; (2) bench-validate ESC telem
+per `docs/esc_telemetry.md`; (3) regen stale `pin_map.md`; (4) pi5/cloud one-liners. Nothing committed.
+**Follow-up (2026-07-26) — on-bench ESC bring-up with a real NeutronRC G071 + 4S:**
+- **ESC passthrough bench-tested → found + fixed real bugs.** Arming the Pico bridge stranded the Pico
+  (needed power-cycles). Root causes fixed in `firmware/boat-pico/esc_passthrough.py`: `stdin.read(64)`
+  blocks until 64 bytes (rp2 `select.poll` on USB-CDC is unreliable) → drain byte-at-a-time; added a
+  **hardware `machine.WDT(8s)`** so a hang self-recovers (also the only HW WDT in the firmware now);
+  moved its PIO SMs 0/4→6/7 (collided with SBUS SM0 + esc_telem SM4/5); dropped the `ESC_PASS: bridging`
+  print in `main.py` that leaked into the CDC as a false "reply". Still not functionally validated for
+  am32.ca-through-Pico (poll/read + half-duplex link unproven) — WDT just makes iterating safe.
+- **am32.ca can't see the Pi's GPIO UART** (Chromium Web Serial lists USB serial only), so the browser
+  path is out without a USB-TTL adapter (user has none). **Pivoted to a CLI configurator.**
+- **NEW `pi5/scripts/am32_config.py` — WORKS.** AM32 one-wire bootloader protocol over the Pi's GPIO
+  UART (transcribed from AM32-bootloader `main.c`: 19200, CRC16 0xA001, SET_ADDRESS/READ/SET_BUFFER/
+  PROG_FLASH). Enabled `uart0` (`/dev/ttyAMA0`, GPIO14/15) at runtime + stopped the serial getty. Read
+  the ESC (name "NeutronRC G0", 64K, flash code 0x35 → EEPROM at 0xf800), then **wrote + read-back-verified
+  bidirectional (byte 18=1) + 30ms telemetry (byte 31=1)**. `read` + `set --bidir/--telemetry/--lvc`.
+  Doc `docs/am32_config.md`; `esc_setup.md` updated (Pi-GPIO path now the recommended bench route).
+- **Telemetry still 0 on GP16.** Traced AM32 firmware: serial telem is emitted on the **MCU's PB6**
+  (USART1 115200 8N1 open-drain) and the transmit sits in the commutation path → **likely only streams
+  while a motor is spinning**. No motor connected, so `esc_telem` correctly sees 0 bytes. Left for the
+  user to finish: motor (props off) + throttle, and confirm GP16 is on the ESC's actual telemetry pad (PB6).
+**Still uncommitted.** Working `am32_config.py` + all firmware/pi5/UI/doc changes from this session.
+
 ## 2026-07-25 — Deep review: LOS nav, obstacle avoidance wired, vision perf, Abyssal Indigo UI
 
 **Worked on:** user asked for an extremely thorough review + make it run *great*, research-backed
@@ -251,25 +309,6 @@ leg, and advanced WP 0→1→2, ranging ~58 m from start; server stopped cleanly
   waypoints or `POST /api/sim/speed` to watch it drive a route quickly.
 **Next steps:** none pending. Offered the user an optional zero-setup standalone animation (self-contained
 HTML canvas / matplotlib playback); build only if they ask. No repo files changed this session.
-
-## 2026-07-21 — Single-hull test bench variant: spec + firmware (branch `single-hull-test-bench`)
-
-**Worked on:** user wants a single-hull "test bench" boat (two stern motors, differential steering, standard hobby ESCs instead of the VESC/CAN chain, 2× M18 series drive instead of 3×) to validate the stack on real hardware before the full catamaran. Produced a spec doc, then implemented the Boat Pico firmware on a new branch `single-hull-test-bench` (branched off `main`; `main` untouched). Mid-implementation the user chose to **keep both SHT41 air-temp sensors**, which forced a pin-plan revision (below).
-**Final pin plan (test bench):** left ESC **GP2**, right ESC **GP3** (PWM slice 1 A/B — same 50 Hz, independent duty), winch **GP6** (was GP14), SBUS **GP7** (was GP15), **both SHT41s kept on GP12–15** (J11/J13, native as-built pins). Reason: a PCB net-trace confirmed the as-built board routes GP12–15 to the two SHT41 SoftI2C connectors, so propulsion/winch/SBUS move to free Pico header pins (GP2/3/6/7 have no connector — hand-wired taps on a bench rig). This also sidesteps the long-standing dual-hull GP12–15 VESC/winch/SBUS-vs-SHT41 as-built conflict.
-**Changed (on branch `single-hull-test-bench`, committed locally, not pushed):**
-- `firmware/boat-pico/escs.py` (new) — dual hobby-ESC PWM driver on GP2/GP3, 50 Hz, reusing the winch pulse mapping (STOP 4915 / MIN 3277 / MAX 6553, `duty_u16`). Exposes `LEFT`/`RIGHT`/`LEFT_PIN`/`RIGHT_PIN`/`init` (returns success)/`ready`/`set_duty`/`stop` plus VESC-shaped telemetry **stubs** (temp→None, fault→0, `max_motor_temp`→0.0, poll/request→no-op) so `main.py` telemetry code runs unchanged.
-- `firmware/boat-pico/motor_control.py` — imports `escs` not `vesc`; `init/update/estop` drive ESCs; winch `MW_PIN` 14→6; `COMP_L=COMP_R=PULLEY_L=PULLEY_R=1.0` (single hull); `init()` returns ESC-up status. Steering math + RC/ESTOP gates unchanged.
-- `firmware/boat-pico/sbus.py` — `SBUS_PIN` 15→7 (PIO).
-- `firmware/boat-pico/sensors.py` — drive divider `INV_P_RATIO` 21.0→**14.0** (130k/10k; 42 V→3.00 V — same margin as the production 200k/10k at 63 V), `P_FULL/EMPTY/WARN/CRIT`=42/30/34/32. **Both SHT41s kept** (SoftI2C init unchanged); only battery constants + docstrings changed.
-- `firmware/boat-pico/main.py` — imports `escs`; removed `task_vesc_telemetry` + its task-list entry; removed watchdog motor-overheat/VESC-fault blocks and `_mt_throttled`/`_vesc_fault_sent` state; TEL2 `v_in` now carries `sensors.prop_batt_v`; startup prints drive-ESC OK/FAIL with a "do NOT arm" warning; docstring pin map updated. `vesc.py` left in tree but no longer imported.
-- `docs/hardware_changes_v2_to_testbench.md` (new) — full spec, revised for the keep-both-SHT41 pin plan. All five firmware files pass `python -m py_compile`.
-**Decisions / open questions:**
-- Ran an adversarial multi-lens verification Workflow (6 review lenses → per-finding refute pass, 14 agents) on the *first* (pre-SHT41-revision) firmware. Confirmed + fixed two real issues: (1) a stale ×13.0/3.23 V divider figure in a `sensors.py` docstring (correct is ×14.0/3.00 V); (2) `escs.init()` swallowed PWM-init failure silently — fixed with a success return + `ready()` + a `main()` FAIL banner. NB: the verification predates the pin move to GP2/3, but both fixes carried forward unchanged.
-- Confirmed the `MCP2515-I_P` symbol in `Boat_PCB.kicad_sch` is placed but **completely unwired**; irrelevant here, worth deleting from the schematic eventually.
-- **Safety note:** dumb ESCs hold last PWM (no VESC-style self-timeout); the heartbeat-watchdog→estop→neutral path is the only motor kill. Must be bench-verified before water testing.
-**Next steps:** (1) branch is committed locally but **not pushed** — user chose local-only; (2) `docs/pin_map.md` still describes the production board — regenerate/annotate for the GP2/3/6/7 test-bench pinout if this branch is kept; (3) before first spin-up, verify the chosen hobby ESCs' arming sequence + pulse range vs the reused winch mapping, and wire the four relocated signals to the Pico breakout header (open items in the new doc).
-
-**Follow-on (same session): whole-project context doc.** User asked for "a comprehensive document of everything going on in this project" for a Claude chat project page. Wrote `docs/PROJECT_CONTEXT.md` — a self-contained briefing synthesized from CLAUDE.md, pin_map, battery_architecture, serial-protocol, changelog_and_decisions, the ADRs, and the current code/git state (gathered via parallel Explore agents). Covers: compute architecture, repo layout, BOM, pin maps (incl. the Pi 5 radar-bar stepper GPIO exception and the GP12–15 as-built conflict), M18 power, VESC propulsion, serial protocol, full software-module inventory, the three-tier vision pipeline, UI/cloud/deploy, connectivity, run instructions, locked decisions, and a branch/open-items status section. Written while checked out on `single-hull-test-bench`, but it presents **`main` as the architecture-of-record** and the two branches (this one + the older `radar-bar-stepper`) as variants. Doc is **uncommitted** and lives on the current branch — decide whether it belongs on `main`. A verification agent fact-checked it against the repo (main-vs-branch attribution, battery values, pins, protocol, FSM, cloud endpoints, file paths) and found **one error, now fixed**: the 4th TEL health flag is the electronics battery (`E_BAT`), not DHT/temp — corrected to match the `main.py` health string `GPS,IMU,P_BAT,E_BAT,MOT,POD`. Everything else verified accurate.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

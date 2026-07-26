@@ -39,6 +39,8 @@ Note: GP0/GP1 are dead — do not use.
 """
 from machine import Pin, PWM
 
+import esc_telem
+
 # Motor IDs — kept identical to vesc.py so motor_control.py stays a drop-in.
 LEFT = 0
 RIGHT = 1
@@ -115,49 +117,57 @@ def stop():
     set_duty(RIGHT, 0.0)
 
 
-# ---- Telemetry stubs -------------------------------------------------------
-# Dumb ESCs report nothing back. These stubs keep main.py's VESC-shaped
-# telemetry / watchdog / health-string / LED code running unchanged — the test
-# bench simply reports "no motor temp / no fault" (which never trips an alert).
+# ---- Telemetry -------------------------------------------------------------
+# AM32 ESCs emit KISS telemetry on their TX pad; esc_telem.py receives it (PIO
+# UART RX) and these accessors delegate to it, so main.py's VESC-shaped telemetry
+# / watchdog / health-string / LED code lights up unchanged. When no telemetry is
+# wired or arriving, the getters return None / 0.0 (the old "dumb ESC" behaviour),
+# so nothing false-trips. esc_telem.init() / poll() are driven from main.py.
 
 def get_motor_temp(motor_id):
-    return None
+    """ESC/FET temperature (°C) from KISS telemetry, or None if none fresh."""
+    return esc_telem.temperature(motor_id)
 
 
 def get_fet_temp(motor_id):
-    return None
+    # KISS telemetry reports a single temperature; expose it as both.
+    return esc_telem.temperature(motor_id)
 
 
 def get_current(motor_id):
-    return None
+    """Motor current (A) from KISS telemetry, or None if none fresh."""
+    return esc_telem.current(motor_id)
 
 
 def get_v_in(motor_id):
-    return None
+    """ESC-sensed rail voltage (V) from KISS telemetry, or None if none fresh."""
+    return esc_telem.voltage(motor_id)
 
 
 def get_fault(motor_id):
+    # KISS telemetry carries no discrete fault code; 0 = no fault reported.
     return 0
 
 
 def max_motor_temp():
-    return 0.0
+    """Hottest fresh ESC temperature, or 0.0 when no telemetry (never trips)."""
+    return esc_telem.max_temp()
 
 
 def is_telemetry_fresh(motor_id, max_age_ms=2000):
-    return False
+    return esc_telem.is_fresh(motor_id, max_age_ms)
 
 
 def poll_rx():
-    """No-op: dumb ESCs have no return channel."""
-    pass
+    """Drain the telemetry RX FIFOs (delegates to esc_telem.poll())."""
+    esc_telem.poll()
 
 
 def request_values(motor_id):
-    """No-op: dumb ESCs have no telemetry to request."""
+    """No-op: KISS telemetry is streamed by the ESC, not requested."""
     pass
 
 
 def request_values_round_robin():
-    """No-op: dumb ESCs have no telemetry to request."""
+    """No-op: KISS telemetry is streamed by the ESC, not requested."""
     pass

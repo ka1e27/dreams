@@ -2,7 +2,7 @@
 
 Single-hull test-bench variant: propulsion is two hobby ESCs on 50 Hz PWM
 (escs.py) instead of the dual-hull boat's VESC / CAN chain, and the drive rail
-is 2× M18 in series.
+is 2× M18 in parallel.
 
 This is the entry point for the Boat Pico firmware. It initialises all
 hardware modules and runs the async task loop using uasyncio.
@@ -26,10 +26,11 @@ Pin map (test bench):
   GP10      — Status NeoPixel (WS2812, 1 pixel)
   GP12/GP13 — SHT41 #A air temp/humidity (SoftI2C, J11)
   GP14/GP15 — SHT41 #B air temp/humidity (SoftI2C, J13)
-  GP16      — unused (was DHT11; not present on the board)
+  GP16      — Left  ESC telemetry RX (AM32 KISS, PIO UART 115200)
   GP17      — Hull leak left
   GP18      — Hull leak right
-  GP26      — Drive battery (2× M18 series) ADC — 130k/10k divider (×14.0)
+  GP19      — Right ESC telemetry RX (AM32 KISS, PIO UART 115200)
+  GP26      — Drive battery (2× M18 parallel) ADC — 130k/10k divider (×14.0)
   GP27      — Electronics battery (1× M18) ADC — 56k/10k divider (×6.6)
   GP28      — Winch battery (1× M18) ADC — 56k/10k divider (×6.6)
 
@@ -49,6 +50,7 @@ import sensors
 import serial_handler as serial
 import watchdog
 import escs
+import esc_telem
 import sbus
 import status_led
 
@@ -107,7 +109,8 @@ def _handle_req_tel(seq):
     serial.send_tel_with_seq(
         seq, gps.lat, gps.lon, compass.heading, gps.speed_knots,
         sensors.prop_batt_v, sensors.prop_batt_pct, sensors.hull_status(),
-        mt_l, mt_r, _health_string())
+        mt_l, mt_r, _health_string(),
+        escs.get_current(escs.LEFT) or 0.0, escs.get_current(escs.RIGHT) or 0.0)
 
 
 def _handle_poll_pod(seq):
@@ -187,6 +190,12 @@ _hull_sent_l = False
 _hull_sent_r = False
 _pod_lost_sent = False
 _sbus_warned = False
+_motor_hot_warned = False
+
+# ESC/motor over-temperature warning threshold (°C). WARN only — an auto-ESTOP on
+# overheat could strand the boat mid-water, so escalation is left to the operator.
+# To make it also cut the motors, add motor_control.estop() beside the alert below.
+_MOTOR_WARN_C = 80.0
 
 
 # ---- Async tasks ----
@@ -279,6 +288,20 @@ async def task_sbus():
         await asyncio.sleep(0.02)
 
 
+async def task_esc_telem():
+    """Drain the AM32 KISS telemetry RX FIFOs at ~100 Hz.
+
+    Fast enough that a 10-byte frame never overflows the 32-byte PIO buffer even
+    if the ESC streams telemetry every ~20 ms. escs.get_motor_temp()/get_current()
+    read the values this parses."""
+    while True:
+        try:
+            esc_telem.poll()
+        except:
+            pass
+        await asyncio.sleep(0.01)
+
+
 async def task_telemetry():
     """Send periodic telemetry to Pi 5."""
     while True:
@@ -288,7 +311,8 @@ async def task_telemetry():
             serial.send_tel(
                 gps.lat, gps.lon, compass.heading, gps.speed_knots,
                 sensors.prop_batt_v, sensors.prop_batt_pct,
-                sensors.hull_status(), mt_l, mt_r, _health_string())
+                sensors.hull_status(), mt_l, mt_r, _health_string(),
+                escs.get_current(escs.LEFT) or 0.0, escs.get_current(escs.RIGHT) or 0.0)
         except:
             pass
         await asyncio.sleep(1)
@@ -336,7 +360,7 @@ async def task_watchdog():
     """Heartbeat + safety checks at ~1 Hz."""
     global _prop_batt_warned, _elec_batt_warned
     global _hull_sent_l, _hull_sent_r
-    global _pod_lost_sent, _sbus_warned
+    global _pod_lost_sent, _sbus_warned, _motor_hot_warned
     while True:
         try:
             watchdog.check()
@@ -367,10 +391,16 @@ async def task_watchdog():
                 motor_control.estop()
                 serial.alert("CRIT", "HULL_LEAK", "BOTH")
 
-            # Motor temperature / ESC fault alerts: not available on the test
-            # bench — dumb hobby ESCs give no telemetry, so there is no motor
-            # overheat detection, thermal throttling, or fault reporting here.
-            # (The dual-hull firmware sourced these from VESC GET_VALUES.)
+            # Motor over-temperature (edge-triggered WARN). Real ESC temps now
+            # come from AM32 KISS telemetry via esc_telem; max_motor_temp() is
+            # 0.0 when no telemetry is arriving, so this never false-trips.
+            hot = escs.max_motor_temp()
+            if hot >= _MOTOR_WARN_C:
+                if not _motor_hot_warned:
+                    _motor_hot_warned = True
+                    serial.alert("WARN", "MOTOR_HOT", "%.0f" % hot)
+            elif hot < _MOTOR_WARN_C - 5.0:
+                _motor_hot_warned = False
 
             # SBUS link health (only matters while RC override is active)
             if motor_control.is_rc_override():
@@ -486,7 +516,7 @@ async def task_uart1_reader():
 
 async def main():
     """Initialise hardware and start all async tasks."""
-    print("Boat Pico v6.0-testbench (2x hobby ESC + BNO085 + 2S-M18 drive)")
+    print("Boat Pico v6.0-testbench (2x hobby ESC + BNO085 + 2x M18 parallel drive)")
 
     status_led.init()
     escs_ok = motor_control.init()
@@ -494,6 +524,7 @@ async def main():
     imu_ok = compass.init()
     sensors.init()
     sbus_ok = sbus.init()
+    telem_ok = esc_telem.init()
 
     # Pod shares UART1 with GPS
     pod_uart.init(gps._uart)
@@ -524,6 +555,8 @@ async def main():
     if imu_ok:
         print("  I2C scan: %s" % [hex(a) for a in compass.scan_bus()])
     print("  SBUS: PIO GP%d %s" % (sbus.SBUS_PIN, "OK" if sbus_ok else "FAIL"))
+    print("  ESC telem: PIO GP%d(L)/GP%d(R) 115200 %s" % (
+        esc_telem.TELEM_L_PIN, esc_telem.TELEM_R_PIN, "OK" if telem_ok else "FAIL"))
     print("  Status LED: NeoPixel GP%d" % status_led.PIN)
     print("  SHT41 #A: SoftI2C GP%d/GP%d (J11)  #B: GP%d/GP%d (J13)" % (
         sensors.SHT_A_SDA, sensors.SHT_A_SCL,
@@ -541,6 +574,7 @@ async def main():
         asyncio.create_task(task_pod_poll()),
         asyncio.create_task(task_motors()),
         asyncio.create_task(task_sbus()),
+        asyncio.create_task(task_esc_telem()),
         asyncio.create_task(task_telemetry()),
         asyncio.create_task(task_telemetry_ext()),
         asyncio.create_task(task_env_telemetry()),
@@ -563,7 +597,9 @@ async def main():
 
     if serial.passthrough_requested is not None:
         esc_id, baud = serial.passthrough_requested
-        print("ESC_PASS: bridging ESC %d @ %d baud (motors stopped)" % (esc_id, baud))
+        # NB: do NOT print here — stdout IS the pipe about to be handed to the ESC /
+        # am32.ca, so any banner bytes corrupt the stream (and get misread as an ESC
+        # reply). The Pi already has the ESC_PASS ACK as its confirmation.
         try:
             import esc_passthrough
             esc_passthrough.bridge(esc_id, baud)   # repurposes CDC; resets on exit

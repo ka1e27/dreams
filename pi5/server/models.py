@@ -16,6 +16,9 @@ class TelemetryOut(BaseModel):
     mt_left: float
     mt_right: float
     health: str
+    # Per-motor current (A) from AM32 KISS telemetry; 0.0 when not reported.
+    curr_left: float = 0.0
+    curr_right: float = 0.0
 
 
 class EnvironmentOut(BaseModel):

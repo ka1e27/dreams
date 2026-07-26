@@ -31,6 +31,10 @@ class Telemetry:
     mt_left: float = 0.0
     mt_right: float = 0.0
     health: str = "000000"
+    # Per-motor current (A) from AM32 KISS telemetry — appended TEL fields,
+    # 0.0 when the firmware/ESC don't report it.
+    curr_left: float = 0.0
+    curr_right: float = 0.0
 
 
 @dataclass
@@ -307,7 +311,7 @@ class PicoSerial:
         if len(f) < 10:
             return
         try:
-            self.telemetry = Telemetry(
+            tel = Telemetry(
                 lat=float(f[0]),
                 lon=float(f[1]),
                 heading=float(f[2]),
@@ -319,6 +323,12 @@ class PicoSerial:
                 mt_right=float(f[8]),
                 health=f[9],
             )
+            # Appended per-motor current (TEL v1.1) — parsed only when present,
+            # like the ENV v1.1 appendix, so older firmware still works.
+            if len(f) >= 12:
+                tel.curr_left = float(f[10])
+                tel.curr_right = float(f[11])
+            self.telemetry = tel
             if self._on_telemetry:
                 self._on_telemetry(self.telemetry)
         except (ValueError, IndexError) as e:

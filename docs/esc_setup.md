@@ -43,13 +43,15 @@ You configure **each ESC individually** (the NeutronRC "USB TO ESC" linker conne
 AM32 is configured over the ESC's **signal wire** using a one-wire (half-duplex) serial protocol —
 the USB "linker" is just a CH340 USB-serial adapter on that wire. So:
 
-- **Directly from Pi GPIO — no (not as wired).** The ESC signals are on the **Boat Pico** (GP2/GP3),
-  not the Pi. The Pi only touches the drive train through USB→Pico. Bit-banging AM32 config from a
-  raw Pi GPIO would mean rewiring the ESC signal to the Pi and goes against the Pi=brain / Pico=I/O split.
-- **USB linker on a Pi USB port — yes, easiest.** Plug the NeutronRC "USB TO ESC" (or any CH340
-  USB-serial) into a Pi USB-A port and run the configurator in **Chromium on the Pi desktop**
-  (`am32.ca` needs a WebSerial browser). Identical to doing it from a laptop — just uses the Pi's USB.
-  One ESC at a time. **This is the recommended path for bench setup.**
+- **Directly from the Pi's GPIO UART — yes, PROVEN (`pi5/scripts/am32_config.py`).** Temporarily move
+  the ESC **signal** wire off Pico GP2 to the Pi's UART (pin 10 RX direct, pin 8 TX via ~1 kΩ, GND
+  pin 6), enable `uart0`, and this script reads/sets bidirectional/telemetry/LVC over the one-wire
+  bootloader — **no browser, no adapter.** Settings only (not firmware flashing). Full guide +
+  one-time UART setup in **`docs/am32_config.md`**. This is now the recommended bench path.
+- **USB linker on a Pi USB port — also works.** Plug the NeutronRC "USB TO ESC" (or any CH340
+  USB-serial) into a Pi USB-A port and run `am32.ca` in **Chromium on the Pi desktop**. (Note:
+  Chromium's Web Serial only lists **USB** ports, so it will *not* see the GPIO UART above — a USB
+  adapter is required for the browser path.) Also flashes firmware, which the CLI tool doesn't.
 - **Through the Pico as an AM32 passthrough — scaffolded (experimental).** GP2/GP3 already reach the
   ESC signals, so the Pico can bridge the Pi↔Pico USB-CDC onto the ESC one-wire, like Betaflight/ArduPilot
   BLHeli/AM32 passthrough — reconfigure the ESCs **in place, no unplugging**, even in the field. A first
@@ -67,7 +69,7 @@ the USB "linker" is just a CH340 USB-serial adapter on that wire. So:
 | **Sinusoidal startup** | ON | Smoother, quieter low-speed starts under a big prop load than damped-light. |
 | **Motor timing** | tune up if rough | Larger boat props at low KV often want more advance than the drone default; raise if startup is rough. |
 | **Current limit** | ~45 A/motor *if available* | Newer AM32 exposes a current limit. If yours does, cap each motor so the pair stays within a 2× M18 parallel pack (~90 A). If not, prop-size for it — see below. |
-| **Current telemetry** | optional | These ESCs output current telemetry. Not wired to the Pico today, but the pad is there if you want per-motor current on the dashboard later. |
+| **Current telemetry** | **enable it** | The TX pad emits KISS telemetry (temp + current). Now wired: ESC **TX → GP16 (L) / GP19 (R)**, received by `esc_telem.py` → per-motor temp/current on the dashboard + a motor-overheat WARN. Turn on the telemetry / auto-telemetry option in am32.ca so it streams in servo-PWM mode. Full bring-up: **`docs/esc_telemetry.md`**. |
 
 ## Current management (the pack is the tighter limit)
 
