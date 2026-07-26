@@ -85,6 +85,10 @@ class NavStateOut(BaseModel):
     cross_track_m: float = 0.0
     course_deg: float = 0.0
     avoiding: bool = False
+    # Water-current estimate + active station-keeping (stay mode).
+    current_set_deg: float = 0.0
+    current_drift_ms: float = 0.0
+    station_keeping: bool = False
 
 
 class GotoIn(BaseModel):

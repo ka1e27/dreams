@@ -31,6 +31,90 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-26 — CV overlay fixed (no model → COCO ONNX), MJPG 720p, HUD de-conflict, auto-exposure
+
+**Worked on:** user reported the command-center CV showed **no bounding boxes**, the top-right
+"avoidance"/anomaly HUD was covered by the DET/FPS readouts, and asked for a **higher MJPG resolution**.
+Run on the Pi with both Arducam 8MP USB cameras live; "don't come back until it works."
+**Root cause (no boxes):** `DetectionOverlay` could load **no model** — `torch`/`ultralytics` aren't
+installed and there was no `maritime_yolov8n.onnx` (only its `_info.json`), so `available=False` and it
+never drew. onnxruntime 1.28 IS installed (the repo's intended lightweight backend).
+**Changed:**
+- `pi5/cv/models/yolov8n.onnx` (+ tracked `yolov8n_info.json`, COCO 80 classes) — exported generic COCO
+  yolov8n → ONNX (imgsz 320) in a throwaway **disk-backed** venv (torch overflowed the 2 GB `/tmp` tmpfs;
+  built under `/`, then deleted), so the runtime `.venv` stays torch-free. `.onnx` is gitignored (like the
+  maritime slot). `pi5/config.yaml` `detection.model` → this path (onnxruntime backend).
+- `pi5/config.yaml` camera → `fourcc: MJPG`, `1280x720` (was YUY2 640×480). Both cams advertise MJPG to
+  1920×1080@30 / 1280×720@30; measured **~16–18 fps** dual-cam through the producer on the bench
+  (auto-exposure-limited indoors; approaches 30 in bright light — not decode/USB-bound).
+- `pi5/cv/camera.py` — force **auto-exposure** (V4L2 aperture-priority=3) on every `_open`. UVC exposure
+  persists on the device across processes; a stray manual setting was blacking out the feed (this was why
+  the first live grab was near-black). Best-effort, Linux/V4L2 only.
+- `pi5/server/templates/command_center.html` — moved `.cam-det` from top-right → **bottom-right** (above
+  `.cam-fps`), freeing the top-right for the baked ANOMALY bar + tier dots. Corner ownership now: TL
+  tag/track, TR anomaly, BL water, BR det/fps.
+**Verified on the Pi (cameras live):** COCO ONNX detects person+boat on stock images and **chair/tv/laptop
+live**; the real `/video` endpoint draws boxes + the uncovered HUD at 1280×720; 3-tier gating turns YOLO
+on via the land-scene anomaly (0.78). Before/after HUD screenshot confirms the de-conflict. `pytest
+pi5/tests` **164 green**, ruff clean.
+**Decisions / open questions:** COCO yolov8n is a bench/demo detector — swap a trained maritime model in
+(`ml/`, drop `pi5/cv/models/maritime_yolov8n.onnx`, auto-preferred). The `.onnx` is gitignored, so a fresh
+checkout needs it regenerated (`ml/export_onnx.py`) or the overlay falls back to the uninstalled `.pt`.
+**Next steps:** train/drop the maritime model; optionally bump capture to 1080p if CPU headroom allows;
+NCNN/Hailo for higher detect FPS. Nothing committed — working tree left for the user to review.
+**Follow-up (maritime model hunt — negative result, kept COCO):** surveyed HF + Roboflow + GitHub for a
+drop-in maritime detector. Findings: (a) openly-downloadable ones are **satellite/SAR** (mayrajeo,
+DefendIntelligence, Mahadih534, torchgeo Sentinel-2, geobase) — wrong perspective for a surface boat;
+(b) `dima806/*` is image-classification, not detection; (c) the good surface-level multi-class ones are
+**gated** (`cazzz307` HF-login; Roboflow "Marine Surveillance" boat/buoy/kayak/vessel needs an API key).
+Best candidate **`alimkacar/argus-maritime-yolov8s`** (ungated, classes boat/sailboat/vessel/buoy/person,
+inshore surface imagery, claimed mAP50 0.97) was downloaded + tested: it was **trained on a FORKED
+ultralytics** (`train_args` has `cls_remap`/`distill_model`/`tracktrack`/`end2end`) and yields ~0.003
+class-confidence under STANDARD ultralytics/ONNX inference across all preprocessing (RGB/BGR/imagenet) —
+i.e. only its fork's forward decodes it, so it is **unusable with this repo's standard `onnx_detector`**
+(would detect nothing). Verified my method is sound by running the working COCO model on the same images
+(boat1 harbour → 2 boats; boat4 buoy → "boat" 0.75; boat2 sailboat → mislabeled "kite"; boat3 marina →
+missed). Conclusion: no free, ungated, surface-level, standard-decoder maritime model exists to drop in
+now. The auto-detect slot (`pi5/cv/models/maritime_yolov8n.onnx`) is ready — the reliable route to a real
+one is a Roboflow "Marine Surveillance" export trained/exported with **standard** ultralytics via `ml/`
+(needs a free Roboflow key), or the user drops in any standard-ultralytics maritime `.onnx`. **Note:**
+COCO/YOLOv8 weights are Ultralytics **AGPL-3.0** — fine for research/personal use; matters only if
+D.R.E.A.M.S is ever distributed as a network service. Kept COCO in place (detects boat+person well).
+**Follow-up 2 (big autonomy + UI push — cameras/Pico/left-ESC on the bench; 3 research agents + 1 UI
+agent):**
+- **Current-aware station-keeping** (`pi5/navigation/current_estimator.py` NEW + `navigator.py`): estimate
+  the water current as *GPS ground velocity − modelled through-water velocity* (thrust model
+  `v=a|thr|+b·thr²`), low-pass filtered → **set/drift** on `/api/status`. Stay/HOLD mode now **actively
+  noses into the current** (required through-water vel = desired-ground-vel − current) instead of
+  drift-then-reacquire. Sim (new `/api/sim/current` + simulator current): recovers 090°/0.35 m/s exactly,
+  **holds ≤0.4 m**. Config `navigation.current_*`/`sk_*`; NavState/NavStateOut extended; +5 tests. ILOS
+  still handles transit current.
+- **Incoming-wave detection → capsize avoidance** (`pi5/cv/wave_detector.py` NEW, wired into
+  `pipeline.py`): horizon-from-gradient + sparse LK optical-flow looming → severity/bearing/TTC with a
+  persistence state machine, ~3 ms/frame live. **Bow-into-wave** override (turn to face + ease throttle,
+  yields to obstacle avoidance) + HUD horizon line/chevron + `vision.wave` telemetry. `vision.wave_detection`
+  config; +4 tests. (No IMU pitch yet — noted.)
+- **YOLO speed** (`pi5/cv/ncnn_detector.py` NEW + `vision_overlay.py`): NCNN backend via the `ncnn` pkg
+  (no torch), identical decode. **Clean Pi-5 benchmark: NCNN 34 fps vs ONNX 18 @ imgsz 320 (1.96×)** — the
+  earlier "NCNN slower" was training CPU contention. Shipped **COCO yolov8n as an NCNN export**
+  (`pi5/cv/models/yolov8n_ncnn_model/`, gitignored; `.onnx` kept as fallback); `detect_max_fps` 10→15.
+- **Maritime+person model — trained but NOT shipped.** Used the user's Roboflow key to pull
+  `udea/proyecto-de-grado-unvpl` v6 (CC BY 4.0: Boats/Sail-Boat/Kayak/Person/Buoy/Rock/wreck/Dock/…), trained
+  yolov8n on the Pi CPU (subset, imgsz 320). It **plateaued at mAP50≈0.21** and — critically — **missed
+  people** on test images (COCO detects them cleanly), because the small Pi-subset fine-tune degraded COCO's
+  person head. Decision: **ship COCO** (detects boats+people = the requirement) via NCNN; the maritime
+  slot + threat map + case-insensitive labels are all ready for a properly-trained model (full dataset/GPU,
+  or frozen-backbone). `threat_assessor` extended (boats/sail-boat/surfer/rock/wreck/bridge, case-insensitive).
+- **UI redesign + ESC tab** (`command_center.html`, via a design agent using the dataviz skill): new
+  **PROPULSION·ESC** panel (per-motor temp radial gauges + current bars, threshold-coloured), **WAVE ALERT**
+  readout, **CURRENT & STATION-KEEP** vector — all wired to the real payload fields; existing ids/JS/drag-grid
+  preserved; scripts pass `node --check`. Verified layout via a static render (chromium can't screenshot the
+  full live page on this ARM Pi — MJPEG stream hangs it; live server serves `/`=200 and `/video` draws the
+  wave-HUD + boxes).
+- **Verified:** `pytest pi5/tests` **173 green**, ruff clean, firmware py_compiles, both template `<script>`
+  blocks pass `node --check`, NCNN COCO detects person/boat live (backend=ncnn), Pico streaming TEL/ENV on
+  `/dev/ttyACM0`. Docs: `docs/current_and_wave_features.md`. **Committed + pushed** this follow-up.
+
 ## 2026-07-25 — Full on-Pi review (9 agents) + ESC KISS telemetry (temp + current)
 
 **Worked on:** first review actually **run on the Pi** (prior 3 sessions were Windows/static-only).
@@ -296,25 +380,6 @@ Pi 5). Also: eWaSR on the Pi CPU is ~2-8 fps, so it can't be the 15 fps primary.
 **Still needs the Pi:** run `ml/export_ewasr.py` on a GPU box, scp `water_seg.onnx` to the Pi, then
 `pytest pi5/tests` + `benchmark_vision.py` to confirm. I did not fetch/train the model (no GPU/Python
 here, and shouldn't download weights unprompted).
-
-## 2026-07-23 — Verified the waypoint-driving sim already works (no code changes)
-
-**Worked on:** user asked whether a viewable sim of the boat driving waypoints could be created. It
-already exists end-to-end — confirmed it rather than building anything new.
-**Verified:** started `run_sim.py`, POSTed a 4-point PATH loop near the dock (`/api/mission?start=true`),
-and polled `/api/status`. The boat pivoted in place to each bearing (align-first `Navigator`), drove the
-leg, and advanced WP 0→1→2, ranging ~58 m from start; server stopped cleanly after. Deps present
-(Py 3.14.4, fastapi 0.135.3, uvicorn 0.44.0).
-**Notes for next time:**
-- Viewable UI = command center at `http://localhost:8000/` (Leaflet map, pulsing boat marker, track +
-  waypoint pins, `/ws/telemetry`). Draw/upload routes at `/planner`; sample missions in
-  `reference/waypoints.json`. Sim mode runs dev-mode auth (no API key needed).
-- Polling `/api/telemetry` and `/api/mission` every tick trips `rate_limit.py` (HTTP 429) — poll the
-  bundled `/api/status` at ≥2–3 s spacing instead.
-- DATA waypoints stall on the winch-down/sample/winch-up sequence (up to ~5 min each) — use PATH
-  waypoints or `POST /api/sim/speed` to watch it drive a route quickly.
-**Next steps:** none pending. Offered the user an optional zero-setup standalone animation (self-contained
-HTML canvas / matplotlib playback); build only if they ask. No repo files changed this session.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

@@ -56,6 +56,23 @@ navigation:
   # and lower the gain of whichever motor is faster until it tracks straight.
   motor_gain_left: 1.0
   motor_gain_right: 1.0
+  # ---- Water-current estimation + station-keeping (stay mode) ----
+  # The boat has no water-speed sensor, so it estimates the current as
+  # (GPS ground velocity − modelled through-water velocity). The model is
+  # v = thrust_a*|thr| + thrust_b*thr²  (thr = mean forward command, −1..1);
+  # calibrate per boat (drive known throttles in still water, fit the curve).
+  current_enabled: true
+  current_thrust_a: 0.35
+  current_thrust_b: 0.15
+  # Active station-keeping: in stay/hold mode the boat noses INTO the estimated
+  # current and holds position (required through-water velocity = desired ground
+  # velocity toward the hold point − current), instead of drifting to the edge of
+  # hold_drift_m and lunging back. Tune on the water.
+  sk_pos_gain: 0.25          # desired ground speed per metre of position error (1/s)
+  sk_max_speed: 0.8          # cap on the station-keeping ground speed (m/s)
+  sk_deadband_m: 1.2         # inside this radius + negligible current → idle motors
+  sk_min_water_speed: 0.04   # required through-water speed below which → idle
+  sk_speed_gain: 90.0        # throttle (0-100) per m/s of required through-water speed
 
 mission:
   # Default max time at a data waypoint if not specified (seconds)
@@ -179,8 +196,8 @@ camera:
   # IMX219 binned modes that hit a high frame rate: 640x480, 1280x720 @ 30+,
   # 1640x1232 @ 30. Run `v4l2-ctl -d /dev/video0 --list-formats-ext` to see the
   # exact modes/formats your module advertises, and set width/height/fps to one.
-  width: 640
-  height: 480
+  width: 1280
+  height: 720
   fps: 30            # capture rate; the camera must support it at this res+format
   # NOTE: uncompressed YUY2 at 1080p30 needs ~1 Gbit/s per camera — USB 3.0
   # port/hub required for both cameras simultaneously. If frames stall or fps
@@ -193,7 +210,7 @@ camera:
   #   "MJPG"  — compressed; light over USB but the module may cap its MJPG modes
   #             (e.g. 1080p only at 15 fps).
   #   ""      — leave the camera in its default format.
-  fourcc: "YUY2"
+  fourcc: "MJPG"
   # If the camera stops delivering frames (USB unplugged, driver hiccup), the
   # producer releases it and retries reopening the same /dev/video* index this
   # often (seconds) until it returns. The feed shows NO-SIGNAL meanwhile and
@@ -215,7 +232,15 @@ camera:
     #      automatically (onnxruntime backend, no torch), no config edit needed.
     #   2. Otherwise drop a maritime .pt here, or an NCNN export dir
     #      (yolov8n_ncnn_model, ~2x faster on ARM). Ultralytics infers the format.
-    model: "yolov8n.pt"
+    # Active: generic COCO yolov8n exported to NCNN (Tencent's ARM-optimised
+    # engine) — measured ~2x faster than ONNX on the Pi 5 CPU (34 vs 18 fps @
+    # imgsz 320), detecting person/boat/… with no torch at runtime. The same
+    # model as pi5/cv/models/yolov8n.onnx is kept alongside as a fallback: if the
+    # `ncnn` package is unavailable, point this at "pi5/cv/models/yolov8n.onnx".
+    # A trained maritime model (pi5/cv/models/maritime_*.onnx or _ncnn_model/)
+    # can be dropped in and pointed to here. NB the on-Pi maritime fine-tune
+    # (docs) underperformed COCO on people, so COCO is the shipped detector.
+    model: "pi5/cv/models/yolov8n_ncnn_model"
     # Inference size (mult of 32). 320 is the sweet spot for the Pi 5 CPU: it's
     # what keeps YOLO in the "lower but high" FPS band alongside the 15 fps Tier-1
     # water screen. 416/640 see smaller/farther targets but cost proportionally
@@ -223,13 +248,18 @@ camera:
     imgsz: 320
     conf: 0.40            # min confidence to keep a detection
     # Upper cap on inference rate (decoupled from Tier-1 seg and the video stream).
-    # Actual FPS = min(this, 1 / inference_time); on a Pi 5 CPU yolov8n@320 lands
-    # around 8-12 fps, so this cap just keeps it below the 15 fps water screen.
-    detect_max_fps: 10
+    # Actual FPS = min(this, 1 / inference_time). With the NCNN backend yolov8n@320
+    # runs ~34 fps on the Pi 5, so we lift the cap to 15 (matching the Tier-1 water
+    # screen / camera rate) for more detection frames while stereo/nav keep headroom.
+    detect_max_fps: 15
     target_classes: []    # keep only these class names; [] = keep all
     # Highlighted (amber) classes — covers both the COCO fallback ('boat','person')
     # and the maritime model ('vessel','kayak'). Others are drawn muted.
-    highlight_classes: ["vessel", "person", "kayak", "boat"]
+    # Highlighted (amber) classes — attention targets. Superset covering the COCO
+    # fallback ('boat','person') and the maritime model ('boats','sail-boat',
+    # 'surfer','vessel','kayak'). Matching is case-insensitive (vision_overlay),
+    # so lowercase entries match 'Sail-Boat'/'Person' from either backend.
+    highlight_classes: ["vessel", "boat", "boats", "sail-boat", "sailboat", "kayak", "surfer", "person"]
     # Default class for the lock reticle / radar bar to follow. "" = AUTO (the
     # highest-confidence highlighted target). Changeable live from the command
     # center's TRACK picker (which also retargets the radar bar).
@@ -328,6 +358,22 @@ vision:
     # rather than orbiting one sitting on the goal line.
     pass_bearing_deg: 110.0    # |bearing| behind the beam → tracked hazard is passed → release
     pass_hold_s: 6.0           # when sight is lost, hold the maneuver this long to finish the pass
+
+  # --- Incoming-wave / swell detection (capsize avoidance) ---
+  # A cheap horizon-tracking + optical-flow-looming watch (pi5/cv/wave_detector.py)
+  # on the Tier-1 loop (~3 ms/frame). Raises an early WAVE alert with a bearing +
+  # severity; when a big set is imminent the boat bows into it (turn to face,
+  # ease throttle) — the seamanship response to avoid a beam-on capsize. Tune the
+  # trigger on the water (whitecaps/glare/wake can false-trigger; the persistence
+  # state machine and smoothing absorb short transients).
+  wave_detection:
+    enabled: true
+    max_fps: 10                # analysis-rate cap (Hz)
+    trigger_severity: 0.55     # fused severity (0-1) above which a wave is "incoming"
+    response_enabled: true     # auto bow-into-wave (yields to obstacle avoidance)
+    turn_severity: 0.6         # severity above which the boat actively turns to face
+    turn_gain: 50              # peak differential steer for the bow-in pivot
+    turn_min: 20               # minimum pivot authority once triggered
 
 stepper:
   # Radar-bar pan stepper (A4988 + NEMA-17) driven from the Pi 5 GPIO header

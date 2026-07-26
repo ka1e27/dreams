@@ -92,6 +92,25 @@ class DetectionOverlay:
         path = self._resolve_model_path()
         self._cfg.model = path
 
+        # NCNN export directory (fastest CPU path on the Pi 5 — ~2-3x ONNX). An
+        # Ultralytics `..._ncnn_model/` dir with .param/.bin, run via the ncnn
+        # package (no torch). Same interface as OnnxYolo, so it reuses the slot.
+        if os.path.isdir(path) and any(
+                f.endswith(".param") for f in os.listdir(path)):
+            try:
+                from .ncnn_detector import NcnnYolo
+                nc = NcnnYolo(path, conf=self._cfg.conf)
+            except Exception as e:  # noqa: BLE001
+                nc = None
+                logger.warning("NCNN backend import failed: %s", e)
+            if nc is not None and nc.available:
+                self._onnx = nc
+                self._names = dict(enumerate(nc.names))
+                logger.info("Using NCNN model: %s (%d classes, imgsz=%d)",
+                            os.path.basename(path.rstrip("/")), len(nc.names), nc.imgsz)
+                return
+            logger.warning("NCNN unavailable — falling back to ONNX/.pt")
+
         if path.lower().endswith(".onnx"):
             try:
                 from .onnx_detector import OnnxYolo
@@ -188,7 +207,8 @@ class DetectionOverlay:
             "conf": round(self._cfg.conf, 2),
             "imgsz": self._onnx.imgsz if self._onnx is not None else self._cfg.imgsz,
             "model": self._cfg.model,
-            "backend": "onnx" if self._onnx is not None else ("ultralytics" if self._model else None),
+            "backend": (("ncnn" if type(self._onnx).__name__ == "NcnnYolo" else "onnx")
+                        if self._onnx is not None else ("ultralytics" if self._model else None)),
             "model_loaded": self.available,
             "detect_fps": self.detect_fps,
             "track_class": self._cfg.track_class,    # "" = auto
@@ -301,15 +321,19 @@ class DetectionOverlay:
         dets: list[dict] = []
         primary: tuple | None = None
         primary_conf = -1.0
-        target = set(self._cfg.target_classes)
-        highlight = set(self._cfg.highlight_classes)
+        # Case-insensitive class matching so a maritime model's "Sail-Boat" /
+        # "Person" resolve against lowercase config lists just like COCO labels.
+        target = {c.lower() for c in self._cfg.target_classes}
+        highlight = {c.lower() for c in self._cfg.highlight_classes}
         track_cls = (self._cfg.track_class or "").strip()
+        track_cls_l = track_cls.lower()
         for x1, y1, x2, y2, label, conf in raw:
-            if target and label not in target:
+            label_l = label.lower()
+            if target and label_l not in target:
                 continue
             # Highlight the configured classes; when a specific track class is
             # chosen, highlight it too so the picked target is always visible.
-            is_hl = label in highlight or (track_cls != "" and label == track_cls)
+            is_hl = label_l in highlight or (track_cls != "" and label_l == track_cls_l)
             distance_m = (self._stereo.median_depth_in_bbox(depth, x1, y1, x2, y2)
                          if depth is not None else None)
             entry = (x1, y1, x2, y2, label, conf, is_hl, distance_m)
@@ -322,7 +346,7 @@ class DetectionOverlay:
             # The tracked object: if the operator picked a class, lock onto the
             # highest-confidence box of THAT class; otherwise fall back to the
             # highest-confidence highlight-class box (what radar_tracker uses).
-            is_candidate = (label == track_cls) if track_cls else is_hl
+            is_candidate = (label_l == track_cls_l) if track_cls else is_hl
             if is_candidate and conf > primary_conf:
                 primary, primary_conf = entry, conf
         return boxes, dets, primary

@@ -173,6 +173,8 @@ def _nav_out() -> NavStateOut:
         arrived=n.arrived, active=n.active,
         cross_track_m=n.cross_track_m, course_deg=n.course_deg,
         avoiding=n.avoiding,
+        current_set_deg=n.current_set_deg, current_drift_ms=n.current_drift_ms,
+        station_keeping=n.station_keeping,
     )
 
 
@@ -446,6 +448,31 @@ async def get_sim_speed(_: str = Depends(auth.require_api_key)):
     if _sim is None:
         return {"max_speed_mps": None}
     return {"max_speed_mps": _sim._config.max_speed_mps}
+
+
+@app.post("/api/sim/current")
+async def set_sim_current(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Set the simulated water current (east/north m/s). Simulator mode only —
+    push a current, then HOLD and watch station-keeping nose into it."""
+    if _sim is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Not in simulator mode")
+    try:
+        e = max(-3.0, min(3.0, float(payload.get("east_mps", 0.0))))
+        n = max(-3.0, min(3.0, float(payload.get("north_mps", 0.0))))
+    except (TypeError, ValueError):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="east_mps/north_mps must be numbers")
+    _sim.set_current(e, n)
+    return {"status": "ok", "east_mps": e, "north_mps": n}
+
+
+@app.get("/api/sim/current")
+async def get_sim_current(_: str = Depends(auth.require_api_key)):
+    """Get the simulated water current (east/north m/s), or None off-sim."""
+    if _sim is None:
+        return {"east_mps": None, "north_mps": None}
+    return {"east_mps": _sim._cur_e, "north_mps": _sim._cur_n}
 
 
 # ---- Simulated obstacles (simulator only) ----

@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING
 from .avoidance import AvoidanceConfig, AvoidanceController
 from .segmentation import ANOMALY_TRIGGER_THRESHOLD, WaterSegmentation, WaterState
 from .threat_assessor import ThreatAssessor, ThreatLevel, threat_level_for
+from .wave_detector import WaveConfig, WaveDetector
 
 if TYPE_CHECKING:
     from .threat_assessor import TrackedObject
@@ -131,6 +132,20 @@ class SurveyVisionPipeline:
             pass_hold_s=float(ra.get("pass_hold_s", 6.0)),
             pass_bearing_deg=float(ra.get("pass_bearing_deg", 110.0)))
         self._avoiding = False
+        # Incoming-wave detection (capsize avoidance): a cheap horizon + optical
+        # flow watch on the Tier-1 loop. When a big set is imminent the boat bows
+        # into it (turn to face + ease throttle), the seamanship response.
+        wv = cfg.get("wave_detection", {}) or {}
+        self._wave = WaveDetector(WaveConfig(
+            enabled=bool(wv.get("enabled", True)),
+            fov_deg=self.fov_deg,
+            max_fps=float(wv.get("max_fps", 10.0)),
+            trigger_severity=float(wv.get("trigger_severity", 0.55))))
+        self.wave_response_enabled = bool(wv.get("response_enabled", True))
+        self._wave_turn_severity = float(wv.get("turn_severity", 0.6))
+        self._wave_turn_gain = int(wv.get("turn_gain", 50))
+        self._wave_turn_min = int(wv.get("turn_min", 20))
+        self._wave_active = False
         sl = cfg.get("survey_logging", {}) or {}
         self._survey_min_conf = float(sl.get("min_confidence", 0.6))
         self._survey_min_anomaly = float(sl.get("min_anomaly_score", 0.20))
@@ -300,6 +315,10 @@ class SurveyVisionPipeline:
             self._anomaly_score = 1.0
             self._anomaly_regions = []
 
+        # Incoming-wave watch — cheap, runs regardless of the YOLO gate.
+        if self._wave.enabled and frame.left is not None:
+            self._wave.analyze(frame.left)
+
         triggered = self._anomaly_score >= self.trigger_threshold
 
         # Hybrid Tier-1b: fold in a fresh DNN (eWaSR) spot-check. It's the
@@ -342,6 +361,9 @@ class SurveyVisionPipeline:
 
         # Reactive avoidance rides on whatever the primary threat is now.
         self._drive_avoidance(now)
+        # Bow into an imminent wave — only when not dodging a hazard (obstacle
+        # avoidance owns the override channel when active).
+        self._drive_wave_response(now)
 
     # -- tier 2 bridge ------------------------------------------------------ #
     def _detections_from_overlay(self) -> list[dict]:
@@ -448,6 +470,43 @@ class SurveyVisionPipeline:
             except Exception as e:  # noqa: BLE001
                 logger.debug("avoidance release failed: %s", e)
 
+    def _drive_wave_response(self, now: float) -> None:
+        """Bow into an imminent wave (turn to face it, ease throttle) via the
+        navigator override channel. Yields to obstacle avoidance."""
+        nav = self._navigator
+        if nav is None or not self.wave_response_enabled:
+            return
+        r = self._wave.result
+        if self._avoiding:                       # hazard dodge takes priority
+            self._wave_active = False
+            return
+        if r.incoming and r.severity >= self._wave_turn_severity:
+            left, right = self._wave_override(r.bearing_deg, r.severity)
+            try:
+                nav.set_avoidance_override(left, right)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("wave override failed: %s", e)
+            if not self._wave_active:
+                logger.info("WAVE bow-in: brg=%.0f sev=%.2f -> L=%d R=%d",
+                            r.bearing_deg, r.severity, left, right)
+            self._wave_active = True
+        elif self._wave_active:
+            self._wave_active = False
+            try:
+                nav.set_avoidance_override(0, 0)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("wave release failed: %s", e)
+
+    def _wave_override(self, bearing_deg: float, severity: float) -> tuple[int, int]:
+        """Differential command that pivots the bow toward the wave bearing with
+        eased-but-nonzero forward throttle (keep steerage)."""
+        fwd = int(self._avoid_cfg.cruise_throttle * max(0.3, 1.0 - 0.5 * severity))
+        turn = max(self._wave_turn_min,
+                   int(self._wave_turn_gain * min(1.0, abs(bearing_deg) / 45.0)))
+        left, right = ((fwd + turn, fwd - turn) if bearing_deg >= 0
+                       else (fwd - turn, fwd + turn))
+        return max(-100, min(100, left)), max(-100, min(100, right))
+
     def _avoidance_bearing(self, bbox) -> float:
         """Threat bearing relative to the bow (deg, +starboard) from its position
         in the forward camera frame. Assumes the detection camera looks ahead."""
@@ -531,6 +590,7 @@ class SurveyVisionPipeline:
             "segmentation_enabled": self.segmentation_enabled,
             "avoidance_enabled": self.avoidance_enabled,
             "avoiding": self._avoiding,
+            "wave": self._wave.to_dict(),
             "survey_logged": self._survey_count,
             "seg_backend": self.seg.backend,
             "confirm": self._confirm_snapshot(),
@@ -631,4 +691,10 @@ class SurveyVisionPipeline:
             tag = "%s %s %s" % (p.class_name.upper(), dtxt, arrow)
             cv2.putText(frame, tag, (x1, max(14, y1 - 8)),
                         cv2.FONT_HERSHEY_SIMPLEX, fs, tcol, 2, cv2.LINE_AA)
+
+        # Incoming-wave horizon line + chevron alert.
+        try:
+            self._wave.draw(frame)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("wave draw failed: %s", e)
         return frame

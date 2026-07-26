@@ -224,6 +224,16 @@ class CameraProducer:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._cfg.width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._cfg.height)
             cap.set(cv2.CAP_PROP_FPS, self._cfg.fps)
+            # Force auto-exposure (V4L2 "aperture priority" = 3). UVC exposure
+            # controls PERSIST on the device across processes, so a prior manual
+            # setting (e.g. from a calibration/probe run) otherwise leaves the
+            # feed near-black. Requesting auto on every open guarantees a
+            # correctly-exposed frame and lets the camera track changing outdoor
+            # light. Best-effort — a no-op if the camera lacks the control.
+            try:
+                cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)
+            except Exception:  # noqa: BLE001
+                pass
         else:
             # DirectShow negotiates the capture pin as one WxHxFourCC mode. If
             # FOURCC is set first and the camera has no discrete mode for that

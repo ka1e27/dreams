@@ -96,9 +96,9 @@
     flex-direction:column;gap:6px;color:var(--crit);font-family:var(--display);
     letter-spacing:.3em;font-size:22px;background:rgba(0,0,0,.55)}
   .nosignal.show{display:flex}
-  .cam-det{position:absolute;right:8px;top:8px;font-size:11px;color:var(--cyan);
+  .cam-det{position:absolute;right:8px;bottom:30px;font-size:11px;color:var(--cyan);
     background:rgba(0,0,0,.55);padding:2px 8px;border-radius:4px;letter-spacing:.05em;
-    max-width:62%;text-align:right}
+    max-width:55%;text-align:right}
   /* vision control bar under the camera */
   .cam-ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:8px 12px;
     border-top:1px solid var(--accent-dim);background:var(--panel-2);flex-shrink:0}
@@ -347,6 +347,64 @@
   .spd-ctl{display:flex;align-items:center;gap:8px;margin-top:5px}
   .spd-ctl input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
   .spd-val{font-family:var(--mono);font-size:12px;color:var(--cyan);min-width:5ch;text-align:right}
+  /* ---- ESC / PROPULSION GAUGES ---- */
+  .esc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;padding:12px 14px;align-items:start}
+  .esc-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .esc-label{font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+  .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .radial-gauge{width:100px;height:100px;border-radius:50%;border:2px solid var(--accent-dim);
+    background:radial-gradient(circle at 50% 30%, rgba(56,189,248,.05), var(--panel));
+    position:relative;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 12px rgba(129,140,248,.1) inset}
+  .radial-gauge .arc{position:absolute;width:96px;height:96px;border-radius:50%;
+    border:6px solid transparent;border-top-color:var(--ok);opacity:0;transition:opacity .5s,border-color .5s}
+  .radial-gauge.warn .arc{border-top-color:var(--warn);opacity:1}
+  .radial-gauge.crit .arc{border-top-color:var(--crit);opacity:1;animation:pulse-hard 1s infinite}
+  @keyframes pulse-hard{0%,100%{opacity:1}50%{opacity:.5}}
+  .radial-gauge .val{font-family:var(--display);font-weight:700;font-size:24px;color:var(--cyan);
+    text-shadow:0 0 8px rgba(56,189,248,.3);letter-spacing:.05em;z-index:1}
+  .radial-gauge.warn .val{color:var(--warn);text-shadow:0 0 8px rgba(255,176,46,.3)}
+  .radial-gauge.crit .val{color:var(--crit);text-shadow:0 0 8px rgba(255,59,59,.3)}
+  .gauge-unit{font-size:9px;color:var(--muted);letter-spacing:.05em;margin-top:2px}
+  .bar-gauge{display:flex;align-items:center;gap:6px;width:100%}
+  .bar-track{flex:1;height:8px;background:var(--panel-2);border:1px solid var(--accent-dim);border-radius:4px;
+    overflow:hidden;position:relative}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan),rgba(56,189,248,.4));
+    width:0;transition:width .4s;box-shadow:0 0 8px rgba(56,189,248,.3)}
+  .bar-gauge.warn .bar-fill{background:linear-gradient(90deg,var(--warn),rgba(255,176,46,.4));box-shadow:0 0 8px rgba(255,176,46,.3)}
+  .bar-gauge.crit .bar-fill{background:linear-gradient(90deg,var(--crit),rgba(255,59,59,.4));box-shadow:0 0 8px rgba(255,59,59,.3)}
+  .bar-val{font-family:var(--display);font-weight:700;font-size:16px;color:#eaf6fb;min-width:32px;text-align:right;letter-spacing:.05em}
+  .bar-gauge.warn .bar-val{color:var(--warn)}
+  .bar-gauge.crit .bar-val{color:var(--crit)}
+  /* ---- WAVE ALERT ---- */
+  .wave-card{background:rgba(56,189,248,.05);border:1px solid var(--accent-dim);border-radius:6px;padding:8px 10px;
+    display:flex;flex-direction:column;gap:6px}
+  .wave-card.alert{background:rgba(255,59,59,.12);border-color:var(--crit)}
+  .wave-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    border:1px solid var(--accent-dim);color:var(--muted);background:transparent}
+  .wave-badge.active{border-color:var(--crit);color:var(--crit);background:rgba(255,59,59,.1);font-weight:600}
+  .wave-info{display:flex;gap:12px;font-size:11px}
+  .wave-meter-wrap{flex:1;display:flex;flex-direction:column;gap:3px}
+  .wave-meter{height:6px;background:var(--panel-2);border:1px solid var(--accent-dim);border-radius:3px;overflow:hidden}
+  .wave-meter-fill{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--warn),var(--crit));
+    transition:width .4s;box-shadow:0 0 6px rgba(56,189,248,.3)}
+  .wave-meter.alert .wave-meter-fill{box-shadow:0 0 6px rgba(255,59,59,.4)}
+  .wave-val{font-family:var(--mono);font-weight:600;color:#eaf6fb;min-width:24px;text-align:right}
+  .wave-brg{display:flex;align-items:center;gap:4px;font-family:var(--mono);font-weight:600;
+    color:var(--cyan);padding:2px 6px;background:var(--panel-2);border-radius:3px;border:1px solid var(--accent-dim);font-size:10px}
+  /* ---- CURRENT + STATION-KEEP ---- */
+  .cur-card{display:flex;align-items:center;gap:10px;padding:8px 10px;
+    background:rgba(56,189,248,.05);border:1px solid var(--accent-dim);border-radius:6px;
+    font-size:11px}
+  .cur-arrow{width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+    color:var(--cyan);font-size:20px;transition:transform .3s}
+  .sk-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:10px;
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    border:1px solid var(--muted);color:var(--muted);background:transparent;
+    margin-left:auto}
+  .sk-badge.active{border-color:var(--ok);color:var(--ok);background:rgba(58,211,122,.1);font-weight:600;
+    box-shadow:0 0 8px rgba(58,211,122,.2)}
   /* ---- modal ---- */
   .modal-bg{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
@@ -522,6 +580,24 @@
             <div class="big" id="vis-survey">0</div>
             <div class="lbl">anomalies this mission</div>
           </div>
+          <div class="vis-col">
+            <div class="sec-ttl">WAVE ALERT</div>
+            <div class="wave-card" id="wave-badge">
+              <div><span class="wave-badge" id="wave-status">disabled</span></div>
+              <div class="wave-info">
+                <div class="wave-meter-wrap">
+                  <div style="font-size:9px;color:var(--muted)">SEV %</div>
+                  <div class="wave-meter" id="wave-sev-meter"><div class="wave-meter-fill" id="wave-sev-bar" style="width:0%"></div></div>
+                  <div class="wave-val" id="wave-sev-val">—</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">
+                  <div style="font-size:9px;color:var(--muted)">BRG</div>
+                  <div class="wave-brg" id="wave-brg">— °</div>
+                </div>
+              </div>
+              <div style="font-size:9px;color:var(--muted)">TTC <span class="wave-val" id="wave-ttc" style="margin-left:4px">—</span><span style="color:var(--muted)">s</span></div>
+            </div>
+          </div>
         </div>
         <div class="cam-ctl">
           <span class="cs"><span class="lbl">SOURCE</span>
@@ -639,6 +715,18 @@
         </div>
 
         <div class="tele-sub">
+          <div class="sec-ttl">CURRENT & STATION</div>
+          <div class="cur-card" id="cur-card">
+            <div class="cur-arrow" id="cur-arrow">↑</div>
+            <div style="flex:1">
+              <div class="d-row" style="border:none;padding:0;margin:0"><span class="d-lbl">Set</span><span class="d-val" id="cur-set">— °</span></div>
+              <div class="d-row" style="border:none;padding:0;margin:0"><span class="d-lbl">Drift</span><span class="d-val" id="cur-drift">— m/s</span></div>
+            </div>
+            <span class="sk-badge" id="sk-badge">— KEEP</span>
+          </div>
+        </div>
+
+        <div class="tele-sub">
           <div class="sec-ttl">CONTROLS</div>
           <div id="simSpeedControl">
             <div class="d-row"><span class="d-lbl">Sim Speed</span><span class="spd-val"><span id="speedVal">1.5</span> m/s</span></div>
@@ -739,6 +827,46 @@
         </div>
         <div class="boat-flags" id="boat-flags"></div>
         <div class="boat-alert" id="boat-alert"></div>
+      </div>
+    </div>
+
+    <!-- ESC / PROPULSION TELEMETRY -->
+    <div class="section" data-id="esc" style="--span:6">
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⚡ PROPULSION · ESC</span>
+        <span class="sp"></span><span class="lbl">AM32 · BLDC</span><span class="chev" aria-hidden="true">▾</span></div>
+      <div class="sec-body">
+        <div class="esc-grid">
+          <div class="esc-col">
+            <span class="esc-label">LEFT MOTOR</span>
+            <div class="gauge-wrap">
+              <div class="radial-gauge" id="esc-l-temp-gauge">
+                <div class="arc"></div>
+                <span class="val" id="esc-l-temp">—</span>
+              </div>
+              <span class="gauge-unit">TEMP °C</span>
+            </div>
+            <div class="bar-gauge" id="esc-l-curr-bar">
+              <div class="bar-track"><div class="bar-fill" id="esc-l-curr-fill"></div></div>
+              <span class="bar-val" id="esc-l-curr">—</span>
+            </div>
+            <span class="gauge-unit">CURRENT A</span>
+          </div>
+          <div class="esc-col">
+            <span class="esc-label">RIGHT MOTOR</span>
+            <div class="gauge-wrap">
+              <div class="radial-gauge" id="esc-r-temp-gauge">
+                <div class="arc"></div>
+                <span class="val" id="esc-r-temp">—</span>
+              </div>
+              <span class="gauge-unit">TEMP °C</span>
+            </div>
+            <div class="bar-gauge" id="esc-r-curr-bar">
+              <div class="bar-track"><div class="bar-fill" id="esc-r-curr-fill"></div></div>
+              <span class="bar-val" id="esc-r-curr">—</span>
+            </div>
+            <span class="gauge-unit">CURRENT A</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1095,6 +1223,29 @@ function renderTelemetry(d){
     $('t-navXte').style.color = '';
     targetLine.setLatLngs([]);
   }
+
+  // current + station-keeping
+  const curSet = n.current_set_deg;
+  const curDrift = n.current_drift_ms;
+  const stationKeeping = n.station_keeping;
+  if (curSet != null && curDrift != null && curDrift > 0) {
+    const rotDeg = (curSet || 0) - 90; // rotate arrow to bearing (0° = up/N)
+    $('cur-arrow').style.transform = `rotate(${rotDeg}deg)`;
+    $('cur-set').textContent = Math.round(curSet) + ' °';
+    $('cur-drift').textContent = curDrift.toFixed(2) + ' m/s';
+  } else {
+    $('cur-arrow').style.transform = 'rotate(0deg)';
+    $('cur-set').textContent = '— °';
+    $('cur-drift').textContent = '— m/s';
+  }
+  const skBadge = $('sk-badge');
+  if (stationKeeping) {
+    skBadge.textContent = '⊕ ACTIVE';
+    skBadge.className = 'sk-badge active';
+  } else {
+    skBadge.textContent = '○ IDLE';
+    skBadge.className = 'sk-badge';
+  }
 }
 autoWS('/ws/telemetry', {
   message: (e) => { try{ renderTelemetry(JSON.parse(e.data)); }catch(err){} },
@@ -1183,6 +1334,42 @@ function buildCores(n){
   }
 }
 function fmt(v, unit, d){ return (v===null||v===undefined) ? 'N/A' : v.toFixed(d===undefined?1:d)+(unit||''); }
+function updateEscGauge(side, temp, curr){
+  const tempSuffix = side === 'l' ? '-temp' : '-temp';
+  const currSuffix = side === 'l' ? '-curr' : '-curr';
+  const gaugeTempId = 'esc-' + side + '-temp-gauge';
+  const gaugeTemp = $(gaugeTempId);
+  const valTemp = $('esc-' + side + tempSuffix);
+  const barCurr = $('esc-' + side + currSuffix + '-bar');
+  const valCurr = $('esc-' + side + currSuffix);
+  const fillCurr = $('esc-' + side + currSuffix + '-fill');
+
+  // Temperature gauge (0-100°C, 0-70 ok, 70-85 warn, 85+ crit)
+  if (temp === null || temp === undefined || temp <= 0) {
+    valTemp.textContent = '—';
+    gaugeTemp.className = 'radial-gauge';
+  } else {
+    const tempVal = Math.min(100, Math.max(0, temp));
+    const tempPct = (tempVal / 100) * 360;
+    const arc = gaugeTemp.querySelector('.arc');
+    if (arc) arc.style.transform = `rotate(${tempPct}deg)`;
+    valTemp.textContent = temp.toFixed(0);
+    gaugeTemp.className = 'radial-gauge' + (temp >= 85 ? ' crit' : temp >= 70 ? ' warn' : '');
+  }
+
+  // Current bar (0-100A, 0-40 ok, 40-70 warn, 70+ crit)
+  if (curr === null || curr === undefined || curr <= 0) {
+    valCurr.textContent = '—';
+    barCurr.className = 'bar-gauge';
+    fillCurr.style.width = '0%';
+  } else {
+    const currVal = Math.min(100, Math.max(0, curr));
+    const currPct = (currVal / 100) * 100;
+    valCurr.textContent = curr.toFixed(1);
+    fillCurr.style.width = currPct + '%';
+    barCurr.className = 'bar-gauge' + (curr >= 70 ? ' crit' : curr >= 40 ? ' warn' : '');
+  }
+}
 function fmtUptime(s){
   if (s===null||s===undefined) return 'N/A';
   s=Math.floor(s); const d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60);
@@ -1350,6 +1537,34 @@ function renderVision(v){
   // survey counter + backend label
   $('vis-survey').textContent = v.survey_logged != null ? v.survey_logged : 0;
   $('vis-backend').textContent = 'SEG:' + (v.seg_backend || '—').toUpperCase();
+  // wave alert readout
+  const wave = v.wave;
+  const waveCard = $('wave-badge');
+  const waveBadge = $('wave-status');
+  if (!wave || !wave.enabled) {
+    waveBadge.textContent = 'disabled';
+    waveBadge.className = 'wave-badge';
+    waveCard.className = 'wave-card';
+    $('wave-sev-bar').style.width = '0%';
+    $('wave-sev-val').textContent = '—';
+    $('wave-brg').textContent = '— °';
+    $('wave-ttc').textContent = '—';
+  } else {
+    const incoming = wave.incoming;
+    const severity = wave.severity || 0;
+    const bearing = wave.bearing_deg || 0;
+    const ttc = wave.ttc_s || 0;
+    waveBadge.textContent = incoming ? '⚠ INCOMING' : 'enabled';
+    waveBadge.className = 'wave-badge' + (incoming ? ' active' : '');
+    waveCard.className = 'wave-card' + (incoming ? ' alert' : '');
+    const sevPct = Math.min(100, Math.max(0, severity * 100));
+    $('wave-sev-bar').style.width = sevPct + '%';
+    $('wave-sev-val').textContent = sevPct.toFixed(0);
+    const brgSign = bearing > 180 ? bearing - 360 : bearing;
+    const brgLabel = brgSign > 0 ? '→' : brgSign < 0 ? '←' : '↑';
+    $('wave-brg').textContent = brgLabel + ' ' + Math.abs(Math.round(brgSign)) + '°';
+    $('wave-ttc').textContent = incoming ? ttc.toFixed(1) : '—';
+  }
 }
 function updateSegButton(enabled){
   const b = $('seg-toggle');
@@ -1430,6 +1645,9 @@ function renderBoat(b){
     + fmt(b.curr_left, '', 1) + ' / ' + fmt(b.curr_right, '', 1) + ' A';
   const hot = Math.max(b.mt_left||0, b.mt_right||0);
   mEl.style.color = hot >= 70 ? 'var(--crit)' : hot >= 60 ? 'var(--warn)' : '#eaf6fb';
+  // wire ESC gauges panel
+  updateEscGauge('l', b.mt_left, b.curr_left);
+  updateEscGauge('r', b.mt_right, b.curr_right);
   // gps
   const noFix = !b.lat && !b.lon;
   const g = $('b-gps');

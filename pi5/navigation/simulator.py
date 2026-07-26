@@ -39,6 +39,11 @@ class SimConfig:
     batt_drain_v_per_m: float = 0.0005
     # Update rate
     update_rate_hz: float = 10.0
+    # Simulated water current (east / north, m/s) — carries the boat every tick
+    # regardless of throttle, so current estimation + station-keeping can be
+    # exercised in sim. 0 = still water. Toggle at runtime via set_current().
+    current_east_mps: float = 0.0
+    current_north_mps: float = 0.0
 
 
 class BoatSimulator:
@@ -58,6 +63,9 @@ class BoatSimulator:
         self.lon = start_lon
         self.heading = start_heading
         self.speed_mps = 0.0
+        # Water current pushing the boat (east/north m/s) — 0 = still water.
+        self._cur_e = self._config.current_east_mps
+        self._cur_n = self._config.current_north_mps
         self.batt_v = 20.5          # 2× M18 parallel drive rail (18 V nom; drains as it drives)
         self.elec_batt_v = 20.0     # 1× M18 electronics rail
         self.winch_batt_v = 20.0    # 1× M18 winch rail (drops while the winch runs)
@@ -97,6 +105,11 @@ class BoatSimulator:
         """Create a MockPicoSerial that routes commands to this simulator."""
         return MockPicoSerial(self)
 
+    def set_current(self, east_mps: float, north_mps: float) -> None:
+        """Set the simulated water current (east/north m/s) at runtime."""
+        self._cur_e = float(east_mps)
+        self._cur_n = float(north_mps)
+
     def _move(self, dt: float) -> None:
         """Advance the simulation by dt seconds."""
         if self._estopped or self._rc_override:
@@ -129,6 +142,13 @@ class BoatSimulator:
             self.lat += dlat
             self.lon += dlon
             self.batt_v -= abs(dist) * cfg.batt_drain_v_per_m
+
+        # Water current carries the boat every tick, throttle or not — this is
+        # what current estimation must detect and station-keeping must fight.
+        if self._cur_e or self._cur_n:
+            self.lat += (self._cur_n * dt) / EARTH_R * RAD_TO_DEG
+            self.lon += (self._cur_e * dt) / (
+                EARTH_R * math.cos(self.lat * DEG_TO_RAD)) * RAD_TO_DEG
 
         self._track.append((self.lat, self.lon, time.time()))
 

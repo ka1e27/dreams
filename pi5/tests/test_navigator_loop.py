@@ -97,9 +97,10 @@ async def test_nav_loop_arrival_sets_event_and_zeros_motors():
 
 
 @pytest.mark.asyncio
-async def test_hold_reacquires_after_drift():
+async def test_hold_actively_station_keeps():
     pico = FakePico()
-    # Current position is ~1.1 km from the hold point → well past hold_drift_m.
+    # Boat far from the hold point → active station-keeping should drive it back
+    # (current-aware hold, not the old "drift then convert to a goto" ping-pong).
     pico.telemetry = _Tel(_CUR[0], _CUR[1], 0.0)
     nav = Navigator(pico, NavConfig(update_rate_hz=200.0, hold_drift_m=8.0))
     nav.hold(*_TGT_NORTH)
@@ -107,14 +108,18 @@ async def test_hold_reacquires_after_drift():
 
     await nav.start()
     try:
-        became_active = await _wait_for(lambda: nav.state.active, timeout=2.0)
-        # Capture target before stop() clears it via stop_nav().
-        reacquired_target = nav.state.target_lat
+        keeping = await _wait_for(lambda: nav.state.station_keeping, timeout=2.0)
+        drove = await _wait_for(
+            lambda: any(lc != 0 or rc != 0 for (lc, rc) in pico.throttle_calls),
+            timeout=2.0)
+        held_lat = nav._hold_lat  # retained (still holding, not a one-shot goto)
     finally:
         await nav.stop()
 
-    assert became_active is True
-    assert reacquired_target == _TGT_NORTH[0]
+    assert keeping is True
+    assert drove is True
+    assert held_lat == _TGT_NORTH[0]
+    assert nav.state.active is False
 
 
 @pytest.mark.asyncio

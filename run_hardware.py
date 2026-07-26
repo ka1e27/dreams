@@ -81,6 +81,14 @@ def _nav_config(nav_cfg: dict) -> NavConfig:
         los_integral_clamp=float(g("los_integral_clamp")),
         motor_gain_left=float(g("motor_gain_left")),
         motor_gain_right=float(g("motor_gain_right")),
+        current_enabled=bool(g("current_enabled")),
+        current_thrust_a=float(g("current_thrust_a")),
+        current_thrust_b=float(g("current_thrust_b")),
+        sk_pos_gain=float(g("sk_pos_gain")),
+        sk_max_speed=float(g("sk_max_speed")),
+        sk_deadband_m=float(g("sk_deadband_m")),
+        sk_min_water_speed=float(g("sk_min_water_speed")),
+        sk_speed_gain=float(g("sk_speed_gain")),
     )
 
 

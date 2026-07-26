@@ -56,8 +56,14 @@ ml/validation_samples/
 # Keep the model-card JSON so the class list/metrics are tracked.
 pi5/cv/models/*.onnx
 pi5/cv/models/*.pt
+pi5/cv/models/*_ncnn_model/
 !pi5/cv/models/*.json
 /yolov8n.pt
+
+# On-Pi throwaway build venvs (torch/ultralytics for model export/training —
+# multi-GB, regenerable). Never commit these.
+/.train_build/
+/.export_build/
 
 # Stereo calibration is rig-specific (baseline, camera intrinsics) — regenerate
 # per-boat with pi5/scripts/calibrate_stereo.py, don't commit someone's laptop

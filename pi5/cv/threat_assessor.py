@@ -42,16 +42,25 @@ class ThreatLevel(IntEnum):
 # (vessel/kayak/buoy/person/dock/debris) plus the COCO fallback ('boat',
 # 'person') and the Tier-1 water-state pseudo-classes.
 THREAT_LEVELS: dict[str, ThreatLevel] = {
-    # CRITICAL — always track, alert mission layer
+    # CRITICAL — always track, alert mission layer. Covers the COCO fallback
+    # labels, the maritime model's labels (Boats/Sail-Boat/Surfer/Person/Kayak),
+    # and the earlier generic set. Lookup is case-insensitive (see below).
     "vessel":        ThreatLevel.CRITICAL,   # approaching boat
     "boat":          ThreatLevel.CRITICAL,   # COCO fallback label for vessel
+    "boats":         ThreatLevel.CRITICAL,   # maritime model plural label
+    "sail-boat":     ThreatLevel.CRITICAL,   # maritime model
+    "sailboat":      ThreatLevel.CRITICAL,
+    "surfer":        ThreatLevel.CRITICAL,   # person on the water
     "person":        ThreatLevel.CRITICAL,   # person in water
     "kayak":         ThreatLevel.CRITICAL,   # small craft, hard to see
     # WARNING — track if moving toward the boat
     "debris":        ThreatLevel.WARNING,    # large floating debris
     "buoy":          ThreatLevel.WARNING,    # navigation marker
+    "rock":          ThreatLevel.WARNING,    # hard obstacle (maritime model)
+    "wreck":         ThreatLevel.WARNING,    # partially-submerged hazard
     # INFO — log only, no tracking
     "dock":          ThreatLevel.INFO,       # stationary structure
+    "bridge":        ThreatLevel.INFO,       # fixed structure (maritime model)
     "algae_bloom":   ThreatLevel.INFO,       # water-quality anomaly
     "discoloration": ThreatLevel.INFO,       # pollution / sediment
     # SURVEY — log to the survey map, no tracking
@@ -62,8 +71,12 @@ APPROACHING, STATIC, RECEDING = "APPROACHING", "STATIC", "RECEDING"
 
 
 def threat_level_for(class_name: str) -> ThreatLevel:
-    """Threat level for a class label; unknown labels default to INFO."""
-    return THREAT_LEVELS.get(class_name, ThreatLevel.INFO)
+    """Threat level for a class label; unknown labels default to INFO.
+
+    Case-insensitive so a maritime model's ``Sail-Boat``/``Boats`` resolve the
+    same as the lowercase COCO labels.
+    """
+    return THREAT_LEVELS.get((class_name or "").lower(), ThreatLevel.INFO)
 
 
 @dataclass

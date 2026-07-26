@@ -9,6 +9,25 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-23 — Verified the waypoint-driving sim already works (no code changes)
+
+**Worked on:** user asked whether a viewable sim of the boat driving waypoints could be created. It
+already exists end-to-end — confirmed it rather than building anything new.
+**Verified:** started `run_sim.py`, POSTed a 4-point PATH loop near the dock (`/api/mission?start=true`),
+and polled `/api/status`. The boat pivoted in place to each bearing (align-first `Navigator`), drove the
+leg, and advanced WP 0→1→2, ranging ~58 m from start; server stopped cleanly after. Deps present
+(Py 3.14.4, fastapi 0.135.3, uvicorn 0.44.0).
+**Notes for next time:**
+- Viewable UI = command center at `http://localhost:8000/` (Leaflet map, pulsing boat marker, track +
+  waypoint pins, `/ws/telemetry`). Draw/upload routes at `/planner`; sample missions in
+  `reference/waypoints.json`. Sim mode runs dev-mode auth (no API key needed).
+- Polling `/api/telemetry` and `/api/mission` every tick trips `rate_limit.py` (HTTP 429) — poll the
+  bundled `/api/status` at ≥2–3 s spacing instead.
+- DATA waypoints stall on the winch-down/sample/winch-up sequence (up to ~5 min each) — use PATH
+  waypoints or `POST /api/sim/speed` to watch it drive a route quickly.
+**Next steps:** none pending. Offered the user an optional zero-setup standalone animation (self-contained
+HTML canvas / matplotlib playback); build only if they ask. No repo files changed this session.
+
 ## 2026-07-21 — Single-hull test bench variant: spec + firmware (branch `single-hull-test-bench`)
 
 **Worked on:** user wants a single-hull "test bench" boat (two stern motors, differential steering, standard hobby ESCs instead of the VESC/CAN chain, 2× M18 series drive instead of 3×) to validate the stack on real hardware before the full catamaran. Produced a spec doc, then implemented the Boat Pico firmware on a new branch `single-hull-test-bench` (branched off `main`; `main` untouched). Mid-implementation the user chose to **keep both SHT41 air-temp sensors**, which forced a pin-plan revision (below).

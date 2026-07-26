@@ -10,10 +10,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import time
 from dataclasses import dataclass
 
 from ..comms.pico_serial import PicoSerial
-from .geo import distance_and_bearing, haversine_distance, heading_diff, los_course
+from .current_estimator import CurrentConfig, CurrentEstimator
+from .geo import (
+    _local_offset,
+    distance_and_bearing,
+    haversine_distance,
+    heading_diff,
+    los_course,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +78,22 @@ class NavConfig:
     # (bias the faster motor's gain down); the heading loop mops up the remainder.
     motor_gain_left: float = 1.0
     motor_gain_right: float = 1.0
+    # ---- Water-current estimation + station-keeping (stay mode) ----
+    # Through-water speed model  v = thrust_a*|thr| + thrust_b*thr^2  (thr = mean
+    # forward command, -1..1). Used to estimate the current as
+    # (GPS ground velocity - modelled through-water velocity). Calibrate per boat.
+    current_enabled: bool = True
+    current_thrust_a: float = 0.35
+    current_thrust_b: float = 0.15
+    # Active station-keeping: hold the target position AGAINST the estimated
+    # current (feedforward) instead of the old "drift until hold_drift_m then
+    # re-acquire" ping-pong. The controller drives the boat's required
+    # through-water velocity = desired-ground-velocity - current_estimate.
+    sk_pos_gain: float = 0.25        # desired ground speed per metre of error (1/s)
+    sk_max_speed: float = 0.8        # cap on station-keeping ground speed (m/s)
+    sk_deadband_m: float = 1.2       # inside this radius + negligible current -> idle
+    sk_min_water_speed: float = 0.04  # required through-water speed below which idle
+    sk_speed_gain: float = 90.0      # throttle (0-100) per m/s of required water speed
 
 
 @dataclass
@@ -89,6 +114,11 @@ class NavState:
     cross_track_m: float = 0.0
     course_deg: float = 0.0
     avoiding: bool = False
+    # Water-current estimate: set = compass direction it flows TOWARD (0-360),
+    # drift = speed (m/s). station_keeping = actively holding against the current.
+    current_set_deg: float = 0.0
+    current_drift_ms: float = 0.0
+    station_keeping: bool = False
 
 
 class Navigator:
@@ -122,6 +152,13 @@ class Navigator:
         self._leg_lon: float | None = None
         self._xte_integral: float = 0.0
         self._last_xte: float = 0.0
+
+        # Water-current estimation + active station-keeping.
+        self._current = CurrentEstimator(CurrentConfig(
+            thrust_a=self._config.current_thrust_a,
+            thrust_b=self._config.current_thrust_b))
+        self._last_thr_frac: float = 0.0            # last mean forward cmd (-1..1)
+        self._last_cur_gps: tuple[float, float] | None = None
 
         self._task: asyncio.Task[None] | None = None
         self._on_arrived: asyncio.Event = asyncio.Event()
@@ -295,6 +332,65 @@ class Navigator:
         right = int(max(-100, min(100, round(right * cfg.motor_gain_right))))
         return left, right
 
+    def _steer_to(self, fwd: int, err: float) -> tuple[int, int]:
+        """Align-first differential-thrust steering toward a course error.
+
+        Same shape as compute_throttle's steering (forward speed gated by heading
+        alignment so a misaligned boat pivots in place, plus a differential turn
+        term). Shared by station-keeping.
+        """
+        cfg = self._config
+        abs_err = abs(err)
+        if abs_err <= cfg.heading_tolerance_deg:
+            align = 1.0
+        else:
+            span = max(1.0, cfg.align_speed_cut_deg - cfg.heading_tolerance_deg)
+            align = max(0.0, 1.0 - (abs_err - cfg.heading_tolerance_deg) / span)
+        fwd = int(fwd * align)
+        if abs_err < cfg.heading_tolerance_deg:
+            turn = 0
+        else:
+            blend = min(
+                (abs_err - cfg.heading_tolerance_deg)
+                / max(1.0, cfg.max_heading_error_deg - cfg.heading_tolerance_deg),
+                1.0,
+            )
+            turn = max(cfg.turn_min_throttle, int(cfg.turn_authority_throttle * blend))
+        left, right = (fwd + turn, fwd - turn) if err >= 0 else (fwd - turn, fwd + turn)
+        rev = -cfg.turn_authority_throttle
+        return max(rev, min(100, left)), max(rev, min(100, right))
+
+    def station_keep(self, lat: float, lon: float, hdg: float) -> tuple[int, int]:
+        """Current-aware station-keeping throttle to hold the hold-point.
+
+        Required *through-water* velocity = (desired ground velocity toward the
+        hold point) - (estimated current). The boat is pointed into that vector
+        and its forward throttle scaled to it, so it actively noses into the
+        current and holds station rather than drifting to a dead-band edge and
+        lunging back. Returns (left, right) motor commands (pre-trim).
+        """
+        cfg = self._config
+        if self._hold_lat is None or self._hold_lon is None:
+            return 0, 0
+        dE, dN = _local_offset(lat, lon, self._hold_lat, self._hold_lon)  # boat->hold (E,N)
+        err_m = math.hypot(dE, dN)
+        v_des = min(cfg.sk_max_speed, cfg.sk_pos_gain * err_m)
+        if err_m > 1e-3:
+            gE, gN = v_des * dE / err_m, v_des * dN / err_m
+        else:
+            gE = gN = 0.0
+        cE, cN = self._current.vector if cfg.current_enabled else (0.0, 0.0)
+        wE, wN = gE - cE, gN - cN               # required through-water velocity
+        w_mag = math.hypot(wE, wN)
+        if err_m < cfg.sk_deadband_m and w_mag < cfg.sk_min_water_speed:
+            return 0, 0
+        if w_mag < cfg.sk_min_water_speed:
+            return 0, 0
+        course = math.degrees(math.atan2(wE, wN)) % 360.0
+        err = heading_diff(hdg, course)
+        fwd = int(min(cfg.cruise_throttle, cfg.sk_speed_gain * w_mag))
+        return self._steer_to(fwd, err)
+
     async def _nav_loop(self) -> None:
         """Background navigation loop — runs at update_rate_hz."""
         interval = 1.0 / self._config.update_rate_hz
@@ -302,17 +398,35 @@ class Navigator:
             try:
                 tel = self._pico.telemetry
 
-                # Station-keeping: if drifted too far, re-engage nav
-                if self._holding and not self.state.active:
-                    if self._hold_lat is not None:
-                        drift = haversine_distance(
-                            tel.lat, tel.lon, self._hold_lat, self._hold_lon
-                        )
-                        if drift > self._config.hold_drift_m:
-                            self.goto(self._hold_lat, self._hold_lon)
-                            logger.info("HOLD reacquire, drift=%.1fm", drift)
+                # --- Water-current estimate — refreshed each new GPS fix ---
+                if (self._config.current_enabled
+                        and (tel.lat, tel.lon) != self._last_cur_gps):
+                    self._last_cur_gps = (tel.lat, tel.lon)
+                    s_deg, drift_ms = self._current.update(
+                        time.monotonic(), tel.lat, tel.lon, tel.heading,
+                        self._last_thr_frac)
+                    self.state.current_set_deg = s_deg
+                    self.state.current_drift_ms = drift_ms
 
-                if self.state.active and self.state.target_lat is not None:
+                # --- Stay mode: active current-aware station-keeping (priority) ---
+                if self._holding and self._hold_lat is not None:
+                    left, right = self.station_keep(tel.lat, tel.lon, tel.heading)
+                    self.state.distance_m = haversine_distance(
+                        tel.lat, tel.lon, self._hold_lat, self._hold_lon)
+                    avoiding = self._avoid_left != 0 or self._avoid_right != 0
+                    if avoiding:
+                        left, right = self._avoid_left, self._avoid_right
+                    left, right = self._trim(left, right)
+                    self.state.throttle_left, self.state.throttle_right = left, right
+                    self.state.station_keeping = True
+                    self.state.avoiding = avoiding
+                    self._last_thr_frac = (left + right) / 200.0
+                    try:
+                        await self._pico.set_throttle(left, right)
+                    except Exception as e:
+                        logger.error("SET_THR failed: %s", e)
+                elif self.state.active and self.state.target_lat is not None:
+                    self.state.station_keeping = False
                     # Anchor the LOS track line: use the caller-supplied leg
                     # start, else latch the boat's current position the first
                     # tick so the leg runs from here to the target.
@@ -349,6 +463,7 @@ class Navigator:
                         self.state.active = False
                         self.state.throttle_left = 0
                         self.state.throttle_right = 0
+                        self._last_thr_frac = 0.0
                         self._on_arrived.set()
                         logger.info("NAV arrived at %.6f, %.6f",
                                     self.state.target_lat, self.state.target_lon)
@@ -367,15 +482,18 @@ class Navigator:
                         left, right = self._trim(left, right)
                         self.state.throttle_left = left
                         self.state.throttle_right = right
+                        self._last_thr_frac = (left + right) / 200.0
                         try:
                             await self._pico.set_throttle(left, right)
                         except Exception as e:
                             logger.error("SET_THR failed: %s", e)
                 else:
                     # Not navigating — ensure motors are stopped
+                    self.state.station_keeping = False
                     if self.state.throttle_left != 0 or self.state.throttle_right != 0:
                         self.state.throttle_left = 0
                         self.state.throttle_right = 0
+                        self._last_thr_frac = 0.0
                         try:
                             await self._pico.set_throttle(0, 0)
                         except Exception:
