@@ -347,8 +347,11 @@
   .spd-ctl{display:flex;align-items:center;gap:8px;margin-top:5px}
   .spd-ctl input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
   .spd-val{font-family:var(--mono);font-size:12px;color:var(--cyan);min-width:5ch;text-align:right}
-  /* ---- ESC / PROPULSION GAUGES ---- */
-  .esc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;padding:12px 14px;align-items:start}
+  /* ---- ESC / PROPULSION GAUGES (inside Boat Health) ---- */
+  .esc-block{border-top:1px solid var(--accent-dim);margin-top:2px}
+  .esc-block-hd{font-size:10px;letter-spacing:.18em;color:var(--accent);padding:9px 14px 0;text-transform:uppercase}
+  .esc-block-sub{color:var(--muted);letter-spacing:.1em;margin-left:4px}
+  .esc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;padding:10px 14px;align-items:start}
   .esc-col{display:flex;flex-direction:column;gap:8px;min-width:0}
   .esc-label{font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
   .gauge-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
@@ -818,55 +821,49 @@
           <div class="stat"><span class="lbl">HULL · RIGHT</span><span class="sv" id="b-hullR">--</span></div>
           <div class="stat"><span class="lbl">HEADING</span><span class="sv" id="b-hdg">--</span></div>
           <div class="stat"><span class="lbl">SPEED</span><span class="sv" id="b-spd">--</span></div>
-          <div class="stat"><span class="lbl">MOTOR L / R</span><span class="sv" id="b-mot">--</span></div>
           <div class="stat"><span class="lbl">GPS FIX</span><span class="sv" id="b-gps">--</span></div>
           <div class="stat"><span class="lbl">AIR T / RH</span><span class="sv" id="b-air">--</span></div>
           <div class="stat"><span class="lbl">ENCLOSURE T / RH</span><span class="sv" id="b-enc">--</span></div>
           <div class="stat"><span class="lbl">WATER TEMP</span><span class="sv" id="b-wtemp">--</span></div>
           <div class="stat"><span class="lbl">WATER EC</span><span class="sv" id="b-wec">--</span></div>
         </div>
-        <div class="boat-flags" id="boat-flags"></div>
-        <div class="boat-alert" id="boat-alert"></div>
-      </div>
-    </div>
-
-    <!-- ESC / PROPULSION TELEMETRY -->
-    <div class="section" data-id="esc" style="--span:6">
-      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⚡ PROPULSION · ESC</span>
-        <span class="sp"></span><span class="lbl">AM32 · BLDC</span><span class="chev" aria-hidden="true">▾</span></div>
-      <div class="sec-body">
-        <div class="esc-grid">
-          <div class="esc-col">
-            <span class="esc-label">LEFT MOTOR</span>
-            <div class="gauge-wrap">
-              <div class="radial-gauge" id="esc-l-temp-gauge">
-                <div class="arc"></div>
-                <span class="val" id="esc-l-temp">—</span>
+        <div class="esc-block">
+          <div class="esc-block-hd">⚡ Propulsion · ESC<span class="esc-block-sub">AM32 · BLDC</span></div>
+          <div class="esc-grid">
+            <div class="esc-col">
+              <span class="esc-label">LEFT MOTOR</span>
+              <div class="gauge-wrap">
+                <div class="radial-gauge" id="esc-l-temp-gauge">
+                  <div class="arc"></div>
+                  <span class="val" id="esc-l-temp">—</span>
+                </div>
+                <span class="gauge-unit">TEMP °C</span>
               </div>
-              <span class="gauge-unit">TEMP °C</span>
-            </div>
-            <div class="bar-gauge" id="esc-l-curr-bar">
-              <div class="bar-track"><div class="bar-fill" id="esc-l-curr-fill"></div></div>
-              <span class="bar-val" id="esc-l-curr">—</span>
-            </div>
-            <span class="gauge-unit">CURRENT A</span>
-          </div>
-          <div class="esc-col">
-            <span class="esc-label">RIGHT MOTOR</span>
-            <div class="gauge-wrap">
-              <div class="radial-gauge" id="esc-r-temp-gauge">
-                <div class="arc"></div>
-                <span class="val" id="esc-r-temp">—</span>
+              <div class="bar-gauge" id="esc-l-curr-bar">
+                <div class="bar-track"><div class="bar-fill" id="esc-l-curr-fill"></div></div>
+                <span class="bar-val" id="esc-l-curr">—</span>
               </div>
-              <span class="gauge-unit">TEMP °C</span>
+              <span class="gauge-unit">CURRENT A</span>
             </div>
-            <div class="bar-gauge" id="esc-r-curr-bar">
-              <div class="bar-track"><div class="bar-fill" id="esc-r-curr-fill"></div></div>
-              <span class="bar-val" id="esc-r-curr">—</span>
+            <div class="esc-col">
+              <span class="esc-label">RIGHT MOTOR</span>
+              <div class="gauge-wrap">
+                <div class="radial-gauge" id="esc-r-temp-gauge">
+                  <div class="arc"></div>
+                  <span class="val" id="esc-r-temp">—</span>
+                </div>
+                <span class="gauge-unit">TEMP °C</span>
+              </div>
+              <div class="bar-gauge" id="esc-r-curr-bar">
+                <div class="bar-track"><div class="bar-fill" id="esc-r-curr-fill"></div></div>
+                <span class="bar-val" id="esc-r-curr">—</span>
+              </div>
+              <span class="gauge-unit">CURRENT A</span>
             </div>
-            <span class="gauge-unit">CURRENT A</span>
           </div>
         </div>
+        <div class="boat-flags" id="boat-flags"></div>
+        <div class="boat-alert" id="boat-alert"></div>
       </div>
     </div>
 
@@ -1639,13 +1636,7 @@ function renderBoat(b){
   setHull('b-hullR', !!b.hull_right);
   $('b-hdg').textContent = fmt(b.heading, '°', 0);
   $('b-spd').textContent = fmt(b.speed_knots, ' kn', 1);
-  // motor temps + per-motor current (AM32 KISS telemetry)
-  const mEl = $('b-mot');
-  mEl.textContent = fmt(b.mt_left, '', 0) + ' / ' + fmt(b.mt_right, '', 0) + ' °C   '
-    + fmt(b.curr_left, '', 1) + ' / ' + fmt(b.curr_right, '', 1) + ' A';
-  const hot = Math.max(b.mt_left||0, b.mt_right||0);
-  mEl.style.color = hot >= 70 ? 'var(--crit)' : hot >= 60 ? 'var(--warn)' : '#eaf6fb';
-  // wire ESC gauges panel
+  // per-motor ESC temperature + current gauges (AM32 KISS telemetry), in Boat Health
   updateEscGauge('l', b.mt_left, b.curr_left);
   updateEscGauge('r', b.mt_right, b.curr_right);
   // gps
