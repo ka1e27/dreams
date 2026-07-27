@@ -65,7 +65,13 @@ the served page.
 records the live left camera. Sentry triggers are CRITICAL-threat / hull-leak / pod-leak (operator
 estop left out). Not yet exercised with a real camera on the Pi.
 **Next steps:** on-camera hardware pass; optional clip thumbnails; maybe a download button beside inline play.
-
+**Follow-up (recording duration):** a clip was getting cut off at the ~90 s hard cap while a threat was
+still in frame. Reworked the stop logic so a sentry clip now records **until the threat clears** — it
+runs on while `note_event` keeps firing and stops only `retrigger_extend_s` (8 s) after the last
+sighting; `max_clip_s` (now 300 s) is a per-**segment** cap that **rolls over** into a new file instead
+of stopping mid-event, so a persistent threat is never cut off (files stay bounded + prunable). +1 test
+(`test_persistent_threat_records_until_it_clears`); verified on the sim (recorded continuously through a
+sustained avoidance, stopped ~8 s after the threat went away → one 16.8 s clip).
 
 ## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
 

@@ -452,8 +452,12 @@ recording:
   fps: 10             # record/pre-roll frame rate
   width: 640          # frames are down-scaled to this width (keeps size/CPU bounded)
   preroll_s: 6        # seconds kept before a sentry trigger fires
-  clip_s: 12          # sentry clip length after a trigger
-  max_clip_s: 90      # hard cap even if events keep extending the clip
+  clip_s: 12          # minimum sentry clip length after a trigger
+  # A sentry clip records until the threat CLEARS (retrigger_extend_s with no new
+  # sighting), not a fixed length. max_clip_s only bounds one segment file — a
+  # threat still in view rolls over into a new segment, never cut off mid-event.
+  max_clip_s: 300     # max length of a single clip segment before rollover
+  retrigger_extend_s: 8  # keep recording this long after the threat is last seen
   max_clips: 60       # oldest clips pruned beyond this
   sentry_default: false  # arm sentry automatically on boot
 

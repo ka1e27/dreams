@@ -70,9 +70,11 @@ class _Clip:
 class RecorderConfig:
     fps: float = 10.0
     preroll_s: float = 6.0
-    clip_s: float = 12.0          # sentry clip length after a trigger
-    max_clip_s: float = 90.0      # hard cap even if events keep extending it
-    retrigger_extend_s: float = 8.0
+    clip_s: float = 12.0          # minimum sentry clip length after a trigger
+    max_clip_s: float = 300.0     # max length of ONE segment file; a still-active
+    #                               threat rolls over into a new segment (a clip is
+    #                               never cut off while the threat is still seen)
+    retrigger_extend_s: float = 8.0  # keep recording this long after the threat clears
     cooldown_s: float = 6.0       # ignore identical re-triggers within this window
     width: int = 640              # frames are scaled to this width (keep aspect)
     max_clips: int = 60
@@ -95,6 +97,7 @@ class Recorder:
         self.sentry_enabled = bool(self.cfg.sentry_default)
         self._cooldowns: dict[str, float] = {}   # reason -> mono time it may re-fire
         self._last_frame_mono = 0.0
+        self._last_event_mono: float | None = None   # last sentry sighting
         self._seq = 0                            # guarantees unique clip names
 
     # -- ingest ------------------------------------------------------------- #
@@ -131,20 +134,28 @@ class Recorder:
             return self._open_clip("manual", "manual", end_in=None, now=now)
 
     def note_event(self, reason: str, now: float | None = None) -> bool:
-        """Sentry hook: a critical moment happened. Starts a clip (seeded with
-        the pre-roll) or extends the running one. Debounced per-reason.
+        """Sentry hook: a critical moment is happening *right now*. Starts a clip
+        (seeded with the pre-roll) or keeps the running one alive.
+
+        The clip records until the threat *clears* — i.e. until
+        ``retrigger_extend_s`` passes with no further event — not a fixed length,
+        so a threat that lingers keeps recording. There's no hard length cap
+        here; the per-segment cap is handled by rollover in :meth:`tick`. The
+        per-reason cooldown only gates *starting* a new clip, not extending one.
         Returns True if it started/extended a clip."""
         mono = time.monotonic() if now is None else float(now)
         with self._lock:
             if not self.sentry_enabled:
                 return False
+            self._last_event_mono = mono
             until = self._cooldowns.get(reason, 0.0)
             self._cooldowns[reason] = mono + self.cfg.cooldown_s
             if self._clip is not None:
-                # Extend a running sentry clip while events keep coming (capped).
                 if self._clip.end_mono is not None:
-                    hard = self._clip.started_mono + self.cfg.max_clip_s
-                    self._clip.end_mono = min(hard, mono + self.cfg.retrigger_extend_s)
+                    # Push the trailing window past this sighting so the clip
+                    # runs on while the threat is still visible.
+                    self._clip.end_mono = max(self._clip.end_mono,
+                                              mono + self.cfg.retrigger_extend_s)
                     if reason not in self._clip.reason.split("+"):
                         self._clip.reason += "+" + reason
                 return True
@@ -155,11 +166,24 @@ class Recorder:
             return True
 
     def tick(self, now: float | None = None) -> None:
-        """Auto-stop a sentry clip once its deadline passes."""
+        """Stop a sentry clip once the threat has cleared (``retrigger_extend_s``
+        elapsed with no new event). If the threat is *still* active when a
+        segment reaches ``max_clip_s``, roll over into a fresh segment instead of
+        stopping — so a persistent threat is never cut off mid-event."""
         mono = time.monotonic() if now is None else float(now)
         with self._lock:
             c = self._clip
-            if c is not None and c.end_mono is not None and mono >= c.end_mono:
+            if c is None or c.end_mono is None:
+                return
+            threat_active = (self._last_event_mono is not None
+                             and (mono - self._last_event_mono) < self.cfg.retrigger_extend_s)
+            if (mono - c.started_mono) >= self.cfg.max_clip_s and threat_active:
+                reason, size = c.reason, c.size    # continue seamlessly in a new file
+                self.stop(now=mono)
+                self._open_clip(reason, "sentry", end_in=self.cfg.clip_s,
+                                now=mono, size=size)
+                return
+            if mono >= c.end_mono:
                 self.stop(now=mono)
 
     def stop(self, now: float | None = None) -> dict | None:
@@ -273,12 +297,15 @@ class Recorder:
         return cv2.resize(bgr, size, interpolation=cv2.INTER_AREA)
 
     def _open_clip(self, reason: str, trigger: str, *, end_in: float | None,
-                   now: float | None = None, seed_preroll: bool = False) -> dict | None:
+                   now: float | None = None, seed_preroll: bool = False,
+                   size: tuple[int, int] | None = None) -> dict | None:
         import cv2
         mono = time.monotonic() if now is None else float(now)
-        # Choose the frame size from the pre-roll (if seeding) or config default.
-        size = self._preroll_size if (seed_preroll and self._preroll_size) else \
-            (self.cfg.width, int(self.cfg.width * 9 / 16) & ~1)
+        # Frame size: an explicit size (segment rollover) wins; else the pre-roll
+        # size (if seeding) or the config default.
+        if size is None:
+            size = self._preroll_size if (seed_preroll and self._preroll_size) else \
+                (self.cfg.width, int(self.cfg.width * 9 / 16) & ~1)
         self._seq += 1
         base = f"clip-{time.strftime('%Y%m%d-%H%M%S', time.localtime())}-{self._seq:04d}-{trigger}"
         writer = mime = ext = None

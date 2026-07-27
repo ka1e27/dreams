@@ -90,6 +90,31 @@ def test_retrigger_extends_running_sentry_clip(tmp_path):
     assert "hull-leak" in rec.list_clips()[0]["reason"]
 
 
+def test_persistent_threat_records_until_it_clears(tmp_path):
+    """A threat still in view must NOT stop the clip at max_clip_s — it rolls
+    over into new segments and only stops once the threat clears."""
+    rec = Recorder(tmp_path, RecorderConfig(
+        fps=10, clip_s=0.3, retrigger_extend_s=0.3, max_clip_s=0.6,
+        width=128, sentry_default=True))
+    # Threat seen continuously for ~1.5 s — well past clip_s and the 0.6 s cap.
+    t = 0.0
+    while t < 1.5:
+        rec.note_event("critical-threat:person", now=t)
+        rec.add_frame(_frame(), now=t)
+        rec.tick(now=t)
+        t = round(t + 0.1, 3)
+    assert rec.status()["recording"], "must still be recording while the threat is present"
+    # Threat clears (last sighting was at t=1.4; trailing window is 0.3 s).
+    rec.tick(now=1.5)
+    assert rec.status()["recording"]            # still inside the trailing window
+    rec.tick(now=1.9)
+    assert not rec.status()["recording"]        # trailing window elapsed -> stopped
+    clips = rec.list_clips()
+    assert len(clips) >= 2, "a >max_clip_s threat should roll into multiple segments"
+    assert all(c["trigger"] == "sentry" for c in clips)
+    assert all(c["frames"] > 0 for c in clips)
+
+
 def test_retention_prunes_to_max_clips(tmp_path):
     rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128, max_clips=2))
     for _ in range(4):
