@@ -49,9 +49,11 @@ the recorder — all off the event loop. Endpoints: `GET /api/recordings` (statu
 `GET /api/recordings/{name}` (served with `?key=` like `/video`, for the `<video>` tag). Wired into
 `run_sim.py` (+ sim reactive-avoidance now raises a sentry event) and `run_hardware.py` (config-driven);
 `recording:` block added to `config.yaml`; clips gitignored.
-**Dashboard:** a new full-width **RECORDINGS** section — SENTRY arm toggle, manual REC/STOP, a live
-`● REC` pill, and a player + scrollable clip list (severity-coloured cards: critical/warning/manual,
-timestamp, duration, size; click to play inline, ✕ to delete). Matches the Abyssal-Indigo design system.
+**Dashboard:** folded into the **CAMERA panel** (not a separate box, per follow-up) — a control bar with
+a SENTRY arm toggle, manual REC/STOP, a live `● REC` overlay on the feed, and a **RECORDINGS** button
+that opens an **ESC-settings-style modal** (`#mRec`): a player beside a severity-coloured clip list
+(critical/warning/manual, timestamp, duration, size) with **fullscreen / download / delete** footer
+actions. Serve endpoint returns inline (`accept-ranges: bytes` → seeking; download via `<a download>`).
 **Verified (on the Pi):** `pytest pi5/tests` **242 green** (+6), ruff clean, inline `<script>` passes
 `node --check`, dashboard Vite build clean. Drove the whole lifecycle over real HTTP: manual clip
 (29 frames / 2.9 s / valid 49 KB WebM) → served 200 `video/webm` → deleted; armed sentry, drove the

@@ -1638,7 +1638,9 @@ async def get_recording(name: str, request: Request):
     if path is None:
         return Response(status_code=404, content="clip not found")
     mime = "video/webm" if path.suffix == ".webm" else "video/mp4"
-    return FileResponse(str(path), media_type=mime, filename=path.name)
+    # No `filename=` → inline (no attachment disposition) so the <video> tag
+    # plays it; the dashboard's download button uses an <a download> instead.
+    return FileResponse(str(path), media_type=mime)
 
 
 # ---- Three-tier vision pipeline (Tier-1 segmentation + threat tracking) ----
