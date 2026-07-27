@@ -1110,6 +1110,47 @@ def _boat_health() -> dict:
     }
 
 
+def _gather_psutil_stats() -> dict:
+    """Blocking psutil probes (/proc reads + a statvfs syscall).
+
+    Run off the event loop via ``asyncio.to_thread`` — this fires every second
+    from the background health loop, and disk_usage/net/mem syscalls can stall
+    tens to hundreds of ms on a loaded or slow-storage Pi, which would add
+    that jitter to every concurrent request. Missing/unavailable psutil
+    degrades to an empty dict (all values None) rather than raising.
+    """
+    global _net_prev
+    stats: dict = {}
+    try:
+        import psutil
+        stats["cpu_percent"] = psutil.cpu_percent(percpu=True)
+        vm = psutil.virtual_memory()
+        du = psutil.disk_usage(os.path.abspath(os.sep))
+        sw = psutil.swap_memory()
+        stats["ram_used"] = round((vm.total - vm.available) / 1e9, 2)
+        stats["ram_total"] = round(vm.total / 1e9, 2)
+        stats["disk_used"] = round(du.used / 1e9, 2)
+        stats["disk_total"] = round(du.total / 1e9, 2)
+        stats["swap_used"] = round(sw.used / 1e9, 2)
+        stats["swap_total"] = round(sw.total / 1e9, 2)
+        stats["uptime_s"] = max(0.0, time.time() - psutil.boot_time())
+        stats["proc_count"] = len(psutil.pids())
+        try:
+            stats["load_avg"] = [round(x, 2) for x in psutil.getloadavg()]
+        except (OSError, AttributeError):
+            stats["load_avg"] = None  # not available on this platform
+        net = psutil.net_io_counters()
+        nowm = time.monotonic()
+        if _net_prev is not None and nowm > _net_prev[2]:
+            dt = nowm - _net_prev[2]
+            stats["net_tx_kbps"] = max(0.0, (net.bytes_sent - _net_prev[0]) / dt / 1024)
+            stats["net_rx_kbps"] = max(0.0, (net.bytes_recv - _net_prev[1]) / dt / 1024)
+        _net_prev = (net.bytes_sent, net.bytes_recv, nowm)
+    except Exception as e:  # noqa: BLE001 — psutil missing/unavailable is non-fatal
+        logger.debug("psutil unavailable: %s", e)
+    return stats
+
+
 async def _gather_health() -> dict:
     """Collect Pi/host health.
 
@@ -1118,37 +1159,19 @@ async def _gather_health() -> dict:
     must never tear down /ws/health — that would make the dashboard
     reconnect-loop (open → error → close → retry).
     """
-    global _net_prev
-    cpu_percent = ram_used = ram_total = disk_used = disk_total = None
-    swap_used = swap_total = uptime_s = proc_count = load_avg = None
-    net_rx_kbps = net_tx_kbps = None
-    try:
-        import psutil
-        cpu_percent = psutil.cpu_percent(percpu=True)
-        vm = psutil.virtual_memory()
-        du = psutil.disk_usage(os.path.abspath(os.sep))
-        sw = psutil.swap_memory()
-        ram_used = round((vm.total - vm.available) / 1e9, 2)
-        ram_total = round(vm.total / 1e9, 2)
-        disk_used = round(du.used / 1e9, 2)
-        disk_total = round(du.total / 1e9, 2)
-        swap_used = round(sw.used / 1e9, 2)
-        swap_total = round(sw.total / 1e9, 2)
-        uptime_s = max(0.0, time.time() - psutil.boot_time())
-        proc_count = len(psutil.pids())
-        try:
-            load_avg = [round(x, 2) for x in psutil.getloadavg()]
-        except (OSError, AttributeError):
-            load_avg = None  # not available on this platform
-        net = psutil.net_io_counters()
-        nowm = time.monotonic()
-        if _net_prev is not None and nowm > _net_prev[2]:
-            dt = nowm - _net_prev[2]
-            net_tx_kbps = max(0.0, (net.bytes_sent - _net_prev[0]) / dt / 1024)
-            net_rx_kbps = max(0.0, (net.bytes_recv - _net_prev[1]) / dt / 1024)
-        _net_prev = (net.bytes_sent, net.bytes_recv, nowm)
-    except Exception as e:  # noqa: BLE001 — psutil missing/unavailable is non-fatal
-        logger.debug("psutil unavailable: %s", e)
+    ps = await asyncio.to_thread(_gather_psutil_stats)
+    cpu_percent = ps.get("cpu_percent")
+    ram_used = ps.get("ram_used")
+    ram_total = ps.get("ram_total")
+    disk_used = ps.get("disk_used")
+    disk_total = ps.get("disk_total")
+    swap_used = ps.get("swap_used")
+    swap_total = ps.get("swap_total")
+    uptime_s = ps.get("uptime_s")
+    proc_count = ps.get("proc_count")
+    load_avg = ps.get("load_avg")
+    net_rx_kbps = ps.get("net_rx_kbps")
+    net_tx_kbps = ps.get("net_tx_kbps")
 
     # Run the vcgencmd probes concurrently — each is an independent subprocess
     # spawn with its own bounded timeout, so awaiting them one at a time only
@@ -1612,10 +1635,14 @@ async def set_camera_devices(payload: dict, _: str = Depends(auth.require_api_ke
     result = await _camera.set_devices(left, right)
     try:
         import json
-        tmp = _CAM_DEVICES_FILE.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps({"left_device": left, "right_device": right}),
-                       encoding="utf-8")
-        tmp.replace(_CAM_DEVICES_FILE)
+        payload = json.dumps({"left_device": left, "right_device": right})
+
+        def _persist() -> None:
+            tmp = _CAM_DEVICES_FILE.with_suffix(".json.tmp")
+            tmp.write_text(payload, encoding="utf-8")
+            tmp.replace(_CAM_DEVICES_FILE)
+
+        await asyncio.to_thread(_persist)  # keep the write off the event loop
     except OSError as e:  # noqa: BLE001 — persistence is best-effort
         logger.warning("Could not persist camera assignment: %s", e)
     return {"status": "ok", **result}
