@@ -688,8 +688,8 @@
 </head>
 <body>
 <div class="grid-bg"></div>
-<div id="banner"></div>
-<div id="toast"></div>
+<div id="banner" role="alert" aria-live="assertive"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <div class="app">
   <!-- HEADER -->
@@ -851,15 +851,15 @@
           <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
             title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
             <option value="">AUTO</option></select></span>
-          <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8"><span class="csv" id="detFpsV">8</span></span>
+          <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8" aria-label="Detection frames per second"><span class="csv" id="detFpsV">8</span></span>
           <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
             title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
             <option value="256">256</option><option value="320">320</option>
             <option value="416" selected>416</option><option value="512">512</option>
             <option value="640">640</option></select></span>
-          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"><span class="csv" id="confV">0.40</span></span>
-          <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60"><span class="csv" id="jqV">60</span></span>
-          <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15"><span class="csv" id="sfpsV">15</span></span>
+          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40" aria-label="Detection confidence threshold"><span class="csv" id="confV">0.40</span></span>
+          <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60" aria-label="Camera stream JPEG quality"><span class="csv" id="jqV">60</span></span>
+          <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15" aria-label="Camera stream frames per second"><span class="csv" id="sfpsV">15</span></span>
         </div>
       </div>
     </div>
@@ -966,14 +966,14 @@
           <div class="sec-ttl">CONTROLS</div>
           <div id="simSpeedControl">
             <div class="d-row"><span class="d-lbl">Sim Speed</span><span class="spd-val"><span id="speedVal">1.5</span> m/s</span></div>
-            <div class="spd-ctl"><input type="range" id="speedSlider" min="0.5" max="20" step="0.5" value="1.5"></div>
+            <div class="spd-ctl"><input type="range" id="speedSlider" min="0.5" max="20" step="0.5" value="1.5" aria-label="Simulator speed in metres per second"></div>
           </div>
           <div class="d-row" style="margin-top:6px"><span class="d-lbl">Cruise Throttle</span><span class="spd-val"><span id="thrVal">40</span>%</span></div>
-          <div class="spd-ctl"><input type="range" id="thrSlider" min="10" max="100" step="5" value="40"></div>
+          <div class="spd-ctl"><input type="range" id="thrSlider" min="10" max="100" step="5" value="40" aria-label="Cruise throttle percent"></div>
           <div class="d-row" style="margin-top:6px"><span class="d-lbl">Winch Down</span><span class="spd-val"><span id="winchDVal">50</span></span></div>
-          <div class="spd-ctl"><input type="range" id="winchDSlider" min="10" max="100" step="5" value="50"></div>
+          <div class="spd-ctl"><input type="range" id="winchDSlider" min="10" max="100" step="5" value="50" aria-label="Winch down speed"></div>
           <div class="d-row" style="margin-top:6px"><span class="d-lbl">Winch Up</span><span class="spd-val"><span id="winchUVal">50</span></span></div>
-          <div class="spd-ctl"><input type="range" id="winchUSlider" min="10" max="100" step="5" value="50"></div>
+          <div class="spd-ctl"><input type="range" id="winchUSlider" min="10" max="100" step="5" value="50" aria-label="Winch up speed"></div>
         </div>
 
       </div>
