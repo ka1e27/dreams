@@ -72,6 +72,11 @@ sighting; `max_clip_s` (now 300 s) is a per-**segment** cap that **rolls over** 
 of stopping mid-event, so a persistent threat is never cut off (files stay bounded + prunable). +1 test
 (`test_persistent_threat_records_until_it_clears`); verified on the sim (recorded continuously through a
 sustained avoidance, stopped ~8 s after the threat went away → one 16.8 s clip).
+**Follow-up (retention):** added age-based cleanup — clips older than `max_age_days` (default **14**) are
+deleted, alongside the existing `max_clips` count cap. Pruned on every save, at `Recorder` construction,
+and hourly by the server feed (`prune_old()`), so stale clips go even with no new recordings. Age comes
+from the clip's metadata `started` (falls back to file mtime); `0` keeps forever. Config
+`recording.max_age_days`; +2 tests.
 
 ## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
 

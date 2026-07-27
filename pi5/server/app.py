@@ -2165,9 +2165,16 @@ async def _start_recorder_feed():
     async def _loop():
         queue = None
         last_eval = 0.0
+        last_prune = 0.0
         try:
             while True:
                 now = time.monotonic()
+                if now - last_prune > 3600.0:          # hourly age-retention sweep
+                    last_prune = now
+                    try:
+                        await asyncio.to_thread(_recorder.prune_old)
+                    except Exception:  # noqa: BLE001 — pruning must not kill the feed
+                        pass
                 if not (_recorder.sentry_enabled or _recorder.recording):
                     if queue is not None and _camera is not None:
                         _camera.unsubscribe(queue)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import numpy as np
 import pytest
@@ -123,6 +124,45 @@ def test_retention_prunes_to_max_clips(tmp_path):
         rec.stop()
     assert len(rec.list_clips()) == 2
     assert rec.status()["clip_count"] == 2
+
+
+def test_prunes_clips_older_than_max_age(tmp_path):
+    import os
+
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128, max_age_days=14))
+    for _ in range(2):
+        rec.start_manual()
+        rec.add_frame(_frame())
+        rec.stop()
+    assert len(rec.list_clips()) == 2
+
+    # Backdate one clip to 15 days ago (metadata start + file mtimes).
+    old_json = sorted(tmp_path.glob("clip-*.json"))[0]
+    m = json.loads(old_json.read_text())
+    m["started"] = time.time() - 15 * 86400
+    old_json.write_text(json.dumps(m))
+    past = time.time() - 15 * 86400
+    os.utime(old_json, (past, past))
+    os.utime(tmp_path / m["file"], (past, past))
+
+    assert rec.prune_old() == 1                       # only the stale one
+    files = {c["file"] for c in rec.list_clips()}
+    assert m["file"] not in files and len(files) == 1
+    assert not (tmp_path / m["file"]).exists()        # video gone too
+
+
+def test_max_age_zero_keeps_everything(tmp_path):
+    import os
+
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128, max_age_days=0))
+    rec.start_manual()
+    rec.add_frame(_frame())
+    rec.stop()
+    j = next(tmp_path.glob("clip-*.json"))
+    past = time.time() - 400 * 86400
+    os.utime(j, (past, past))
+    assert rec.prune_old() == 0                        # 0 disables age pruning
+    assert len(rec.list_clips()) == 1
 
 
 def test_delete_and_path_traversal_guard(tmp_path):

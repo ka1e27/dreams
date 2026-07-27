@@ -77,7 +77,8 @@ class RecorderConfig:
     retrigger_extend_s: float = 8.0  # keep recording this long after the threat clears
     cooldown_s: float = 6.0       # ignore identical re-triggers within this window
     width: int = 640              # frames are scaled to this width (keep aspect)
-    max_clips: int = 60
+    max_clips: int = 60           # oldest clips pruned beyond this count
+    max_age_days: float = 14.0    # clips older than this are deleted (0 = keep forever)
     jpeg_quality: int = 70
     sentry_default: bool = False
 
@@ -99,6 +100,10 @@ class Recorder:
         self._last_frame_mono = 0.0
         self._last_event_mono: float | None = None   # last sentry sighting
         self._seq = 0                            # guarantees unique clip names
+        try:
+            self._prune_by_age()                 # drop stale clips left from prior runs
+        except Exception:  # noqa: BLE001 — startup cleanup must never block construction
+            logger.debug("startup age-prune skipped", exc_info=True)
 
     # -- ingest ------------------------------------------------------------- #
     def add_frame(self, bgr: "np.ndarray", now: float | None = None) -> None:
@@ -362,13 +367,52 @@ class Recorder:
     def _count_clips(self) -> int:
         return sum(1 for _ in self.dir.glob("clip-*.json"))
 
+    def _delete_meta(self, json_path: Path) -> None:
+        """Delete a clip's video + its metadata sidecar."""
+        try:
+            m = json.loads(json_path.read_text(encoding="utf-8"))
+            (self.dir / m.get("file", "")).unlink(missing_ok=True)
+        except (OSError, ValueError):
+            pass
+        json_path.unlink(missing_ok=True)
+
+    def _clip_started(self, json_path: Path) -> float:
+        """A clip's wall-clock start time — from metadata, else the file mtime."""
+        try:
+            started = float(json.loads(json_path.read_text(encoding="utf-8")).get("started", 0.0))
+            if started > 0.0:
+                return started
+        except (OSError, ValueError):
+            pass
+        try:
+            return json_path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def _prune_by_age(self) -> int:
+        """Delete clips older than ``max_age_days`` (0 disables). Returns count."""
+        if self.cfg.max_age_days <= 0:
+            return 0
+        cutoff = time.time() - self.cfg.max_age_days * 86400.0
+        removed = 0
+        for j in list(self.dir.glob("clip-*.json")):
+            if self._clip_started(j) < cutoff:
+                self._delete_meta(j)
+                removed += 1
+        if removed:
+            logger.info("Pruned %d recording(s) older than %.0f days",
+                        removed, self.cfg.max_age_days)
+        return removed
+
+    def prune_old(self) -> int:
+        """Age-retention sweep the server can call periodically, even when
+        nothing is recording. Thread-safe."""
+        with self._lock:
+            return self._prune_by_age()
+
     def _prune(self) -> None:
+        self._prune_by_age()                       # age first...
         clips = sorted(self.dir.glob("clip-*.json"),
                        key=lambda p: p.stat().st_mtime, reverse=True)
-        for old in clips[self.cfg.max_clips:]:
-            try:
-                m = json.loads(old.read_text(encoding="utf-8"))
-                (self.dir / m.get("file", "")).unlink(missing_ok=True)
-            except (OSError, ValueError):
-                pass
-            old.unlink(missing_ok=True)
+        for old in clips[self.cfg.max_clips:]:     # ...then the count cap
+            self._delete_meta(old)

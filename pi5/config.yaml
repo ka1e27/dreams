@@ -458,7 +458,8 @@ recording:
   # threat still in view rolls over into a new segment, never cut off mid-event.
   max_clip_s: 300     # max length of a single clip segment before rollover
   retrigger_extend_s: 8  # keep recording this long after the threat is last seen
-  max_clips: 60       # oldest clips pruned beyond this
+  max_clips: 60       # oldest clips pruned beyond this count
+  max_age_days: 14    # clips older than this are auto-deleted (0 = keep forever)
   sentry_default: false  # arm sentry automatically on boot
 
 server:

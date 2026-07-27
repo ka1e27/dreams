@@ -233,6 +233,7 @@ def main() -> None:
             retrigger_extend_s=float(rec_cfg.get("retrigger_extend_s", 8)),
             width=int(rec_cfg.get("width", 640)),
             max_clips=int(rec_cfg.get("max_clips", 60)),
+            max_age_days=float(rec_cfg.get("max_age_days", 14)),
             sentry_default=bool(rec_cfg.get("sentry_default", False)),
         ),
     )
