@@ -86,6 +86,48 @@ def distance_and_bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> 
     return dist, brg
 
 
+def destination_point(lat: float, lon: float, bearing_deg: float,
+                      distance_m: float) -> tuple[float, float]:
+    """Project a point ``distance_m`` metres from (lat, lon) along ``bearing_deg``.
+
+    The forward (direct) geodesic on a sphere — the inverse of :func:`bearing` +
+    :func:`haversine_distance`: given where the boat is, which way it's looking
+    (compass bearing, 0-360, 0 = north), and how far away a thing is, this returns
+    the thing's latitude/longitude. It is what turns a camera detection (boat
+    fix + heading + object bearing + stereo range) into a map coordinate the
+    object memory can drop a marker at.
+
+    Uses the exact great-circle formula (not the equirectangular offset used on
+    the per-tick steering hot path), so it stays accurate at any bearing including
+    near the poles and across the ±180° meridian — geolocating a landmark happens
+    at a few Hz, so the extra trig is free.
+
+    Args:
+        lat, lon: Observer position (decimal degrees).
+        bearing_deg: Compass bearing to the target (degrees, 0-360, 0 = north,
+            90 = east). Values outside 0-360 are wrapped.
+        distance_m: Range to the target in metres (>= 0).
+
+    Returns:
+        (lat, lon) of the target in decimal degrees; longitude normalised to
+        (-180, 180].
+    """
+    ang = distance_m / EARTH_R                      # angular distance (radians)
+    brg = (bearing_deg % 360.0) * DEG_TO_RAD
+    r1 = lat * DEG_TO_RAD
+    lon1 = lon * DEG_TO_RAD
+    sin_r1, cos_r1 = math.sin(r1), math.cos(r1)
+    sin_ang, cos_ang = math.sin(ang), math.cos(ang)
+
+    sin_r2 = sin_r1 * cos_ang + cos_r1 * sin_ang * math.cos(brg)
+    r2 = math.asin(max(-1.0, min(1.0, sin_r2)))
+    lon2 = lon1 + math.atan2(math.sin(brg) * sin_ang * cos_r1,
+                             cos_ang - sin_r1 * sin_r2)
+    # Normalise longitude to (-180, 180].
+    out_lon = (lon2 * RAD_TO_DEG + 540.0) % 360.0 - 180.0
+    return r2 * RAD_TO_DEG, out_lon
+
+
 def heading_diff(current: float, target: float) -> float:
     """Shortest signed angle from current heading to target heading.
 

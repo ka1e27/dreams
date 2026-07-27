@@ -11,10 +11,17 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   :root{
-    --bg:#080810; --panel:#0e1018; --panel-2:#12141f;
-    --accent:#8b8cff; --accent-dim:rgba(129,140,248,.35);
-    --cyan:#38bdf8; --grid:rgba(129,140,248,.10);
-    --ok:#3ad37a; --warn:#ffb02e; --crit:#ff3b3b; --muted:#8a97ad;
+    /* Abyssal Indigo v2 — matches command_center.html */
+    --bg:#06070d;
+    --panel:#0d1019; --panel-2:#111524; --panel-3:#171d30;
+    --surface-hi:rgba(255,255,255,.045); --hairline:rgba(146,157,214,.12);
+    --accent:#8b93ff; --accent-2:#aab1ff; --accent-dim:rgba(129,140,248,.30);
+    --accent-soft:rgba(129,140,248,.10); --accent-glow:rgba(129,140,248,.10);
+    --cyan:#38bdf8; --cyan-hi:#7dd3fc; --grid:rgba(129,140,248,.05);
+    --ok:#3ad37a; --warn:#ffb02e; --crit:#ff3b3b; --muted:#8592ac; --ink:#e9f0fc;
+    --r-sm:5px; --r:9px;
+    --sh-2:0 12px 34px -10px rgba(0,0,0,.62),0 2px 8px rgba(0,0,0,.4);
+    --sh-glow:0 0 26px rgba(129,140,248,.08);
     --mono:'IBM Plex Mono',ui-monospace,monospace;
     --display:'Orbitron',sans-serif;
   }
@@ -22,28 +29,42 @@
   html,body{margin:0;height:100%}
   body{
     background:
-      radial-gradient(1200px 600px at 50% -10%, rgba(129,140,248,.06), transparent 60%),
-      var(--bg);
-    color:#cfe3ea; font-family:var(--mono); font-size:13px;
+      radial-gradient(1200px 620px at 50% -14%, rgba(129,140,248,.13), transparent 60%),
+      radial-gradient(1000px 560px at 88% 4%, rgba(56,189,248,.06), transparent 58%),
+      linear-gradient(180deg,#080a12,var(--bg));
+    color:var(--ink); font-family:var(--mono); font-size:13px;
     background-attachment:fixed;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    font-variant-numeric:tabular-nums;
   }
   .grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;
     background-image:linear-gradient(var(--grid) 1px,transparent 1px),
                      linear-gradient(90deg,var(--grid) 1px,transparent 1px);
-    background-size:40px 40px;mask:radial-gradient(120% 120% at 50% 0,#000,transparent 90%)}
-  .app{position:relative;z-index:1;display:flex;flex-direction:column;gap:12px;padding:12px;
-    height:100vh;max-width:1700px;margin:0 auto}
-  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
-    padding:10px 16px;border:1px solid var(--accent-dim);border-radius:8px;
-    background:linear-gradient(180deg,rgba(129,140,248,.08),transparent);
-    box-shadow:0 0 24px rgba(129,140,248,.08) inset;flex-shrink:0}
-  header h1{font-family:var(--display);font-weight:900;letter-spacing:.18em;
-    margin:0;font-size:20px;color:#fff;text-shadow:0 0 18px var(--accent-dim)}
-  header h1 b{color:var(--accent)}
-  header .sub{color:var(--muted);letter-spacing:.3em;font-size:10px;margin-left:14px}
-  .links a{color:var(--muted);text-decoration:none;margin-left:8px;font-size:11px;letter-spacing:.12em;
-    text-transform:uppercase;padding:5px 11px;border:1px solid var(--accent-dim);border-radius:5px;transition:.15s}
-  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(56,189,248,.06)}
+    background-size:44px 44px;mask:radial-gradient(130% 120% at 50% -6%,#000 8%,transparent 82%)}
+  .grid-bg::after{content:"";position:absolute;inset:-20% -10%;
+    background:radial-gradient(680px 420px at 20% 12%,rgba(129,140,248,.06),transparent 60%),
+              radial-gradient(560px 420px at 82% 78%,rgba(56,189,248,.05),transparent 62%);
+    animation:aurora 34s ease-in-out infinite alternate}
+  @keyframes aurora{0%{transform:translate3d(-2%,-1%,0) scale(1)}100%{transform:translate3d(3%,2%,0) scale(1.08)}}
+  .app{position:relative;z-index:1;display:flex;flex-direction:column;gap:14px;padding:16px;
+    height:100vh;max-width:1720px;margin:0 auto}
+  header{position:relative;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+    padding:13px 20px;border:1px solid var(--hairline);border-radius:var(--r);flex-shrink:0;overflow:hidden;
+    background:linear-gradient(180deg,var(--surface-hi),transparent 40%),
+              linear-gradient(180deg,rgba(129,140,248,.10),rgba(13,16,25,.6));
+    box-shadow:var(--sh-2),0 1px 0 var(--surface-hi) inset}
+  header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--accent) 20%,var(--cyan) 50%,var(--accent) 80%,transparent);
+    opacity:.55;mask:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
+  header h1{font-family:var(--display);font-weight:900;letter-spacing:.17em;
+    margin:0;font-size:21px;color:#fff;text-shadow:0 0 22px rgba(129,140,248,.45);white-space:nowrap}
+  header h1 b{color:var(--accent-2)}
+  header .sub{color:var(--muted);letter-spacing:.34em;font-size:9.5px;margin-left:14px;text-transform:uppercase}
+  .links a{color:var(--muted);text-decoration:none;margin-left:8px;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;padding:6px 12px;border:1px solid var(--hairline);border-radius:var(--r-sm);
+    transition:.16s;background:rgba(255,255,255,.015)}
+  .links a:hover{color:var(--cyan);border-color:var(--cyan);background:rgba(56,189,248,.08);
+    box-shadow:0 0 14px rgba(56,189,248,.15)}
   .lbl{color:var(--muted);font-size:10px;letter-spacing:.18em}
   /* ---- status dot (mirrors command_center.html's .dot/.dot.live/.dot.warn
      contract; JS here sets style.background/boxShadow directly on state
@@ -53,12 +74,17 @@
   /* ---- layout ---- */
   .plan-grid{display:grid;grid-template-columns:1fr 400px;gap:12px;flex:1;min-height:0}
   @media(max-width:1000px){.plan-grid{grid-template-columns:1fr}.side{max-height:50vh}}
-  .panel{border:1px solid var(--accent-dim);border-radius:8px;background:var(--panel);
-    box-shadow:0 0 0 1px rgba(0,0,0,.4),0 0 30px rgba(129,140,248,.05) inset;
-    display:flex;flex-direction:column;min-height:0;overflow:hidden}
-  .pnl-hd{font-family:var(--display);font-weight:700;letter-spacing:.22em;font-size:11px;color:var(--accent);
-    padding:8px 12px;border-bottom:1px solid var(--accent-dim);display:flex;align-items:center;gap:9px;
-    background:rgba(129,140,248,.04);flex-shrink:0}
+  .panel{border:1px solid var(--hairline);border-radius:var(--r);
+    background:linear-gradient(180deg,var(--surface-hi),transparent 90px),
+              linear-gradient(180deg,var(--panel-2),var(--panel));
+    box-shadow:var(--sh-2),0 1px 0 var(--surface-hi) inset;
+    display:flex;flex-direction:column;min-height:0;overflow:hidden;transition:box-shadow .25s,border-color .25s}
+  .panel:hover{border-color:var(--accent-dim);box-shadow:var(--sh-2),var(--sh-glow),0 1px 0 var(--surface-hi) inset}
+  .pnl-hd{position:relative;font-family:var(--display);font-weight:700;letter-spacing:.2em;font-size:11px;
+    color:var(--accent-2);padding:11px 14px;border-bottom:1px solid var(--hairline);display:flex;align-items:center;gap:9px;
+    background:linear-gradient(180deg,rgba(129,140,248,.07),transparent);flex-shrink:0;text-shadow:0 0 14px var(--accent-glow)}
+  .pnl-hd::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:15px;border-radius:0 3px 3px 0;background:var(--accent);box-shadow:0 0 10px var(--accent-dim)}
   .pnl-hd .sp{flex:1}
   /* ---- map ---- */
   .map-wrap{position:relative;flex:1;min-height:300px}
@@ -90,9 +116,13 @@
   input[type=text],input[type=number],select{background:#080812;color:#dbeef5;border:1px solid var(--accent-dim);
     border-radius:5px;padding:7px 9px;outline:none}
   input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 1px var(--cyan)}
-  .cbtn{cursor:pointer;background:rgba(129,140,248,.1);color:var(--accent);border:1px solid var(--accent);
-    border-radius:5px;padding:7px 12px;letter-spacing:.1em;font-size:11px;transition:.15s;white-space:nowrap}
-  .cbtn:hover{background:var(--accent);color:#0a0a14;box-shadow:0 0 14px var(--accent-dim)}
+  .cbtn{cursor:pointer;background:linear-gradient(180deg,var(--accent-soft),rgba(129,140,248,.03));
+    color:var(--accent-2);border:1px solid var(--accent-dim);
+    border-radius:var(--r-sm);padding:7px 13px;letter-spacing:.1em;font-size:11px;font-weight:500;
+    transition:.16s;white-space:nowrap;box-shadow:0 1px 0 var(--surface-hi) inset}
+  .cbtn:hover{background:linear-gradient(180deg,var(--accent-2),var(--accent));color:#080a14;
+    border-color:var(--accent-2);box-shadow:0 0 16px var(--accent-dim),0 1px 0 rgba(255,255,255,.25) inset}
+  .cbtn:active{transform:translateY(1px)}
   .cbtn.danger{color:var(--crit);border-color:var(--crit);background:rgba(255,59,59,.08)}
   .cbtn.danger:hover{background:var(--crit);color:#fff;box-shadow:0 0 14px rgba(255,59,59,.45)}
   .cbtn.ghost2{color:var(--muted);border-color:var(--muted);background:transparent}

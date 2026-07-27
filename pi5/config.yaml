@@ -318,6 +318,31 @@ vision:
   # Camera horizontal FOV — for mapping a bbox to a bearing (bbox → radar angle).
   fov_degrees: 75
 
+  # --- Persistent GPS-anchored object memory (pi5/cv/object_memory.py) ---
+  # Geolocates confirmed detections (boat fix + heading + bbox bearing + stereo
+  # range) and remembers them as markers on the map. A marker only drops once an
+  # object has been seen enough times to CONFIRM it; further sightings just refine
+  # the stored coordinate (inverse-distance weighted — closer looks count more).
+  # Buoys/docks/rocks are PERMANENT (kept); people/boats/debris are TRANSIENT
+  # (forgotten transient_ttl_s after they're last seen). Class→category lives in
+  # object_memory.py. Needs stereo range, so it's a no-op on a mono rig.
+  object_memory:
+    enabled: true
+    confirm_sightings: 3        # agreeing looks before a marker drops (anti-false-positive)
+    match_radius_m: 6.0         # base spatial gate for "same object" (metres)
+    match_radius_frac: 0.08     # + this × range (far fixes are noisier → wider gate)
+    match_radius_max_m: 25.0    # cap on the gate
+    transient_ttl_s: 45.0       # forget a confirmed person/boat this long after last seen
+    candidate_ttl_s: 12.0       # drop an unconfirmed candidate this fast (noise)
+    permanent_ttl_s: 0.0        # 0 = keep buoys/docks for the whole session
+    max_range_m: 60.0           # ignore detections ranged beyond this (stereo unreliable)
+    min_confidence: 0.30        # ignore detections below this confidence
+    max_objects: 200            # memory cap (drops least-valuable first)
+    # Once a landmark is charted, don't lock the radar bar re-observing it — keep
+    # scanning for the unknown even with known things nearby (CRITICAL threats
+    # like vessels/people are always tracked regardless).
+    release_radar_on_known: true
+
   threat_tracking:
     enabled: true
     # Class → threat level lives in pi5/cv/threat_assessor.py (THREAT_LEVELS).

@@ -62,8 +62,8 @@ def _health_string():
     flags = ""
     flags += "1" if gps.is_healthy() else "0"
     flags += "1" if compass.is_healthy() else "0"
-    flags += "1" if (sensors.prop_batt_v > 5.0) else "0"
-    flags += "1" if (sensors.elec_batt_v > 3.0) else "0"
+    flags += "0" if sensors.is_prop_critical() else "1"
+    flags += "0" if sensors.is_elec_critical() else "1"
     flags += "1" if (escs.max_motor_temp() < 85.0) else "0"
     flags += "1" if pod_uart.is_healthy() else "0"
     return flags

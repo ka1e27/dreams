@@ -132,9 +132,10 @@ class WaveDetector:
         # --- horizon ---
         if water_mask is not None:
             mask = cv2.resize(water_mask, (pw, ph), interpolation=cv2.INTER_NEAREST)
-            hy = np.array([
-                (np.argmax(mask[:, x] > 0) if mask[:, x].any() else ph) for x in range(pw)
-            ], dtype=np.float32)
+            # First water row per column (vectorized): argmax finds the first
+            # True down each column; columns with no water fall back to ph.
+            binary = mask > 0
+            hy = np.where(binary.any(axis=0), binary.argmax(axis=0), ph).astype(np.float32)
             slope = float(np.polyfit(np.arange(pw), hy, 1)[0]) if pw >= 8 else 0.0
             med = float(np.median(hy))
         else:

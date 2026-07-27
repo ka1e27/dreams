@@ -12,9 +12,10 @@ import logging
 import uvicorn
 
 from pi5.comms.pod_bridge import PodBridge
+from pi5.cv.object_memory import ObjectMemory
 from pi5.navigation.mission_manager import MissionManager
 from pi5.navigation.navigator import Navigator
-from pi5.navigation.sim_obstacles import ObstacleField, SimAvoider
+from pi5.navigation.sim_obstacles import ObstacleField, SimAvoider, SimObjectMapper
 from pi5.navigation.simulator import BoatSimulator
 from pi5.server.app import app, configure
 
@@ -41,6 +42,13 @@ def main():
     obstacles = ObstacleField()
     avoider = SimAvoider(obstacles, nav)
 
+    # Persistent object memory + a ground-truth "sensor" that feeds it, so the
+    # GPS-anchored buoy/landmark map (confirm → drop marker → refine → forget)
+    # runs end-to-end without a camera. Drop a "buoy" or "person" obstacle and
+    # watch it get confirmed onto the command-center map.
+    object_memory = ObjectMemory()
+    mapper = SimObjectMapper(obstacles, object_memory)
+
     # Inject into the FastAPI app
     configure(
         pico=pico,
@@ -52,6 +60,7 @@ def main():
         cors_origins=["http://localhost:5173", "http://localhost:3000"],
         simulator=sim,
         obstacle_field=obstacles,
+        object_memory=object_memory,
     )
 
     avoid_task: list[asyncio.Task] = []
@@ -61,6 +70,9 @@ def main():
         while True:
             try:
                 avoider.update(sim.lat, sim.lon, sim.heading)
+                # Same tick, feed the object map from ground truth (the sim's
+                # stand-in for the vision pipeline geolocating detections).
+                mapper.update(sim.lat, sim.lon, sim.heading)
             except Exception as e:  # noqa: BLE001 — a glitch must not kill the loop
                 logging.getLogger("run_sim").debug("sim avoid error: %s", e)
             await asyncio.sleep(0.25)

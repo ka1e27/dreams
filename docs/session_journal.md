@@ -31,6 +31,116 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-26 — 5-agent code audit (fixes applied) + dashboard HTML redesign to "10/10"
+
+**Worked on:** user asked to (a) finish the interrupted verification — 5 max-effort (Opus) agents
+checking the whole stack for correctness + efficiency — and (b) lift the served HTML dashboards from
+a self-rated 7/10 to a 10/10.
+**Audit (5 parallel Opus agents; baseline healthy: 234 tests green, ruff clean, both Vite builds pass,
+both inline `<script>`s valid).** Applied the *verified, safe* findings; rejected/​skipped the rest with
+reasons:
+- `pi5/navigation/navigator.py` — **CRITICAL** div-by-zero guard: `compute_throttle`'s turn-blend
+  divided by `(max_heading_error_deg − heading_tolerance_deg)` unguarded while the sibling `_steer_to`
+  already used `max(1.0, …)`; made them consistent.
+- `pi5/server/app.py` — **event-loop unblocking**: `/ws/camera` now offloads StereoSGBM + `cv2.imencode`
+  to the executor (mirrors `/video`); `/api/paths` read/write moved to `asyncio.to_thread`; `/api/pod/history`
+  `limit` clamped to ≤5000 (was unbounded → OOM/DoS vector).
+- `pi5/cv/wave_detector.py` — vectorised the water-mask horizon scan (per-column Python loop → numpy
+  `argmax`/`where`; dormant path, ~30× when used).
+- `firmware/boat-pico/main.py` — health-flag battery bits now use the real `is_prop_critical()`/
+  `is_elec_critical()` predicates (were `>5.0`/`>3.0` → always "healthy"; telemetry-accuracy only).
+- `cloud/api/app.py` — `list_missions` now bounded (`limit` Query ≤2000, was unbounded).
+- `dashboard/src/components/BoatMap.jsx` — waypoint markers use a stable key, not the array index.
+- **Rejected on verify:** the "WebSocket client-list race" (single-thread asyncio; no iteration during
+  send) and the SBUS `push_thresh 8→32` one-liner (8 = autopush **bit** count = 1 byte/word; bumping it
+  repacks 4 bytes/word and **breaks SBUS framing** unless the reader is redesigned — left as a real
+  follow-up, not a one-liner). Skipped `threat_assessor` deque (negligible, deque-slice risk) and the
+  `run_sim` ObjectMemory-config wiring (sim harness ignores `config.yaml` for *every* component — kept
+  consistent).
+**HTML redesign — command_center.html + waypoint_planner.html → "Abyssal Indigo v2":** used the dataviz
+skill's method. New layered-glass design system (elevation/hairline/surface tokens, restrained glow as a
+*signal* not decoration, `tabular-nums` on every live readout so digits don't jitter, ambient aurora
+wash). Header became a real command bar (live local clock + mission-elapsed **T+** timer keyed off the
+mission badge, grouped connection cluster with breathing live-dots, animated hairline scan). Section/panel
+shells got glass depth + a left accent-tab header rule. Flagship upgrade: the crude rotating-border ESC
+temp gauge → a proper **animated conic-sweep ring** (`@property --deg`, colour-shifts ok→warn→crit) inside
+framed per-motor instrument cards; ESC current bars, status chips, buttons, dots, wave-alert + boat-health
+tiles all refined. Planner brought onto the same system.
+**Verified (on the Pi):** `pytest pi5/tests` **234 green**, ruff clean, firmware `py_compile` OK, both
+templates' inline `<script>` pass `node --check`, dashboard Vite build clean. Booted the sim and
+round-tripped the changed endpoints over real HTTP: `/api/paths` GET/POST/DELETE, `/api/pod/history?limit=
+999999999` clamps (no OOM), `/` and `/planner` both 200. Rendered both templates in headless Chromium
+(fonts/leaflet/monaco stubbed, canned telemetry through the real render path) and eyeballed the result —
+reads as designer-grade in both. Screenshots in the session scratchpad.
+**Decisions / open questions:** SBUS FIFO under-drain is still a *plausible* margin risk — wants a real
+PIO redesign (pack 4 bytes/word + unpack in the reader), not the mislabelled one-liner. The headless
+render falls back off Orbitron (web font hangs headless Chromium on this ARM Pi) — live page unaffected.
+**Next steps:** on-bench/on-water passes still outstanding from prior entries (ESC over `/dev/ttyAMA0`,
+telemetry-on-GP16 with a motor spinning, real maritime model). Nothing committed — tree left for review.
+
+## 2026-07-26 — GPS-anchored object memory (buoys/landmarks charted on the map)
+
+**Worked on:** new feature — the boat now **remembers where objects are on the water**. When vision
+confirms a buoy (or dock/rock/person), it geolocates it and drops a marker on the GPS map; once
+charted it re-verifies the coordinate on each later sighting instead of re-dropping, and doesn't tie
+up the radar re-observing it — so it keeps scanning for the unknown even with known things nearby.
+Permanent marks (buoys/docks/rocks) are kept; transient movers (people/boats) expire after a TTL.
+**Changed:**
+- `pi5/navigation/geo.py` — new `destination_point()` (forward geodesic): boat fix + true bearing +
+  range → object lat/lon. The inverse of `bearing`/`haversine`. +6 tests.
+- `pi5/cv/object_memory.py` (NEW) — `ObjectMemory`: geolocates detections, matches by **world
+  coordinate** (survives looking away/back), confirms after N agreeing sightings (then a marker
+  drops), refines with an inverse-distance²-weighted mean, and ages out transients/candidates.
+  Class→category (PERMANENT vs TRANSIENT) here. +32 tests.
+- `pi5/cv/pipeline.py` — feeds every ranged detection into the memory (bearing off the bow =
+  `heading + bbox offset`; cameras are fixed-forward, the stepper is a *separate* radar bar), ages it
+  each tick, exposes `map_objects()` + `vision_state()["object_memory"]`, and **releases the radar
+  from confirmed non-CRITICAL landmarks** (`release_radar_on_known`) so it keeps scanning. +6 pipeline
+  tests.
+- `pi5/server/app.py` — `GET /api/map/objects`, `POST /api/map/objects/clear` (reads the pipeline's
+  memory on hardware, a standalone one in sim); `configure(object_memory=…)`.
+- `pi5/navigation/sim_obstacles.py` — `SimObjectMapper` feeds the memory from ground truth (the sim's
+  stand-in for vision), wired into `run_sim.py`. +4 tests.
+- UI: command center `command_center.html` — object marker layer polling `/api/map/objects` (cyan
+  permanent / amber transient, hover label + detail popup) + **SIM MAP** DROP BUOY / DROP PERSON /
+  CLEAR MARKS buttons (sim-only). React `dashboard/` — `useMapObjects` hook + `BoatMap.jsx` markers.
+- `pi5/config.yaml` — new `vision.object_memory` block. Docs: `docs/object_memory.md`.
+**Verified (on the Pi):** `pytest pi5/tests` **234 green** (+40), ruff clean, command-center inline
+`<script>` passes `node --check`, `dashboard` Vite build clean. Booted the sim and drove the whole
+lifecycle over the real endpoints twice: dropped a buoy 18 m ahead → confirmed **PERMANENT** marker
+geolocated to **18.1 m / bearing 359.8°** (matches ground truth to ~0.1 m); person → **TRANSIENT**;
+markers **persist after the obstacles are removed** (remembered); two buoys stay distinct (9.1 m
+apart) while an out-of-cone one isn't seen; a repeat drop **refines, not duplicates**; CLEAR MARKS
+wipes them. Transient TTL / permanent persistence are covered by deterministic unit tests.
+**Decisions / open questions:** object memory needs **stereo range** to place a detection → no-op on a
+mono rig (documented). Marker identity is the world coordinate + class; the vessel synonym set
+(boat/vessel/boats) is canonicalised. Not yet exercised on-water with a real detector (bench next).
+**Next steps:** on-water pass with the camera + a real buoy; tune `confirm_sightings`/`match_radius_m`
+against live stereo noise; consider persisting the memory across restarts. Nothing committed — tree
+left for review.
+**Follow-up (independent verification pass — on the Pi):** re-verified the whole feature end to end,
+nothing changed in the code. Static: `pytest pi5/tests` **234 green** (targeted object-memory/geodesic
+subset **35 green**), ruff clean across all 10 touched files, command-center inline `<script>` passes
+`node --check`, dashboard **Vite build clean**. Independent numerical check of the forward geodesic
+(`destination_point` round-tripped against `haversine`/`bearing`): **worst distance error 0.000 cm over
+77 cases** (bearings 0-359.5°, ranges 1 m-5 km), bearings back to <0.05°, +180° meridian wraps
+correctly. Independent live lifecycle over the **real HTTP endpoints** (fresh sim boot): buoy dropped
+18 m ahead confirmed after 3 sightings and **geolocated 0.19 m from sim ground truth**; person →
+TRANSIENT; two distinct markers; repeat sightings **refined one object** (id stable, sightings 7→11,
+0.04 m drift, no duplicate); markers **persisted after the obstacles were deleted**; CLEAR wiped them.
+Code confirmations: the `distance_m` fed to the memory is the overlay's **stereo** value (mono
+`_fallback_distance` is used only on the avoidance path) → the "mono rig = no-op" claim holds; the
+hardware pipeline maps all 11 `vision.object_memory` config keys 1:1; both UIs (command center +
+`BoatMap.jsx`) render markers identically (cyan permanent / amber transient) and XSS-safe. The
+sim-only path the live run can't reach — **radar-release-on-known** — is covered by
+`test_pipeline_radar_releases_known_buoy_keeps_scanning`. **Two benign notes (not bugs):** (1)
+`run_sim.py` builds `ObjectMemory()` with defaults — consistent with the sim harness ignoring
+`config.yaml` for every component; config wiring lives on the hardware path + unit tests, so a config
+change is only felt in sim if `run_sim` is taught to load it. (2) `known_confirmed_near` uses a fixed
+6 m radius in the radar-release check (not range-scaled), so releasing the bar may under-fire for a
+landmark geolocated from a long/noisy range — conservative (keeps tracking), an on-water tuning knob.
+Still nothing committed.
+
 ## 2026-07-26 — Designer-grade ESC Settings editor (dashboard) + endpoints + tests
 
 **Worked on:** finished the interrupted ESC-config UI. A prior session had refactored
@@ -216,137 +326,6 @@ read was shredding GPS fixes and the pod leak frame). **S2** — `serial_handler
 byte-at-a-time behind a `POLLOUT` poll (`_stdout_poll`) and drops the rest of a frame under back-pressure,
 so a Pi that stops draining the CDC can no longer wedge the asyncio loop and starve the heartbeat
 watchdog. S1/S2 changes (`main.py`, `serial_handler.py`) + this note uncommitted.
-
-## 2026-07-25 — Deep review: LOS nav, obstacle avoidance wired, vision perf, Abyssal Indigo UI
-
-**Worked on:** user asked for an extremely thorough review + make it run *great*, research-backed
-vision/nav optimization, and a non-orange UI redesign. This session's changes were **run + tested**
-(venv pytest: 123→144 green, ruff clean, sim booted and probed live in-browser). Full write-up in
-`docs/code_review_2026-07.md`.
-**Changed:**
-- **Obstacle avoidance was dead code** — `AvoidanceLoop` (ran a *duplicate* YOLO) was never
-  instantiated and the pipeline never steered around threats. Rewrote `pi5/cv/avoidance.py` into a
-  pure, tested `reactive_avoidance()` rule (bearing+range → slow & bear away; head-on → starboard per
-  COLREGS); `pi5/cv/pipeline.py` now pushes a steer-away override into the navigator (wired
-  `navigator=nav` in `run_hardware.py`). Live **AVOID** toggle + `POST /vision/avoidance/toggle`.
-- **Navigation:** added lookahead **LOS + ILOS** guidance and cross-track error to
-  `pi5/navigation/geo.py`; `Navigator.compute_throttle` steers to the LOS course when a leg start is
-  given (legacy point-at-target kept for no-leg + old tests); `MissionManager` anchors each leg to the
-  previous waypoint. New `test_los.py` (10 tests incl. convergence rollout) + `test_avoidance.py` (11).
-- **Config gap:** `run_hardware.py` ignored the whole `navigation:` block — added `_nav_config()`.
-  New config keys: `navigation.los_*`, `camera.stereo_wls`, `vision.reactive_avoidance` (replaced the
-  stale top-level `avoidance:` block).
-- **Vision perf:** new `pi5/cv/ort_utils.py` (ONNX Runtime graph-opt=ALL + 4-thread + XNNPACK) used by
-  the detector and segmenter; `pi5/cv/stereo.py` SGBM 3-way + preFilterCap + optional WLS disparity
-  filter for textureless water (`opencv-contrib`, graceful fallback).
-- **UI:** rethemed `command_center.html` + `waypoint_planner.html` from amber → **Abyssal Indigo**
-  (0 residual orange, verified in-browser, no console errors); added AVOID toggle + Cross-Track
-  telemetry readout. `NavStateOut` gains `cross_track_m`/`course_deg`/`avoiding`.
-- **Docs:** `docs/vision_optimization.md`, `docs/navigation_guidance.md`, `docs/code_review_2026-07.md`.
-**Follow-up (same session — user asked for tasks 1 & 2 + a drive-battery change):**
-- **Stereo sync (review A4):** `CameraProducer` now grabs both handles back-to-back then decodes both
-  (`_grab_retrieve` + `_account`), cutting stereo capture skew from a decode-time to ~one grab
-  (`test_camera.py`).
-- **Sim obstacle injection:** new `pi5/navigation/sim_obstacles.py` (`ObstacleField` + `SimAvoider`)
-  drives the real reactive rule into the real navigator from ground truth; wired into `run_sim.py`
-  (~4 Hz task) + `GET/POST/DELETE /api/sim/obstacles` + a **DROP OBSTACLE** map button. Avoidance now
-  runs end-to-end in sim, and faithfully shows the reactive **local-minimum** limit (a hazard dead on
-  the goal line is orbited, not passed — collision-free but no progress; documented, VFH/bug planner is
-  the upgrade). Gave `min_forward_frac` a 0.2 default so the boat arcs vs stalls.
-- **Drive battery → 2× M18 PARALLEL (18 V)** for the twin 2814 motors (was 2× series 36 V): firmware
-  `sensors.py` thresholds → single-M18 (21/15/17/16), `INV_P_RATIO` kept 14.0 (existing 130k/10k divider
-  reads 21 V→1.5 V correctly — no resistor rework; 56k/10k+6.6 optional). Updated `config.yaml`,
-  `simulator.py` (drive now ~20.5 V/91 %, verified live), `docs/battery_architecture.md`, `CLAUDE.md`.
-  Gotcha documented: 2× parallel = 18 V is **below 6S (22 V)**, so the 2814s make less than their
-  1330 W/6S rating; cap VESC **battery** current per motor (~45 A on HO 6Ah) so the two don't overdraw
-  the pair. Added `navigation.motor_gain_left/right` per-motor trim for the different-Kv 2814s
-  (`Navigator._trim`, tested); the heading loop nulls the residual crab.
-**Follow-up 2 (same session — user asked for the bug escape + confirmed plain ESCs):**
-- **Bug-style escape** (`pi5/cv/avoidance.py:AvoidanceController`): wraps the memoryless reactive rule
-  with commit-to-a-side + pass-detection (bearing behind the beam when tracked, or a blind `pass_hold_s`
-  when sight is lost). `reactive_avoidance` gained `force_side`. Wired into `SimAvoider` (tracks the
-  committed obstacle 360° so release is exact) and `pipeline._drive_avoidance`. Result: the boat now
-  **routes past** a dead-centered blocking obstacle to the waypoint (was orbiting) — verified against the
-  real `BoatSimulator` motion model (centered + offset, minsep ~8.8 m vs 4 m radius, arrives). New config
-  `vision.reactive_avoidance.pass_bearing_deg/pass_hold_s`; +5 controller tests.
-- **Drive = ESCs off the Pico (no VESC), identified as NeutronRC 70A-G071 (AM32).** Firmware already does
-  plain PWM ESCs (`firmware/boat-pico/escs.py`, GP2/GP3, 50 Hz servo PWM) — no code change; the -1..1→
-  1.0-2.0 ms mapping already matches AM32 bidirectional mode. These are AM32 (STM32G071) crawler/robot
-  ESCs, NOT "dumb": configurable firmware with current telemetry + protections, so I corrected the earlier
-  VESC/dumb-ESC framing. New **`docs/esc_setup.md`** — the required AM32 config: **Bi-directional mode ON**
-  (else reverse pulses idle and the boat can't pivot/back away — the navigator commands negative throttle),
-  5S LVC, low-RPM-power-protect OFF, stall/brake tuning, current limit ~45 A/motor if the AM32 build has it.
-  The pack (~90 A HO-6Ah pair) is the tighter limit vs the 70 A ESCs. Updated `escs.py` docstring,
-  `docs/battery_architecture.md`, `CLAUDE.md`. Kv trim via `motor_gain_*` + firmware `COMP_L/COMP_R`.
-Suite now **164 green**, ruff clean.
-**Follow-up 3 (same session — user asked to build the AM32 passthrough to test on the Pi later):**
-- **AM32 ESC passthrough through the Pico** — configure the drive ESCs in place (no USB linker), like
-  FC BLHeli/AM32 passthrough. `firmware/boat-pico/esc_passthrough.py`: a **PIO half-duplex one-wire UART**
-  on GP2/GP3 + a transparent USB-CDC↔ESC bridge; entered via a new `ESC_PASS,<esc>,<baud>` serial command
-  (mirrors the REFLASH pattern — stops motors, cancels tasks, hands over the CDC, `machine.reset()` on
-  exit). Pi driver `pi5/scripts/esc_passthrough.py` (`enter` for the am32.ca workflow — am32.ca connects
-  straight to /dev/ttyACM0; `probe`/`scan` for scripted bring-up + baud discovery). Doc
-  `docs/esc_passthrough.md` with the ordered validation plan (PIO UART loopback → baud scan → am32.ca).
-  **⚠ UNTESTED — no hardware yet.** Firmware py_compiles, Pi script ruff-clean. Research: AM32 signal-line
-  is a BLHeli-derived one-wire link (am32.ca "Arduino PC Link" ref); baud not publicly pinned → parameterised
-  + `scan` sweeps it. Risky bits (PIO timing, half-duplex turnaround, baud, bootloader-entry) isolated +
-  flagged for on-Pi iteration.
-- **User plans to install Claude Code on the Pi** to run the hardware-in-the-loop validation (real Pico +
-  ESC). That closes most of the "verify on Pi later" gaps (camera FPS, serial link, and this passthrough).
-- **⚙ MOTORS button** added to the command center (COMMANDS→DRIVE) → a Motor Configuration modal:
-  per-motor **trim** (fully working — `GET/POST /api/nav/motor-trim`, browser-verified) + **ESC config**
-  (arms the AM32 passthrough via `POST /api/esc/passthrough` → sends ESC_PASS, drops the link; hardware-only,
-  400s cleanly in sim). `PicoSerial.esc_passthrough()` added. All browser-verified, no console errors.
-**Decisions / open questions:** ILOS gain defaults to 0 (field-tune on a flowing river). WLS off by
-default. `pi5/cv/detector.py` orphaned — candidate for deletion. Bug escape handles one blocking obstacle
-at a time; dense multi-obstacle fields still want VFH/DWA. ESC passthrough is unvalidated scaffolding.
-**Next steps:** (1) **on-Pi validation of the ESC passthrough** — PIO UART loopback → baud scan → am32.ca
-(see `docs/esc_passthrough.md`); (2) flash AM32 ≥v1.99 + enable Bi-directional mode + bench-verify reverse
-before first spin-up; (3) end-to-end ONNX detector test + measure real vision FPS on the Pi; (4) YOLO→NCNN
-or Hailo-8L; (5) confirm drive divider / whether to fit 56k/10k. Nothing committed — working tree left for
-the user to review.
-
-## 2026-07-24 — Whole-project multi-agent review + efficiency/design pass
-
-**Worked on:** user asked for a full review of the whole D.R.E.A.M.S codebase — make it efficient and
-the UIs designer-grade. Ran 9 directory-partitioned review agents in parallel. Nothing could be
-executed (no Python/Node/ruff in this Windows session), so ALL edits are **static-review-only** — run
-`pytest pi5/tests`, the two Vite builds, and the on-Pi checks below before trusting them.
-**Changed (highlights):**
-- `cloud/api` — SRID insert bug fixed (`ST_SetSRID(ST_MakePoint,4326)`); 6 DB routes `async def`→`def`
-  (sync `Session` was blocking the event loop); `init_db` now creates `postgis`+`btree_gist` before
-  `create_all` (the GiST index over timestamp+geometry needs btree_gist); indexes on `mission_name`
-  and `(mission_name,timestamp)`; `pool_pre_ping`; non-root Dockerfile + HEALTHCHECK.
-- `pi5/comms` — ALERT 2-field detail no longer truncated; pod poll loop survives a link-down; bounded
-  nmcli wifi-connect. `pi5/data/uploader` — offline-buffer race fixed (pop-before-await) + blocking
-  saves → `asyncio.to_thread`. `pi5/server/app` — 7 vcgencmd probes `gather`ed; ws pump guard;
-  `_pico_port_lock` around the /pico reflash endpoints.
-- `pi5/navigation` — **fixed a real pause/resume deadlock** (`pause()` cleared the nav target via
-  `stop_nav()` but `resume_mission()` never re-issued `goto()`/`hold()` → hung forever); added a
-  bit-identical `distance_and_bearing()` to halve per-tick trig; removed dead `_on_wp_arrived`.
-- `pi5/cv/segmentation` — fixed the `_seg_mask` NCHW channel-axis heuristic (the 2 new NCHW tests were
-  RED; real eWaSR (1,3,384,512) preserved) and routed the TFLite path through the same config-driven
-  reducer (was hardcoded `water_class=0`, inverting eWaSR-convention models). A review agent verified
-  the 2026-07-24 stereo-downscale rescaled-Q and `blobFromImage` changes are metrically/geometrically
-  CORRECT.
-- Front-end — `command_center.html`/`waypoint_planner.html` polish (WCAG-AA contrast, focus-visible,
-  reduced-motion, responsive Pico terminal; **no `<script>` touched**; visually QA'd in a browser).
-  React `dashboard/` + `cloud/map-viewer/` code+design passes (re-render/leak/race fixes, Leaflet CSS
-  self-hosted for field/offline use, canvas heatmap, componentized styling). `ml/` — determinism
-  (`sorted()`+seeds), hardlinked dataset copies, dead-import removal.
-- Cross-cutting — health-flag byte 4 relabelled **DHT→E_BAT** across `app.py`, `command_center.html`,
-  and `serial-protocol.md` (firmware truth = electronics battery; the React dashboard was already
-  correct); `run_hardware` `stream_fps` default 15→30; CI `head_commit.modified` path filters removed
-  (they never matched → cloud/dashboard/map-viewer jobs silently skipped on push).
-**Decisions / open questions:** **Firmware was audited REVIEW-ONLY (no edits)** — safety-critical and
-untestable here. Real items to fix + bench-test: **S1** UART1 is drained by two tasks → `$POD` (incl.
-leak) frames can be lost; **S2** a blocking USB `stdout.write` can freeze the loop so the software
-watchdog never ESTOPs, and there's no hardware WDT; **S3** the SBUS PIO samples 9 cycles/bit not 8 →
-RC override may never decode (verify on a scope); **S4** on this single-hull branch a one-hull leak
-only WARNs (doesn't ESTOP). Did NOT modernize `on_event`→`lifespan` (risky without a runtime).
-**Next steps:** on the Pi/laptop — `pytest pi5/tests` (the 2 seg tests should now be GREEN), `python
-run_sim.py` and exercise **pause/resume mid-transit and mid-DATA-waypoint** (the changed uncovered
-path), then `npm run dev` both UIs for a visual pass; then triage the firmware S1–S4 safety findings.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

@@ -4,7 +4,12 @@ Validates against known reference values and edge cases.
 """
 import pytest
 
-from pi5.navigation.geo import bearing, haversine_distance, heading_diff
+from pi5.navigation.geo import (
+    bearing,
+    destination_point,
+    haversine_distance,
+    heading_diff,
+)
 
 
 class TestHaversineDistance:
@@ -77,6 +82,51 @@ class TestBearing:
         for lat2, lon2 in [(52, 1), (50, -2), (53, -0.1), (51, 0.1)]:
             brg = bearing(51.5, -0.1, lat2, lon2)
             assert 0 <= brg < 360
+
+
+class TestDestinationPoint:
+    """Test destination_point() — the forward geodesic used to place detections."""
+
+    def test_zero_distance_is_origin(self):
+        lat, lon = destination_point(51.5, -0.1, 42.0, 0.0)
+        assert lat == pytest.approx(51.5, abs=1e-9)
+        assert lon == pytest.approx(-0.1, abs=1e-9)
+
+    def test_due_north_moves_latitude_up(self):
+        # 111 m north ≈ 0.001° of latitude, longitude unchanged.
+        lat, lon = destination_point(51.5, -0.1, 0.0, 111.32)
+        assert lat > 51.5 and lat == pytest.approx(51.501, abs=2e-4)
+        assert lon == pytest.approx(-0.1, abs=1e-6)
+
+    def test_due_east_moves_longitude_up(self):
+        # 1° of longitude at the equator on this spherical Earth (R=6371 km)
+        # is π/180·R ≈ 111_194.9 m.
+        lat, lon = destination_point(0.0, 0.0, 90.0, 111_194.9)
+        assert lat == pytest.approx(0.0, abs=1e-6)
+        assert lon == pytest.approx(1.0, abs=1e-3)
+
+    def test_roundtrip_against_haversine_and_bearing(self):
+        # Project out along a bearing, then measure back: distance + bearing must
+        # match what we asked for. This ties destination_point to the inverse pair.
+        for brg in (0.0, 37.0, 90.0, 175.0, 244.0, 359.0):
+            for dist in (5.0, 50.0, 500.0):
+                lat2, lon2 = destination_point(51.506726, -0.071438, brg, dist)
+                back_d = haversine_distance(51.506726, -0.071438, lat2, lon2)
+                back_b = bearing(51.506726, -0.071438, lat2, lon2)
+                assert back_d == pytest.approx(dist, rel=1e-4, abs=1e-3)
+                assert heading_diff(back_b, brg) == pytest.approx(0.0, abs=0.05)
+
+    def test_bearing_wraps(self):
+        a = destination_point(10.0, 20.0, 45.0, 300.0)
+        b = destination_point(10.0, 20.0, 405.0, 300.0)  # 405 == 45
+        assert a[0] == pytest.approx(b[0], abs=1e-9)
+        assert a[1] == pytest.approx(b[1], abs=1e-9)
+
+    def test_longitude_normalised_across_antimeridian(self):
+        # Just east of +180° should wrap to a negative longitude, not 181.
+        _lat, lon = destination_point(0.0, 179.999, 90.0, 5_000.0)
+        assert -180.0 < lon <= 180.0
+        assert lon < 0.0
 
 
 class TestHeadingDiff:

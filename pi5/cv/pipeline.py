@@ -36,7 +36,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..navigation.geo import destination_point
 from .avoidance import AvoidanceConfig, AvoidanceController
+from .object_memory import ObjectMemory
 from .segmentation import ANOMALY_TRIGGER_THRESHOLD, WaterSegmentation, WaterState
 from .threat_assessor import ThreatAssessor, ThreatLevel, threat_level_for
 from .wave_detector import WaveConfig, WaveDetector
@@ -106,6 +108,27 @@ class SurveyVisionPipeline:
             approach_size_threshold=float(tt.get("approach_size_threshold", 1.10)),
             track_warning_if_approaching=bool(tt.get("track_warning_if_approaching", True)),
             mission_alert_distance_m=float(tt.get("mission_alert_distance_m", 30.0)),
+        )
+
+        # Persistent GPS-anchored object memory. Confirmed buoys/permanent marks
+        # (and, briefly, transient movers like people) are geolocated from the
+        # boat fix + heading + bbox bearing + stereo range and dropped onto the
+        # map. Once a landmark is charted the radar needn't lock onto it, so the
+        # boat keeps scanning for the unknown even with known things nearby.
+        om = cfg.get("object_memory", {}) or {}
+        self.object_memory_enabled = bool(om.get("enabled", True))
+        self._release_radar_on_known = bool(om.get("release_radar_on_known", True))
+        self.object_memory = ObjectMemory(
+            confirm_sightings=int(om.get("confirm_sightings", 3)),
+            match_radius_m=float(om.get("match_radius_m", 6.0)),
+            match_radius_frac=float(om.get("match_radius_frac", 0.08)),
+            match_radius_max_m=float(om.get("match_radius_max_m", 25.0)),
+            transient_ttl_s=float(om.get("transient_ttl_s", 45.0)),
+            candidate_ttl_s=float(om.get("candidate_ttl_s", 12.0)),
+            permanent_ttl_s=float(om.get("permanent_ttl_s", 0.0)),
+            max_range_m=float(om.get("max_range_m", 60.0)),
+            min_confidence=float(om.get("min_confidence", 0.30)),
+            max_objects=int(om.get("max_objects", 200)),
         )
 
         # Reactive obstacle avoidance — pushes a steer-away override into the
@@ -359,6 +382,11 @@ class SurveyVisionPipeline:
             self._mission_alert = self.threat.get_mission_alert()
             self._drive_radar(now)
 
+        # Persistent map memory — geolocate detections, confirm/refine landmarks,
+        # age out transients. Independent of the radar/threat gate: it learns from
+        # every ranged detection and ages every tick.
+        self._update_object_memory(detections, now)
+
         # Reactive avoidance rides on whatever the primary threat is now.
         self._drive_avoidance(now)
         # Bow into an imminent wave — only when not dodging a hazard (obstacle
@@ -397,6 +425,53 @@ class SurveyVisionPipeline:
             return (None, None)
         return (lat, lon)
 
+    def _current_pose(self) -> "tuple[float | None, float | None, float]":
+        """Boat (lat, lon, heading_deg) — heading is needed to turn a bbox bearing
+        into a true (compass) bearing for geolocation. (None, None, hdg) with no
+        GPS fix."""
+        tel = getattr(self._pico, "telemetry", None)
+        hdg = float(getattr(tel, "heading", 0.0) or 0.0) if tel is not None else 0.0
+        lat, lon = self._current_gps()
+        return lat, lon, hdg
+
+    def _update_object_memory(self, detections: list[dict], now: float) -> None:
+        """Fold ranged detections into the persistent map memory, then age it.
+
+        Every detection carrying a stereo range is geolocated (boat fix + heading
+        + its bbox bearing off the bow + range) and confirmed/refined in
+        ``self.object_memory``; unknown classes and range-less detections are
+        dropped by the memory itself. Expiry runs each tick so transients and
+        unconfirmed candidates age out even on frames with nothing detected.
+        """
+        if not self.object_memory_enabled:
+            return
+        lat, lon, hdg = self._current_pose()
+        if lat is not None and lon is not None:
+            for det in detections:
+                bbox = det.get("bbox")
+                if bbox is None:
+                    continue
+                self.object_memory.observe(
+                    det.get("class_name") or det.get("label") or "",
+                    lat, lon, hdg,
+                    self._avoidance_bearing(bbox),
+                    det.get("distance_m"),
+                    float(det.get("confidence", 0.0)),
+                    now=now,
+                )
+        self.object_memory.expire(now)
+
+    def _geolocate(self, bbox, distance_m) -> "tuple[float | None, float | None]":
+        """World position of a bbox from the current pose + bearing + range, or
+        (None, None) if there's no range or GPS fix to place it with."""
+        if distance_m is None:
+            return None, None
+        lat, lon, hdg = self._current_pose()
+        if lat is None or lon is None:
+            return None, None
+        true_bearing = (hdg + self._avoidance_bearing(bbox)) % 360.0
+        return destination_point(lat, lon, true_bearing, float(distance_m))
+
     # -- tier 3 actions ----------------------------------------------------- #
     def _drive_radar(self, now: float) -> None:
         """Engage/disengage the existing RadarTracker for the primary threat.
@@ -409,6 +484,20 @@ class SurveyVisionPipeline:
             return
         primary = self._primary
         engage = self.threat.should_engage_tracking(primary)
+        # Already charted it? Don't tie the radar bar up re-observing a landmark
+        # we've confirmed on the map — release it to keep scanning for the unknown
+        # even with known things nearby. The bbox still geolocates to the charted
+        # spot only while the object is actually there, so a drifting mover that
+        # has left its mapped position no longer matches and IS tracked again.
+        # Safety carve-out: a CRITICAL threat (vessel/person) is always tracked,
+        # and avoidance runs off the primary threat regardless of the radar.
+        if (engage and primary is not None and self._release_radar_on_known
+                and self.object_memory_enabled
+                and primary.threat_level < ThreatLevel.CRITICAL):
+            plat, plon = self._geolocate(primary.bbox, primary.distance_m)
+            if plat is not None and self.object_memory.known_confirmed_near(
+                    plat, plon, class_name=primary.class_name):
+                engage = False
         if engage and primary is not None:
             self._last_threat_t = now
             if not self._engaged or self._tracked_class != primary.class_name:
@@ -595,7 +684,12 @@ class SurveyVisionPipeline:
             "seg_backend": self.seg.backend,
             "confirm": self._confirm_snapshot(),
             "mission_alert": self._mission_alert,
+            "object_memory": self.object_memory.stats(),
         }
+
+    def map_objects(self) -> list[dict]:
+        """Confirmed, geolocated objects for the GPS map (marker layer)."""
+        return self.object_memory.markers()
 
     def _confirm_snapshot(self) -> "dict | None":
         """DNN spot-check status for the dashboard, or None if hybrid is off."""

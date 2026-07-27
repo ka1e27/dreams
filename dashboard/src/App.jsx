@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useTelemetry } from './hooks/useTelemetry'
 import { useApi } from './hooks/useApi'
 import { useNetwork } from './hooks/useNetwork'
+import { useMapObjects } from './hooks/useMapObjects'
 import BoatMap from './components/BoatMap'
 import TelemetryPanel from './components/TelemetryPanel'
 import ControlPanel from './components/ControlPanel'
@@ -12,6 +13,7 @@ export default function App() {
   const { data, connected } = useTelemetry()
   const api = useApi()
   const network = useNetwork(api)
+  const mapObjects = useMapObjects(api)
   const [waypoints, setWaypoints] = useState([])
 
   const handleMapClick = useCallback((lat, lon) => {
@@ -79,6 +81,7 @@ export default function App() {
           telemetry={telemetry}
           mission={mission}
           waypoints={mapWaypoints}
+          mapObjects={mapObjects}
           onMapClick={handleMapClick}
         />
       </div>

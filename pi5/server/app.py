@@ -69,6 +69,8 @@ _stepper = None    # cv.stepper.StepperMotor (optional, radar-bar pan)
 _radar = None      # cv.radar_tracker.RadarTracker (optional)
 _pipeline = None   # cv.pipeline.SurveyVisionPipeline (optional, three-tier vision)
 _obstacles = None  # navigation.sim_obstacles.ObstacleField (simulator only)
+_object_memory = None  # cv.object_memory.ObjectMemory (simulator only; hardware
+#                        reads the pipeline's own memory via _pipeline.map_objects)
 _esc_mock = None   # bytearray — persistent mock ESC EEPROM for the editor in sim mode
 _winch_mode = "survey"
 _home_lat = None
@@ -80,12 +82,13 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
               cors_origins=None, simulator=None, camera=None,
               network=None, winch_mode="survey", overlay=None,
               jpeg_quality=60, stream_fps=15, stepper=None, radar=None,
-              pipeline=None, obstacle_field=None):
+              pipeline=None, obstacle_field=None, object_memory=None):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
-    global _stepper, _radar, _pipeline, _obstacles
+    global _stepper, _radar, _pipeline, _obstacles, _object_memory
     _obstacles = obstacle_field
+    _object_memory = object_memory
     _pico = pico
     _navigator = navigator
     _mission = mission_mgr
@@ -231,7 +234,10 @@ async def get_pod_history(
     _: str = Depends(auth.require_api_key),
 ):
     """Pod reading history (most recent first)."""
-    readings = _pod.history[-limit:]
+    # Clamp the client-supplied limit: an unbounded value could slice/copy a
+    # huge list and spike memory on the Pi.
+    n = max(1, min(int(limit), 5000))
+    readings = _pod.history[-n:]
     readings.reverse()
     return [
         PodReadingOut(
@@ -374,7 +380,7 @@ def _write_paths(paths: dict) -> None:
 @app.get("/api/paths")
 async def list_paths(_: str = Depends(auth.require_api_key)):
     """List saved waypoint-planner paths (newest first)."""
-    paths = list(_read_paths().values())
+    paths = list((await asyncio.to_thread(_read_paths)).values())
     paths.sort(key=lambda p: p.get("updated", 0), reverse=True)
     return paths
 
@@ -386,13 +392,13 @@ async def save_path(
 ):
     """Save (create or overwrite by name) a waypoint-planner path."""
     async with _paths_lock:
-        paths = _read_paths()
+        paths = await asyncio.to_thread(_read_paths)
         paths[payload.name] = {
             "name": payload.name,
             "waypoints": [wp.model_dump() for wp in payload.waypoints],
             "updated": time.time(),
         }
-        _write_paths(paths)
+        await asyncio.to_thread(_write_paths, paths)
     return {"status": "saved", "name": payload.name,
             "count": len(payload.waypoints)}
 
@@ -401,12 +407,12 @@ async def save_path(
 async def delete_path(name: str, _: str = Depends(auth.require_api_key)):
     """Delete a saved path by name."""
     async with _paths_lock:
-        paths = _read_paths()
+        paths = await asyncio.to_thread(_read_paths)
         if name not in paths:
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="No such path")
         del paths[name]
-        _write_paths(paths)
+        await asyncio.to_thread(_write_paths, paths)
     return {"status": "deleted", "name": name}
 
 
@@ -529,6 +535,49 @@ async def clear_sim_obstacles(_: str = Depends(auth.require_api_key)):
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Not in simulator mode")
     _obstacles.clear()
+    return {"status": "cleared"}
+
+
+# ---- Remembered map objects (geolocated buoys / landmarks) ----
+# The vision pipeline geolocates confirmed detections (buoys, docks, people, …)
+# and remembers them as map markers (pi5/cv/object_memory.py). On hardware the
+# pipeline owns the memory; in the simulator a SimObjectMapper feeds a standalone
+# ObjectMemory from ground truth. Either way the command-center map polls this.
+
+def _object_memory_source():
+    """The live object memory: the pipeline's on hardware, else the sim's."""
+    if _pipeline is not None:
+        return _pipeline
+    return _object_memory
+
+
+@app.get("/api/map/objects")
+async def get_map_objects(_: str = Depends(auth.require_api_key)):
+    """Confirmed geolocated objects for the GPS map (buoys/landmarks/etc.).
+
+    Returns ``{available, objects}``. ``objects`` are the *confirmed* markers only
+    (an unconfirmed candidate isn't dropped on the map until it's been seen
+    enough times). Empty + available=false when no vision memory is wired.
+    """
+    src = _object_memory_source()
+    if src is None:
+        return {"available": False, "objects": []}
+    if hasattr(src, "map_objects"):          # SurveyVisionPipeline
+        objects = src.map_objects()
+    else:                                     # bare ObjectMemory (sim)
+        objects = src.markers()
+    return {"available": True, "objects": objects}
+
+
+@app.post("/api/map/objects/clear")
+async def clear_map_objects(_: str = Depends(auth.require_api_key)):
+    """Forget all remembered map objects (operator reset)."""
+    src = _object_memory_source()
+    if src is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="No object memory available")
+    mem = getattr(src, "object_memory", src)  # pipeline.object_memory, or the memory
+    mem.clear()
     return {"status": "cleared"}
 
 
@@ -817,6 +866,16 @@ async def ws_camera(ws: WebSocket):
             logger.warning("disparity view fell back to left: %s", e)
             view = "left"
 
+    loop = asyncio.get_event_loop()
+
+    def _disparity(left, right):
+        # StereoSGBM + colormap — heavy CPU; runs in a worker thread (cv2
+        # releases the GIL), keeping the asyncio loop free for telemetry/control.
+        disp, _ = stereo.compute(left, right)
+        disp_norm = cv2.normalize(disp, None, 0, 255,
+                                  cv2.NORM_MINMAX).astype(np.uint8)
+        return cv2.applyColorMap(disp_norm, cv2.COLORMAP_TURBO)
+
     try:
         while True:
             try:
@@ -826,13 +885,15 @@ async def ws_camera(ws: WebSocket):
             if view == "right" and frame.right is not None:
                 img = frame.right
             elif view == "disparity" and stereo is not None and frame.right is not None:
-                disp, _ = stereo.compute(frame.left, frame.right)
-                disp_norm = cv2.normalize(disp, None, 0, 255,
-                                          cv2.NORM_MINMAX).astype(np.uint8)
-                img = cv2.applyColorMap(disp_norm, cv2.COLORMAP_TURBO)
+                img = await loop.run_in_executor(None, _disparity, frame.left, frame.right)
             else:
                 img = frame.left
-            _, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 60])
+            # JPEG encode is CPU-bound at 720p+; offload so a slow encode can't
+            # stall the event loop (mirrors the /video MJPEG endpoint).
+            _, jpeg = await loop.run_in_executor(
+                None,
+                lambda i=img: cv2.imencode(".jpg", i, [cv2.IMWRITE_JPEG_QUALITY, 60]),
+            )
             await ws.send_bytes(jpeg.tobytes())
     except WebSocketDisconnect:
         pass

@@ -71,6 +71,12 @@ def _box(label, x1, y1, x2, y2, conf=0.9, dist=None):
     return (x1, y1, x2, y2, label, conf, True, dist)
 
 
+class FakePico:
+    """Minimal pico stand-in exposing a .telemetry with lat/lon/heading."""
+    def __init__(self, lat=51.506726, lon=-0.071438, heading=0.0):
+        self.telemetry = types.SimpleNamespace(lat=lat, lon=lon, heading=heading)
+
+
 # --------------------------------------------------------------------------- #
 # Tier 1 — water segmentation (classical fallback)
 # --------------------------------------------------------------------------- #
@@ -351,3 +357,105 @@ def test_bearing_uses_stepper_angle_and_fov():
     # bbox at right edge → positive offset up to +fov/2
     b = p._bearing_for((150, 0, 160, 20))
     assert b > 30.0
+
+
+# --------------------------------------------------------------------------- #
+# Object memory — geolocation + confirmation + expiry through the pipeline
+# --------------------------------------------------------------------------- #
+from pi5.navigation.geo import destination_point, haversine_distance  # noqa: E402
+
+
+def _mem_pipeline(overlay, *, pico, config=None):
+    cfg = {"threat_tracking": {"clear_timeout_s": 5.0}}
+    if config:
+        cfg.update(config)
+    return SurveyVisionPipeline(
+        camera=None, overlay=overlay, radar=FakeRadar(), config=cfg,
+        pico=pico, fov_deg=75.0, frame_width=160)
+
+
+def test_pipeline_confirms_and_maps_buoy():
+    # A centred buoy box (0° off the bow) at 20 m, boat heading 90° (east): after
+    # confirm_sightings frames a marker should drop 20 m due east of the boat.
+    pico = FakePico(heading=90.0)
+    ov = FakeOverlay([_box("buoy", 70, 50, 90, 70, 0.9, 20.0)])  # centred in 160px
+    p = _mem_pipeline(ov, pico=pico,
+                      config={"object_memory": {"confirm_sightings": 3}})
+    p.segmentation_enabled = False  # force YOLO on so detections flow
+    for i in range(3):
+        p._process(_frame(_img((140, 90, 30))), now=100.0 + i)
+    objs = p.map_objects()
+    assert len(objs) == 1
+    o = objs[0]
+    assert o["class_name"] == "buoy" and o["confirmed"] is True
+    exp_lat, exp_lon = destination_point(pico.telemetry.lat, pico.telemetry.lon,
+                                         90.0, 20.0)
+    assert haversine_distance(o["lat"], o["lon"], exp_lat, exp_lon) < 1.0
+    assert p.vision_state()["object_memory"]["permanent"] == 1
+
+
+def test_pipeline_no_marker_before_confirmation():
+    pico = FakePico()
+    ov = FakeOverlay([_box("buoy", 70, 50, 90, 70, 0.9, 15.0)])
+    p = _mem_pipeline(ov, pico=pico,
+                      config={"object_memory": {"confirm_sightings": 4}})
+    p.segmentation_enabled = False
+    for i in range(2):  # fewer than confirm_sightings
+        p._process(_frame(_img((140, 90, 30))), now=200.0 + i)
+    assert p.map_objects() == []          # candidate, not yet on the map
+
+
+def test_pipeline_transient_person_expires():
+    pico = FakePico()
+    ov = FakeOverlay([_box("person", 70, 50, 90, 70, 0.9, 10.0)])
+    p = _mem_pipeline(ov, pico=pico, config={"object_memory": {
+        "confirm_sightings": 2, "transient_ttl_s": 30.0}})
+    p.segmentation_enabled = False
+    for i in range(2):
+        p._process(_frame(_img((140, 90, 30))), now=300.0 + i)
+    assert len(p.map_objects()) == 1      # person charted (briefly)
+    ov._boxes = []                        # person leaves the frame
+    p._process(_frame(_img((140, 90, 30))), now=400.0)  # past the TTL
+    assert p.map_objects() == []          # forgotten
+
+
+def test_pipeline_maps_dock_but_not_water_anomaly():
+    # A dock is INFO for threat-tracking (never a "threat") but a PERMANENT map
+    # landmark — the memory is independent of the threat gate, so it's charted.
+    # A water_anomaly is a survey pseudo-class and never a mappable object.
+    pico = FakePico()
+    ov = FakeOverlay([_box("dock", 70, 50, 90, 70, 0.9, 12.0),
+                      _box("water_anomaly", 10, 10, 30, 30, 0.9, 12.0)])
+    p = _mem_pipeline(ov, pico=pico,
+                      config={"object_memory": {"confirm_sightings": 1}})
+    p.segmentation_enabled = False
+    p._process(_frame(_img((140, 90, 30))), now=500.0)
+    objs = p.map_objects()
+    assert [o["class_name"] for o in objs] == ["dock"]
+
+
+def test_pipeline_radar_releases_known_buoy_keeps_scanning():
+    # An APPROACHING buoy normally locks the radar (WARNING + approaching). Once
+    # it's confirmed on the map, the pipeline should stop locking the radar onto
+    # it so the bar keeps scanning — while an unknown one still gets tracked.
+    pico = FakePico(heading=0.0)
+    ov = FakeOverlay()
+    radar = FakeRadar()
+    p = SurveyVisionPipeline(
+        camera=None, overlay=ov, radar=radar,
+        config={"threat_tracking": {"clear_timeout_s": 5.0,
+                                     "approach_detection_frames": 3},
+                "object_memory": {"confirm_sightings": 3}},
+        pico=pico, fov_deg=75.0, frame_width=160)
+    p.segmentation_enabled = False
+    # Drive an approaching buoy (growing, centred box → same map spot each frame).
+    size = 20
+    for i in range(6):
+        size = int(size * 1.25)
+        cx1, cx2 = 80 - size // 2, 80 + size // 2
+        ov._boxes = [_box("buoy", cx1, 60, cx2, 60 + size, 0.9, 12.0)]
+        p._process(_frame(_img((140, 90, 30))), now=600.0 + i)
+    st = p.vision_state()
+    assert st["object_memory"]["permanent"] == 1     # buoy got charted
+    # It is known now → the pipeline must not be engaged/tracking it.
+    assert st["tracking_engaged"] is False

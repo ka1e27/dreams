@@ -46,6 +46,8 @@ export function useApi() {
 
   const getNetworkStatus = useCallback(() => apiFetch('/api/network'), [])
 
+  const getMapObjects = useCallback(() => apiFetch('/api/map/objects'), [])
+
   // Memoize the returned object so its identity is stable across renders.
   // Every method above is itself stable (useCallback, []), but the plain
   // object literal that wrapped them was recreated on every render, which
@@ -56,11 +58,11 @@ export function useApi() {
     estop, resumeEstop, returnHome,
     pauseMission, resumeMission, abortMission, startMission,
     uploadMission, uploadAndStart, goto, getPodHistory,
-    getNetworkStatus,
+    getNetworkStatus, getMapObjects,
   }), [
     estop, resumeEstop, returnHome,
     pauseMission, resumeMission, abortMission, startMission,
     uploadMission, uploadAndStart, goto, getPodHistory,
-    getNetworkStatus,
+    getNetworkStatus, getMapObjects,
   ])
 }

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Circle, CircleMarker, Tooltip, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
+
+// Remembered map objects: permanent marks (buoys/docks) cyan, transient
+// (people/boats) amber — matches the command-center map.
+const OBJ_COLOR = { permanent: '#22d3ee', transient: '#f5a623' }
 
 const BOAT_ICON = L.divIcon({
   className: '',
@@ -69,7 +73,7 @@ function MapClickHandler({ onMapClick }) {
   return null
 }
 
-export default function BoatMap({ telemetry, mission, waypoints, onMapClick, track }) {
+export default function BoatMap({ telemetry, mission, waypoints, mapObjects, onMapClick, track }) {
   const lat = telemetry?.lat || 51.506726
   const lon = telemetry?.lon || -0.071438
   const heading = telemetry?.heading || 0
@@ -97,7 +101,7 @@ export default function BoatMap({ telemetry, mission, waypoints, onMapClick, tra
       {/* Waypoint markers */}
       {(waypoints || []).map((wp, i) => (
         <Marker
-          key={i}
+          key={wp.id ?? `${wp.lat},${wp.lon},${wp.type ?? ''},${i}`}
           position={[wp.lat, wp.lon]}
           icon={wp.type === 'data' ? WP_DATA_ICON : WP_PATH_ICON}
         />
@@ -121,6 +125,31 @@ export default function BoatMap({ telemetry, mission, waypoints, onMapClick, tra
       {trackPositions.length > 1 && (
         <Polyline positions={trackPositions} color="#22c55e" weight={2} opacity={0.6} />
       )}
+
+      {/* Remembered map objects (confirmed buoys / landmarks / people) */}
+      {(mapObjects || []).map((o) => {
+        if (o.lat == null || o.lon == null) return null
+        const col = OBJ_COLOR[o.category] || '#cbd5e1'
+        return (
+          <CircleMarker
+            key={o.id}
+            center={[o.lat, o.lon]}
+            radius={6}
+            pathOptions={{ color: col, weight: 2, fillColor: col, fillOpacity: 0.4 }}
+          >
+            <Tooltip permanent direction="right" offset={[7, 0]}>
+              {String(o.class_name || '?').toUpperCase()}
+            </Tooltip>
+            <Popup>
+              <div style={{ fontFamily: 'monospace', fontSize: 11 }}>
+                <b>{String(o.class_name || '?').toUpperCase()}</b> ({o.category})<br />
+                sightings {o.sightings} · conf {Math.round((o.confidence || 0) * 100)}%<br />
+                {o.distance_m != null ? `range ${o.distance_m.toFixed(1)} m` : 'range —'}
+              </div>
+            </Popup>
+          </CircleMarker>
+        )
+      })}
     </MapContainer>
   )
 }

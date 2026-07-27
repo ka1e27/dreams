@@ -136,63 +136,6 @@ field layouts and alert codes. Do not restate it here.
 
 ---
 
-## Repo Structure
-
-```
-COE 2 Autonomous Boat/            ← repo root (project name: D.R.E.A.M.S)
-├── CLAUDE.md                     ← this file
-├── README.md
-├── CONTRIBUTING.md
-├── pyproject.toml                ← Ruff + pytest config
-├── run_sim.py                    ← simulator entry point
-├── firmware/
-│   ├── boat-pico/                ← RP2040, MicroPython (Boat Pico)
-│   │   ├── main.py               ← entry point + pin-map docstring
-│   │   ├── vesc.py               ← UART0 VESC control (GP12/13)
-│   │   ├── motor_control.py      ← VESC duty + winch PWM (GP14)
-│   │   ├── compass.py            ← BNO085 I²C0 driver (GP8/9)
-│   │   ├── gps.py                ← u-blox M10Q UART1 (GP4/5)
-│   │   ├── sensors.py            ← battery ADCs, DHT11, hull leak
-│   │   ├── sbus.py               ← PIO SBUS receiver (GP15)
-│   │   ├── pod_uart.py           ← Pod poll/response over shared UART1
-│   │   ├── serial_handler.py     ← USB CDC Pi 5 protocol
-│   │   ├── watchdog.py           ← Pi 5 heartbeat → auto-ESTOP
-│   │   └── status_led.py         ← WS2812 NeoPixel (GP10)
-│   └── pod-pico/                 ← RP2040, MicroPython (underwater pod)
-│       ├── main.py
-│       ├── sensors.py            ← EC probe, NTC, pressure, light, bottom contact
-│       ├── leak_detect.py        ← pod leak sensor (GP20)
-│       └── uart_responder.py     ← UART0 poll-response (GP0/1)
-├── pi5/
-│   ├── comms/                    ← network.py, pico_serial.py, pod_bridge.py, protocol.py
-│   ├── cv/                       ← camera.py, stereo.py, detector.py, avoidance.py
-│   ├── navigation/               ← navigator.py, mission_manager.py, geo.py, simulator.py
-│   ├── server/                   ← app.py, auth.py, models.py, rate_limit.py, static/
-│   ├── data/                     ← cloud data uploader (offline buffer)
-│   ├── scripts/                  ← stereo calibration, pico deploy utilities
-│   ├── services/                 ← systemd unit files
-│   ├── tests/                    ← pytest unit tests
-│   ├── config.yaml               ← mode: simulator | hardware
-│   └── requirements.txt
-├── dashboard/                    ← React + Vite + Leaflet + Recharts
-├── cloud/
-│   ├── api/                      ← FastAPI + SQLAlchemy + PostGIS
-│   ├── map-viewer/               ← React heatmap / mission-playback viewer
-│   └── docker-compose.yml        ← PostGIS for local dev
-├── docs/
-│   ├── pin_map.md                ← authoritative pin maps
-│   ├── serial-protocol.md        ← authoritative serial protocol (v1.0)
-│   ├── system_tree.md            ← Mermaid system diagram
-│   ├── changelog_and_decisions.md
-│   ├── hardware_changes_v1_to_v2.md
-│   ├── pcb_design_notes.md
-│   └── adr/                      ← ADR-001 … ADR-005
-├── deploy/                       ← HTTPS / hosting setup
-└── Boat_PCB/                     ← KiCad 10 project (main board)
-```
-
----
-
 ## Simulation-First Development
 
 `pi5/config.yaml` carries a `mode:` flag (`simulator` or `hardware`). In simulator mode,
@@ -273,6 +216,7 @@ resolves the old midpoint-vs-dedicated ambiguity.
 - `docs/pin_map.md` — authoritative pin assignments (both Picos + Pi 5 USB)
 - `docs/battery_architecture.md` — authoritative M18 three-domain battery reference
 - `docs/serial-protocol.md` — Pi 5 ↔ Boat Pico protocol (v1.0)
+- `docs/object_memory.md` — GPS-anchored buoy/landmark memory (confirm → map marker → verify → forget)
 - `docs/system_tree.md` — Mermaid system/power diagram
 - `docs/pcb_design_notes.md` — Boat_PCB component breakdown
 - `docs/hardware_changes_v1_to_v2.md` — V1 → V2 hardware delta

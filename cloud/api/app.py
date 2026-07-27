@@ -205,9 +205,10 @@ def query_track(
 @app.get("/api/v1/missions")
 def list_missions(
     db: Session = Depends(get_db),
+    limit: int = Query(default=500, ge=1, le=2000),
     _: str = Depends(require_api_key),
 ):
-    """List distinct mission names with reading counts."""
+    """List distinct mission names with reading counts (most recent first)."""
     query = (
         select(
             SensorReading.mission_name,
@@ -218,6 +219,7 @@ def list_missions(
         .where(SensorReading.mission_name.isnot(None))
         .group_by(SensorReading.mission_name)
         .order_by(func.max(SensorReading.timestamp).desc())
+        .limit(limit)
     )
     results = db.execute(query).all()
     return [

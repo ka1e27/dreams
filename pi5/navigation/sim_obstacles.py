@@ -12,6 +12,7 @@ mock of it.
 """
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass
 
@@ -161,3 +162,56 @@ class SimAvoider:
             self._override_active = False
             self._nav.set_avoidance_override(0, 0)
         return False
+
+
+class SimObjectMapper:
+    """Feeds an :class:`~pi5.cv.object_memory.ObjectMemory` from ground truth —
+    the simulator counterpart to the vision pipeline geolocating detections.
+
+    On hardware the pipeline turns YOLO boxes + stereo range into geolocated
+    sightings; the sim has no camera, so this "sees" the obstacle field through a
+    forward sensor cone, adds a little deterministic range/bearing noise (so
+    confirmation and the inverse-distance-weighted averaging behave like the real
+    noisy sensor rather than snapping to a perfect point), and observes each
+    visible obstacle into the memory under its label. The result is the *same*
+    ObjectMemory the boat builds on the water — so what you watch appear on the
+    command-center map is the real confirm/refine/forget logic, not a mock.
+
+    An obstacle whose label isn't a remembered class (e.g. the generic
+    "obstacle" the DROP OBSTACLE button drops) is simply ignored by the memory —
+    drop a "buoy" or "person" to exercise the map.
+    """
+
+    def __init__(self, field: ObstacleField, memory, *,
+                 sensor_range_m: float = 45.0, fov_deg: float = 75.0,
+                 range_noise_frac: float = 0.04, bearing_noise_deg: float = 1.2,
+                 seed: int = 1234) -> None:
+        self._field = field
+        self._mem = memory
+        self.sensor_range_m = float(sensor_range_m)
+        self.fov_deg = float(fov_deg)
+        self.range_noise_frac = float(range_noise_frac)
+        self.bearing_noise_deg = float(bearing_noise_deg)
+        self._rng = random.Random(seed)
+
+    def update(self, lat: float, lon: float, heading: float,
+               now: float | None = None) -> int:
+        """Observe every visible obstacle into the memory, then age it. Returns
+        the number of observations fed this tick."""
+        now = time.monotonic() if now is None else float(now)
+        fed = 0
+        for o in self._field.obstacles:
+            # Range to the obstacle *centre* — the memory maps where the object
+            # is, not its near edge (which is what avoidance ranges to).
+            dist, brg = distance_and_bearing(lat, lon, o.lat, o.lon)
+            rel = heading_diff(heading, brg)
+            if dist > self.sensor_range_m or abs(rel) > self.fov_deg / 2.0:
+                continue
+            r = max(0.1, dist * (1.0 + self._rng.uniform(-1.0, 1.0)
+                                 * self.range_noise_frac))
+            b = rel + self._rng.uniform(-1.0, 1.0) * self.bearing_noise_deg
+            if self._mem.observe(o.label, lat, lon, heading, b, r,
+                                 confidence=0.9, now=now) is not None:
+                fed += 1
+        self._mem.expire(now)
+        return fed

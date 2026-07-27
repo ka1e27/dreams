@@ -296,7 +296,7 @@ class Navigator:
         else:
             blend = min(
                 (abs_err - cfg.heading_tolerance_deg)
-                / (cfg.max_heading_error_deg - cfg.heading_tolerance_deg),
+                / max(1.0, cfg.max_heading_error_deg - cfg.heading_tolerance_deg),
                 1.0,
             )
             # Floor the differential at turn_min_throttle so a small residual
