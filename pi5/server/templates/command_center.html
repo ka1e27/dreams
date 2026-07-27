@@ -676,6 +676,61 @@
     .pico-inner{grid-template-columns:1fr;grid-template-rows:minmax(280px,1fr) minmax(220px,1fr)}
     .editor-col{border-right:none;border-bottom:1px solid var(--accent-dim)}
   }
+  /* ---- recordings (sentry + manual clips) ---- */
+  .rec-ctl{display:flex;align-items:center;gap:10px;padding:10px 14px;
+    border-bottom:1px solid var(--hairline);background:var(--panel-2);flex-wrap:wrap}
+  .rec-live{display:none;align-items:center;gap:7px;color:var(--crit);font-size:11px;
+    letter-spacing:.16em;font-weight:600}
+  .rec-live.on{display:inline-flex}
+  .rec-live .rec-dot{width:9px;height:9px;border-radius:50%;background:var(--crit);
+    box-shadow:0 0 10px var(--crit);animation:pulse 1s infinite}
+  .rec-live #recLiveMeta{color:var(--muted);font-weight:400;letter-spacing:.08em}
+  .rec-count{color:var(--muted);font-size:10px;letter-spacing:.16em;text-transform:uppercase}
+  #recSentryBtn.armed{background:rgba(58,211,122,.14);color:var(--ok);border-color:var(--ok);
+    box-shadow:0 0 12px rgba(58,211,122,.25)}
+  #recBtn.recording{background:var(--crit);color:#fff;border-color:var(--crit);
+    box-shadow:0 0 14px rgba(255,59,59,.4)}
+  .rec-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);min-height:300px}
+  @media(max-width:900px){.rec-layout{grid-template-columns:1fr}}
+  .rec-player{position:relative;background:#000;display:flex;align-items:center;
+    justify-content:center;min-height:300px;overflow:hidden}
+  .rec-player video{width:100%;max-height:56vh;object-fit:contain;display:none;background:#000}
+  .rec-player video.on{display:block}
+  .rec-player-empty{position:absolute;color:var(--muted);font-size:12px;letter-spacing:.24em;
+    font-family:var(--display)}
+  .rec-nowplaying{position:absolute;left:10px;top:10px;font-size:10px;letter-spacing:.08em;
+    color:var(--cyan);background:rgba(0,0,0,.6);padding:3px 8px;border-radius:4px;display:none;
+    max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rec-nowplaying.on{display:block}
+  .rec-list{border-left:1px solid var(--hairline);overflow-y:auto;max-height:56vh;
+    display:flex;flex-direction:column}
+  @media(max-width:900px){.rec-list{border-left:none;border-top:1px solid var(--hairline);max-height:340px}}
+  .rec-empty{color:var(--muted);font-size:11px;padding:18px 14px;letter-spacing:.05em}
+  .rec-item{display:flex;align-items:center;gap:10px;padding:9px 12px;
+    border-bottom:1px solid var(--hairline);cursor:pointer;transition:background .15s;
+    border-left:3px solid transparent}
+  .rec-item:hover{background:var(--panel-2)}
+  .rec-item.sel{background:rgba(56,189,248,.08)}
+  .rec-item.sev-critical{border-left-color:var(--crit)}
+  .rec-item.sev-warning{border-left-color:var(--warn)}
+  .rec-item.sev-manual{border-left-color:var(--cyan)}
+  .rec-thumb{width:30px;height:30px;flex-shrink:0;border-radius:6px;display:flex;
+    align-items:center;justify-content:center;font-size:14px;background:var(--panel-3);
+    border:1px solid var(--hairline)}
+  .rec-item.sev-critical .rec-thumb{color:var(--crit)}
+  .rec-item.sev-warning .rec-thumb{color:var(--warn)}
+  .rec-item.sev-manual .rec-thumb{color:var(--cyan)}
+  .rec-meta{flex:1;min-width:0}
+  .rec-when{font-size:11px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rec-sub{font-size:9px;color:var(--muted);letter-spacing:.06em;margin-top:3px;
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .rec-badge{font-size:8px;letter-spacing:.14em;padding:1px 6px;border-radius:8px;
+    border:1px solid currentColor;text-transform:uppercase}
+  .rec-badge.sev-critical{color:var(--crit)} .rec-badge.sev-warning{color:var(--warn)}
+  .rec-badge.sev-manual{color:var(--cyan)}
+  .rec-del{background:transparent;border:1px solid var(--hairline);color:var(--muted);
+    border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;flex-shrink:0;transition:.15s}
+  .rec-del:hover{color:var(--crit);border-color:var(--crit)}
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{
       animation-duration:.001ms !important;
@@ -1182,6 +1237,33 @@
                 <button class="cbtn" onclick="stepperGoto()">GO</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECORDINGS (sentry + manual camera clips) -->
+    <div class="section" data-id="recordings" style="--span:12">
+      <div class="sec-hd"><span class="drag-handle" aria-hidden="true">⠿</span><span>⏺ RECORDINGS</span>
+        <span class="sp"></span><span class="lbl" id="rec-hdr-lbl">—</span><span class="chev" aria-hidden="true">▾</span></div>
+      <div class="sec-body">
+        <div class="rec-ctl">
+          <button class="cbtn" id="recSentryBtn" onclick="toggleSentry()"
+            title="Sentry mode: auto-record critical moments (CRITICAL vision threat, hull/pod leak) with a few seconds of pre-roll">🛡 SENTRY: OFF</button>
+          <button class="cbtn" id="recBtn" onclick="toggleRecord()"
+            title="Manually start / stop a recording">⏺ REC</button>
+          <span class="rec-live" id="recLive"><span class="rec-dot"></span> REC <span id="recLiveMeta"></span></span>
+          <span class="sp"></span>
+          <span class="rec-count" id="recCount"></span>
+        </div>
+        <div class="rec-layout">
+          <div class="rec-player">
+            <video id="recVideo" controls playsinline preload="metadata" aria-label="Recording playback"></video>
+            <div class="rec-player-empty" id="recPlayerEmpty">▶ SELECT A CLIP TO PLAY</div>
+            <div class="rec-nowplaying" id="recNowPlaying"></div>
+          </div>
+          <div class="rec-list" id="recList">
+            <div class="rec-empty">No recordings yet.</div>
           </div>
         </div>
       </div>
@@ -2195,6 +2277,80 @@ async function clearObstacles(){
   catch(e){ toast('✗ ' + e.message, false); }
 }
 setInterval(refreshObstacles, 3000); refreshObstacles();
+
+// ---- recordings (sentry + manual clips) ----
+let recSentry = false, recActive = false, recSelected = null;
+function fmtBytes(n){ if(n>=1e6) return (n/1e6).toFixed(1)+' MB'; if(n>=1e3) return (n/1e3).toFixed(0)+' KB'; return (n||0)+' B'; }
+function fmtClock(epoch){ try{ return new Date(epoch*1000).toLocaleString([], {month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}); }catch(e){ return '—'; } }
+function recIcon(sev){ return sev==='critical' ? '⚠' : sev==='warning' ? '◆' : '⏺'; }
+function recSrc(file){ return '/api/recordings/' + encodeURIComponent(file) + (KEY ? '?key=' + encodeURIComponent(KEY) : ''); }
+async function refreshRecordings(){
+  let d;
+  try{ d = await getApi('recordings'); }catch(e){ return; }
+  if(!d.available){ $('rec-hdr-lbl').textContent = 'unavailable'; return; }
+  recSentry = !!d.sentry_enabled; recActive = !!d.recording;
+  const sb = $('recSentryBtn'); sb.classList.toggle('armed', recSentry);
+  sb.textContent = recSentry ? '🛡 SENTRY: ARMED' : '🛡 SENTRY: OFF';
+  const rb = $('recBtn'); rb.classList.toggle('recording', recActive);
+  rb.textContent = recActive ? '⏹ STOP' : '⏺ REC';
+  $('recLive').classList.toggle('on', recActive);
+  if(recActive) $('recLiveMeta').textContent = (d.active_reason || '') + ' · ' + (d.active_frames||0) + 'f';
+  const n = (d.clips||[]).length;
+  $('recCount').textContent = n + ' clip' + (n===1?'':'s');
+  $('rec-hdr-lbl').textContent = (recSentry ? 'SENTRY ARMED' : 'sentry off') + (recActive ? ' · ● REC' : '') + ' · ' + n + ' clips';
+  renderRecList(d.clips || []);
+}
+function renderRecList(clips){
+  const el = $('recList');
+  if(!clips.length){ el.innerHTML = '<div class="rec-empty">No recordings yet. Arm SENTRY or hit REC.</div>'; return; }
+  el.innerHTML = clips.map(c => {
+    const sev = c.severity || 'manual';
+    const sel = (c.file === recSelected) ? ' sel' : '';
+    const file = encodeURIComponent(c.file);
+    return '<div class="rec-item sev-' + sev + sel + '" onclick="playClip(\'' + file + '\')">' +
+      '<div class="rec-thumb">' + recIcon(sev) + '</div>' +
+      '<div class="rec-meta"><div class="rec-when">' + fmtClock(c.started) + '</div>' +
+      '<div class="rec-sub"><span class="rec-badge sev-' + sev + '">' + (c.trigger||'') + '</span>' +
+      '<span>' + (c.duration_s||0) + 's</span><span>' + fmtBytes(c.size_bytes) + '</span></div></div>' +
+      '<button class="rec-del" title="Delete clip" onclick="event.stopPropagation();deleteClip(\'' + file + '\')">✕</button>' +
+      '</div>';
+  }).join('');
+}
+function playClip(file){
+  file = decodeURIComponent(file);
+  recSelected = file;
+  const v = $('recVideo');
+  v.src = recSrc(file); v.classList.add('on');
+  $('recPlayerEmpty').style.display = 'none';
+  $('recNowPlaying').textContent = '▶ ' + file; $('recNowPlaying').classList.add('on');
+  v.play().catch(()=>{});
+  refreshRecordings();
+}
+async function deleteClip(file){
+  file = decodeURIComponent(file);
+  try{
+    await fetch('/api/recordings/' + encodeURIComponent(file), { method:'DELETE', headers: apiHeaders() });
+    if(recSelected === file){
+      recSelected = null;
+      const v = $('recVideo'); v.pause(); v.removeAttribute('src'); v.load();
+      v.classList.remove('on'); $('recPlayerEmpty').style.display = '';
+      $('recNowPlaying').classList.remove('on');
+    }
+    toast('✓ clip deleted', true); refreshRecordings();
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+async function toggleSentry(){
+  const was = recSentry;
+  try{ await postApi('recordings/sentry', { enabled: !was }); await refreshRecordings();
+    toast(was ? 'Sentry disarmed' : 'Sentry armed', true); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+async function toggleRecord(){
+  try{ await postApi(recActive ? 'recordings/stop' : 'recordings/start'); refreshRecordings(); }
+  catch(e){ toast('✗ ' + e.message, false); }
+}
+setInterval(refreshRecordings, 3000); refreshRecordings();
+
 function swapCam(){ setCam(camView === 'left' ? 'right' : 'left'); }
 function toggleDetect(){
   // Detection is Tier 2 of the vision pipeline — the YOLO toggle owns it.

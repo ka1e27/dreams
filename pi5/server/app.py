@@ -72,6 +72,8 @@ _obstacles = None  # navigation.sim_obstacles.ObstacleField (simulator only)
 _object_memory = None  # cv.object_memory.ObjectMemory (simulator only; hardware
 #                        reads the pipeline's own memory via _pipeline.map_objects)
 _esc_mock = None   # bytearray — persistent mock ESC EEPROM for the editor in sim mode
+_recorder = None   # cv.recorder.Recorder (optional; camera clip + sentry recording)
+_recorder_task = None
 _winch_mode = "survey"
 _home_lat = None
 _home_lon = None
@@ -82,11 +84,12 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
               cors_origins=None, simulator=None, camera=None,
               network=None, winch_mode="survey", overlay=None,
               jpeg_quality=60, stream_fps=15, stepper=None, radar=None,
-              pipeline=None, obstacle_field=None, object_memory=None):
+              pipeline=None, obstacle_field=None, object_memory=None,
+              recorder=None):
     """Inject dependencies. Called before app startup."""
     global _pico, _navigator, _mission, _pod, _home_lat, _home_lon, _sim
     global _camera, _network, _winch_mode, _overlay, _jpeg_quality, _stream_fps_cap
-    global _stepper, _radar, _pipeline, _obstacles, _object_memory
+    global _stepper, _radar, _pipeline, _obstacles, _object_memory, _recorder
     _obstacles = obstacle_field
     _object_memory = object_memory
     _pico = pico
@@ -105,6 +108,7 @@ def configure(pico, navigator, mission_mgr, pod_bridge,
     _stepper = stepper
     _radar = radar
     _pipeline = pipeline
+    _recorder = recorder
     auth.configure(api_key)
 
     if cors_origins:
@@ -1515,6 +1519,128 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
     return _camera_state()
 
 
+# ---- Camera recordings (manual capture + Tesla-style sentry clips) ----
+# The recorder saves clips to disk on the Pi. A background feed keeps a rolling
+# pre-roll buffer while sentry mode is armed, so an auto-clip captures the
+# seconds before a critical event (CRITICAL vision threat, hull leak, pod leak).
+# All heavy OpenCV work runs off the event loop via asyncio.to_thread.
+
+def _sentry_reasons() -> list[str]:
+    """Critical conditions, right now, that sentry mode should record."""
+    reasons: list[str] = []
+    if _pipeline is not None:
+        try:
+            pt = _pipeline.vision_state().get("primary_threat")
+            if pt and pt.get("threat_level") == "CRITICAL":
+                reasons.append("critical-threat:" + str(pt.get("class_name", "obj")))
+        except Exception:  # noqa: BLE001 — never let a status read break the feed
+            pass
+    tel = getattr(_pico, "telemetry", None)
+    if tel is not None and getattr(tel, "hull", "DRY") not in ("DRY", None, ""):
+        reasons.append("hull-leak")
+    if _pod is not None:
+        latest = getattr(_pod, "latest", None)
+        if latest is not None and getattr(latest, "leak_detected", False):
+            reasons.append("pod-leak")
+    return reasons
+
+
+def _sim_sentry_frame():
+    """Synthetic frame for simulator mode (no camera) so the recorder still
+    produces meaningful, playable clips: a dark HUD with live sim telemetry."""
+    import cv2
+    import numpy as np
+    w, h = 640, 360
+    img = np.full((h, w, 3), 16, np.uint8)
+    for x in range(0, w, 40):
+        cv2.line(img, (x, 0), (x, h), (30, 28, 24), 1)
+    for y in range(0, h, 40):
+        cv2.line(img, (0, y), (w, y), (30, 28, 24), 1)
+    tel = getattr(_pico, "telemetry", None)
+
+    def _num(v, fmt):
+        return fmt.format(v) if isinstance(v, (int, float)) else "--"
+    cv2.putText(img, "D.R.E.A.M.S  SENTRY (SIM)", (16, 36),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (60, 170, 255), 2, cv2.LINE_AA)
+    cv2.putText(img, time.strftime("%Y-%m-%d %H:%M:%S"), (16, h - 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (210, 225, 240), 1, cv2.LINE_AA)
+    lines = [
+        "LAT " + _num(getattr(tel, "lat", None), "{:.5f}"),
+        "LON " + _num(getattr(tel, "lon", None), "{:.5f}"),
+        "HDG " + _num(getattr(tel, "heading", None), "{:.0f} deg"),
+        "SPD " + _num(getattr(tel, "speed_knots", None), "{:.1f} kn"),
+        "HULL " + str(getattr(tel, "hull", "--")),
+    ]
+    for i, ln in enumerate(lines):
+        cv2.putText(img, ln, (16, 82 + i * 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (250, 230, 120), 1, cv2.LINE_AA)
+    return img
+
+
+@app.get("/api/recordings")
+async def list_recordings(_: str = Depends(auth.require_api_key)):
+    """Sentry/record status + all saved clips (newest first)."""
+    if _recorder is None:
+        return {"available": False, "sentry_enabled": False,
+                "recording": False, "clips": []}
+    st = await asyncio.to_thread(_recorder.status)
+    clips = await asyncio.to_thread(_recorder.list_clips)
+    return {"available": True, **st, "clips": clips}
+
+
+@app.post("/api/recordings/start")
+async def start_recording(_: str = Depends(auth.require_api_key)):
+    """Begin a manual clip (runs until /stop)."""
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    meta = await asyncio.to_thread(_recorder.start_manual)
+    return {"status": "recording", "clip": meta}
+
+
+@app.post("/api/recordings/stop")
+async def stop_recording(_: str = Depends(auth.require_api_key)):
+    """Finalise the current clip."""
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    meta = await asyncio.to_thread(_recorder.stop)
+    return {"status": "stopped", "clip": meta}
+
+
+@app.post("/api/recordings/sentry")
+async def set_sentry_mode(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Arm/disarm sentry mode: {"enabled": bool}."""
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    if "enabled" in payload:
+        _recorder.set_sentry(bool(payload["enabled"]))
+    return await asyncio.to_thread(_recorder.status)
+
+
+@app.delete("/api/recordings/{name}")
+async def delete_recording(name: str, _: str = Depends(auth.require_api_key)):
+    """Delete a saved clip + its metadata."""
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    ok = await asyncio.to_thread(_recorder.delete_clip, name)
+    if not ok:
+        return Response(status_code=404, content="clip not found")
+    return {"status": "deleted", "file": name}
+
+
+@app.get("/api/recordings/{name}")
+async def get_recording(name: str, request: Request):
+    """Serve a clip for the <video> tag. Auth via ?key= like /video."""
+    if not _http_key_ok(request):
+        return Response(status_code=403, content="Invalid or missing API key")
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    path = _recorder.clip_path(name)
+    if path is None:
+        return Response(status_code=404, content="clip not found")
+    mime = "video/webm" if path.suffix == ".webm" else "video/mp4"
+    return FileResponse(str(path), media_type=mime, filename=path.name)
+
+
 # ---- Three-tier vision pipeline (Tier-1 segmentation + threat tracking) ----
 # These drive pi5/cv/pipeline.py's SurveyVisionPipeline. All degrade to 503 when
 # no pipeline is wired (simulator mode / no camera).
@@ -2016,3 +2142,81 @@ async def _start_health_loop():
 async def _stop_health_loop():
     if _health_task is not None:
         _health_task.cancel()
+
+
+# ---- Recorder feed lifecycle (rolling pre-roll + sentry auto-record) ----
+
+@app.on_event("startup")
+async def _start_recorder_feed():
+    """Pump frames into the recorder and evaluate sentry triggers.
+
+    Idles cheaply when sentry is off and nothing is recording. Uses live camera
+    frames on hardware; a synthetic telemetry HUD in simulator mode so the
+    feature is demonstrable end-to-end without a camera. All blocking OpenCV
+    work (encode/write) is offloaded to a thread.
+    """
+    global _recorder_task
+    if _recorder is None:
+        return
+    period = 1.0 / max(1.0, _recorder.cfg.fps)
+
+    async def _loop():
+        queue = None
+        last_eval = 0.0
+        try:
+            while True:
+                now = time.monotonic()
+                if not (_recorder.sentry_enabled or _recorder.recording):
+                    if queue is not None and _camera is not None:
+                        _camera.unsubscribe(queue)
+                        queue = None
+                    await asyncio.sleep(0.25)
+                    continue
+
+                frame = None
+                if _camera is not None:
+                    if queue is None:
+                        queue = _camera.subscribe()
+                    try:
+                        sf = await asyncio.wait_for(queue.get(), timeout=period * 3)
+                        while not queue.empty():          # skip to the freshest frame
+                            sf = queue.get_nowait()
+                        frame = sf.left
+                    except asyncio.TimeoutError:
+                        frame = None
+                else:
+                    frame = await asyncio.to_thread(_sim_sentry_frame)
+
+                if _recorder.sentry_enabled and (now - last_eval) > 0.33:
+                    last_eval = now
+                    reasons = _sentry_reasons()
+                    if reasons:
+                        await asyncio.to_thread(
+                            lambda rs=reasons, t=now:
+                            [_recorder.note_event(r, now=t) for r in rs])
+
+                if frame is not None:
+                    await asyncio.to_thread(_recorder.add_frame, frame, now)
+                await asyncio.to_thread(_recorder.tick, now)
+
+                await asyncio.sleep(max(0.0, period - (time.monotonic() - now)))
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001 — a feed crash must not take down the app
+            logger.error("recorder feed stopped: %s", e)
+        finally:
+            if queue is not None and _camera is not None:
+                _camera.unsubscribe(queue)
+
+    _recorder_task = asyncio.create_task(_loop())
+
+
+@app.on_event("shutdown")
+async def _stop_recorder_feed():
+    if _recorder_task is not None:
+        _recorder_task.cancel()
+    if _recorder is not None and _recorder.recording:
+        try:
+            _recorder.stop()
+        except Exception:  # noqa: BLE001
+            pass

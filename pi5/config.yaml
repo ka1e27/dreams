@@ -445,6 +445,18 @@ winch:
   # mechanical swap; firmware behavior is identical in either mode.
   mode: "survey"
 
+recording:
+  # Camera clip recorder + Tesla-style sentry (writes .webm clips to the Pi).
+  # Manual REC and armed SENTRY are toggled live from the dashboard.
+  dir: ""             # blank → pi5/server/recordings/
+  fps: 10             # record/pre-roll frame rate
+  width: 640          # frames are down-scaled to this width (keeps size/CPU bounded)
+  preroll_s: 6        # seconds kept before a sentry trigger fires
+  clip_s: 12          # sentry clip length after a trigger
+  max_clip_s: 90      # hard cap even if events keep extending the clip
+  max_clips: 60       # oldest clips pruned beyond this
+  sentry_default: false  # arm sentry automatically on boot
+
 server:
   # FastAPI web server (dashboard + API)
   host: "0.0.0.0"

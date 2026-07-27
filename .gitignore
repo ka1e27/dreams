@@ -73,3 +73,5 @@ pi5/cv/calibration.npz
 .code-review-graph/
 pi5/server/saved_paths.json
 pi5/server/camera_devices.json
+# Recorded camera clips (manual + sentry) live on the Pi, not in git.
+pi5/server/recordings/

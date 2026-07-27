@@ -30,6 +30,7 @@ from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.camera import CameraConfig, CameraProducer
 from pi5.cv.pipeline import SurveyVisionPipeline
 from pi5.cv.radar_tracker import RadarTracker
+from pi5.cv.recorder import Recorder, RecorderConfig
 from pi5.cv.stepper import StepperMotor
 from pi5.cv.vision_overlay import DetectionConfig, DetectionOverlay
 from pi5.navigation.mission_manager import MissionManager
@@ -220,6 +221,21 @@ def main() -> None:
         frame_width=cam_cfg.get("width", 640),
     )
 
+    # Camera clip recorder + Tesla-style sentry (writes .webm to disk on the Pi).
+    rec_cfg = cfg.get("recording", {}) or {}
+    recorder = Recorder(
+        rec_cfg.get("dir") or (Path(__file__).parent / "pi5" / "server" / "recordings"),
+        RecorderConfig(
+            fps=float(rec_cfg.get("fps", 10)),
+            preroll_s=float(rec_cfg.get("preroll_s", 6)),
+            clip_s=float(rec_cfg.get("clip_s", 12)),
+            max_clip_s=float(rec_cfg.get("max_clip_s", 90)),
+            width=int(rec_cfg.get("width", 640)),
+            max_clips=int(rec_cfg.get("max_clips", 60)),
+            sentry_default=bool(rec_cfg.get("sentry_default", False)),
+        ),
+    )
+
     configure(
         pico=pico,
         navigator=nav,
@@ -238,6 +254,7 @@ def main() -> None:
         stepper=stepper,          # radar-bar pan (Pi 5 GPIO)
         radar=radar,              # tracker thread = the motor's motion authority
         pipeline=pipeline,        # three-tier vision (Tier-1 seg → threat → radar)
+        recorder=recorder,        # manual + sentry camera clips → pi5/server/recordings/
     )
 
     @app.on_event("startup")

@@ -1,0 +1,112 @@
+"""Tests for the camera clip recorder (manual + sentry pre-roll)."""
+from __future__ import annotations
+
+import json
+
+import numpy as np
+import pytest
+
+from pi5.cv.recorder import Recorder, RecorderConfig
+
+pytest.importorskip("cv2")
+
+
+def _frame(h: int = 72, w: int = 128) -> np.ndarray:
+    return (np.random.rand(h, w, 3) * 255).astype(np.uint8)
+
+
+def test_manual_clip_writes_file_and_metadata(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128))
+    assert rec.start_manual(now=0.0) is not None
+    for i in range(5):
+        rec.add_frame(_frame(), now=0.1 * (i + 1))
+    meta = rec.stop(now=0.6)
+
+    assert meta is not None
+    assert meta["trigger"] == "manual"
+    assert meta["frames"] == 5
+    vid = tmp_path / meta["file"]
+    assert vid.exists() and vid.stat().st_size > 0
+    # sidecar JSON matches
+    side = json.loads((vid.with_suffix(".json")).read_text())
+    assert side["name"] == meta["name"]
+    clips = rec.list_clips()
+    assert len(clips) == 1 and clips[0]["file"] == meta["file"]
+
+
+def test_sentry_event_includes_preroll_and_autostops(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(
+        fps=10, preroll_s=0.5, clip_s=0.5, width=128, sentry_default=True))
+
+    # Warm the pre-roll ring (sentry on, no clip yet) — maxlen = 0.5*10 = 5.
+    for i in range(8):
+        rec.add_frame(_frame(), now=0.1 * i)
+    assert rec.status()["preroll_frames"] == 5
+
+    started = rec.note_event("critical-threat", now=0.8)
+    assert started
+    st = rec.status()
+    assert st["recording"] and st["active_frames"] == 5   # seeded from pre-roll
+
+    for i in range(4):
+        rec.add_frame(_frame(), now=0.9 + 0.1 * i)
+    # Not yet past the deadline (0.8 + 0.5 = 1.3)
+    rec.tick(now=1.2)
+    assert rec.status()["recording"]
+    # Past the deadline -> auto-stop
+    rec.tick(now=1.4)
+    assert not rec.status()["recording"]
+
+    clips = rec.list_clips()
+    assert len(clips) == 1
+    assert clips[0]["trigger"] == "sentry"
+    assert clips[0]["severity"] == "critical"
+    assert clips[0]["frames"] == 9   # 5 pre-roll + 4 live
+
+
+def test_preroll_only_fills_when_sentry_enabled(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, preroll_s=1.0, sentry_default=False))
+    for i in range(5):
+        rec.add_frame(_frame(), now=0.1 * i)
+    assert rec.status()["preroll_frames"] == 0   # idle when sentry off
+    rec.set_sentry(True)
+    for i in range(5):
+        rec.add_frame(_frame(), now=1.0 + 0.1 * i)
+    assert rec.status()["preroll_frames"] == 5
+
+
+def test_retrigger_extends_running_sentry_clip(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(
+        fps=10, clip_s=0.5, retrigger_extend_s=0.5, max_clip_s=5.0,
+        width=128, sentry_default=True))
+    rec.add_frame(_frame(), now=0.0)
+    rec.note_event("critical-threat", now=0.2)   # deadline 0.7
+    rec.note_event("hull-leak", now=0.6)          # extends to 0.6+0.5 = 1.1
+    rec.tick(now=0.8)
+    assert rec.status()["recording"]              # would have stopped at 0.7 without extend
+    rec.tick(now=1.2)
+    assert not rec.status()["recording"]
+    assert "critical-threat" in rec.list_clips()[0]["reason"]
+    assert "hull-leak" in rec.list_clips()[0]["reason"]
+
+
+def test_retention_prunes_to_max_clips(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128, max_clips=2))
+    for _ in range(4):
+        rec.start_manual()
+        rec.add_frame(_frame())
+        rec.stop()
+    assert len(rec.list_clips()) == 2
+    assert rec.status()["clip_count"] == 2
+
+
+def test_delete_and_path_traversal_guard(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128))
+    rec.start_manual()
+    rec.add_frame(_frame())
+    meta = rec.stop()
+    assert rec.clip_path(meta["file"]) is not None
+    assert rec.clip_path("../secret.webm") is None
+    assert rec.clip_path("nope.webm") is None
+    assert rec.delete_clip(meta["file"]) is True
+    assert rec.list_clips() == []

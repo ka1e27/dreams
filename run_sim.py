@@ -8,11 +8,13 @@ Usage:
 """
 import asyncio
 import logging
+from pathlib import Path
 
 import uvicorn
 
 from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.object_memory import ObjectMemory
+from pi5.cv.recorder import Recorder
 from pi5.navigation.mission_manager import MissionManager
 from pi5.navigation.navigator import Navigator
 from pi5.navigation.sim_obstacles import ObstacleField, SimAvoider, SimObjectMapper
@@ -49,6 +51,11 @@ def main():
     object_memory = ObjectMemory()
     mapper = SimObjectMapper(obstacles, object_memory)
 
+    # Camera clip recorder + Tesla-style sentry. No camera in sim, so the feed
+    # synthesises a telemetry-HUD frame — arm SENTRY or hit REC in the dashboard
+    # and it writes real, playable .webm clips under pi5/server/recordings/.
+    recorder = Recorder(Path(__file__).parent / "pi5" / "server" / "recordings")
+
     # Inject into the FastAPI app
     configure(
         pico=pico,
@@ -61,6 +68,7 @@ def main():
         simulator=sim,
         obstacle_field=obstacles,
         object_memory=object_memory,
+        recorder=recorder,
     )
 
     avoid_task: list[asyncio.Task] = []
@@ -69,10 +77,15 @@ def main():
         # ~4 Hz, the same cadence the hardware reactive layer runs at.
         while True:
             try:
-                avoider.update(sim.lat, sim.lon, sim.heading)
+                avoiding = avoider.update(sim.lat, sim.lon, sim.heading)
                 # Same tick, feed the object map from ground truth (the sim's
                 # stand-in for the vision pipeline geolocating detections).
                 mapper.update(sim.lat, sim.lon, sim.heading)
+                # Reactive avoidance is a "critical moment" — the sim's stand-in
+                # for a CRITICAL vision threat, so armed sentry auto-records it
+                # (debounced inside note_event; no-op when sentry is off).
+                if avoiding:
+                    recorder.note_event("critical-threat:obstacle")
             except Exception as e:  # noqa: BLE001 — a glitch must not kill the loop
                 logging.getLogger("run_sim").debug("sim avoid error: %s", e)
             await asyncio.sleep(0.25)
