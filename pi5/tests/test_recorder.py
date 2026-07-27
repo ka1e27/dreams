@@ -151,6 +151,46 @@ def test_prunes_clips_older_than_max_age(tmp_path):
     assert not (tmp_path / m["file"]).exists()        # video gone too
 
 
+def test_favorite_survives_age_and_count_pruning(tmp_path):
+    import os
+
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128, max_age_days=14, max_clips=1))
+    rec.start_manual()
+    rec.add_frame(_frame())
+    fav = rec.stop()
+    # Favorite it, then backdate it well past the age limit.
+    assert rec.set_favorite(fav["file"], True) is not None
+    jp = (tmp_path / fav["file"]).with_suffix(".json")
+    past = time.time() - 100 * 86400
+    m = json.loads(jp.read_text())
+    m["started"] = past
+    jp.write_text(json.dumps(m))
+    os.utime(jp, (past, past))
+    os.utime(tmp_path / fav["file"], (past, past))
+
+    assert rec.prune_old() == 0                       # age sweep skips the favorite
+    files = {c["file"] for c in rec.list_clips()}
+    assert fav["file"] in files
+
+    # A newer clip triggers the count cap (max_clips=1) — the favorite is still kept.
+    rec.start_manual()
+    rec.add_frame(_frame())
+    rec.stop()
+    files = {c["file"] for c in rec.list_clips()}
+    assert fav["file"] in files                       # protected from the count cap too
+
+    # Un-favorite → now the stale clip is eligible and gets pruned.
+    rec.set_favorite(fav["file"], False)
+    assert rec.prune_old() == 1
+    assert fav["file"] not in {c["file"] for c in rec.list_clips()}
+
+
+def test_set_favorite_rejects_unknown_and_traversal(tmp_path):
+    rec = Recorder(tmp_path, RecorderConfig(fps=10, width=128))
+    assert rec.set_favorite("../secret.webm", True) is None
+    assert rec.set_favorite("nope.webm", True) is None
+
+
 def test_max_age_zero_keeps_everything(tmp_path):
     import os
 

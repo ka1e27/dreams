@@ -733,6 +733,8 @@
     border:1px solid currentColor;text-transform:uppercase}
   .rec-badge.sev-critical{color:var(--crit)} .rec-badge.sev-warning{color:var(--warn)}
   .rec-badge.sev-manual{color:var(--cyan)}
+  .rec-fav-star{color:var(--warn);margin-left:6px;text-shadow:0 0 8px rgba(255,176,46,.5)}
+  #recFavBtn.on{color:var(--warn);border-color:var(--warn);background:rgba(255,176,46,.10)}
   .rec-del{background:transparent;border:1px solid var(--hairline);color:var(--muted);
     border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;flex-shrink:0;transition:.15s}
   .rec-del:hover{color:var(--crit);border-color:var(--crit)}
@@ -1424,6 +1426,8 @@
       <button class="cbtn ghost2" onclick="closeModal('mRec')">CLOSE</button>
       <span class="rec-sel-name" id="recSelName"></span>
       <span class="sp"></span>
+      <button class="cbtn ghost2" id="recFavBtn" onclick="toggleFavorite()"
+        title="Favorite: keep this clip forever (never auto-deleted)" disabled>☆ FAVORITE</button>
       <button class="cbtn ghost2" id="recFsBtn" onclick="fullscreenClip()" disabled>⛶ FULLSCREEN</button>
       <button class="cbtn" id="recDlBtn" onclick="downloadClip()" disabled>⤓ DOWNLOAD</button>
       <button class="cbtn danger" id="recDelBtn" onclick="deleteSelected()" disabled>DELETE</button>
@@ -2327,19 +2331,33 @@ function renderRecList(clips){
     const sev = c.severity || 'manual';
     const sel = (c.file === recSelected) ? ' sel' : '';
     const file = encodeURIComponent(c.file);
+    const star = c.favorite ? '<span class="rec-fav-star" title="Favorite — kept forever">★</span>' : '';
     return '<div class="rec-item sev-' + sev + sel + '" onclick="playClip(\'' + file + '\')">' +
       '<div class="rec-thumb">' + recIcon(sev) + '</div>' +
-      '<div class="rec-meta"><div class="rec-when">' + fmtClock(c.started) + '</div>' +
+      '<div class="rec-meta"><div class="rec-when">' + fmtClock(c.started) + star + '</div>' +
       '<div class="rec-sub"><span class="rec-badge sev-' + sev + '">' + (c.trigger||'') + '</span>' +
       '<span>' + (c.duration_s||0) + 's</span><span>' + fmtBytes(c.size_bytes) + '</span></div></div>' +
       '</div>';
   }).join('');
   recUpdateActions();
 }
+function recSelectedClip(){ return recClips.find(c => c.file === recSelected) || null; }
 function recUpdateActions(){
-  const has = !!recSelected;
-  ['recDlBtn','recFsBtn','recDelBtn'].forEach(id => { const b = $(id); if(b) b.disabled = !has; });
+  const c = recSelectedClip();
+  const has = !!c;
+  ['recDlBtn','recFsBtn','recDelBtn','recFavBtn'].forEach(id => { const b = $(id); if(b) b.disabled = !has; });
+  const fb = $('recFavBtn');
+  if(fb){ const fav = !!(c && c.favorite); fb.classList.toggle('on', fav); fb.textContent = fav ? '★ FAVORITED' : '☆ FAVORITE'; }
   const nm = $('recSelName'); if(nm) nm.textContent = recSelected || '';
+}
+async function toggleFavorite(){
+  const c = recSelectedClip();
+  if(!c) return;
+  try{
+    await postApi('recordings/' + encodeURIComponent(recSelected) + '/favorite', { favorite: !c.favorite });
+    toast(c.favorite ? 'Removed from favorites' : '★ Favorited — kept forever', true);
+    await refreshRecordings(); renderRecList(recClips);
+  }catch(e){ toast('✗ ' + e.message, false); }
 }
 function openRecModal(){ openModal('mRec'); refreshRecordings(); renderRecList(recClips); }
 function playClip(file){

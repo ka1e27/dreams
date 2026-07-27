@@ -217,6 +217,7 @@ class Recorder:
                 "width": c.size[0],
                 "height": c.size[1],
                 "mime": c.mime,
+                "favorite": False,   # user pin — favorites are never auto-deleted
                 "size_bytes": c.path.stat().st_size if c.path.exists() else 0,
             }
             c.path.with_suffix(".json").write_text(json.dumps(meta), encoding="utf-8")
@@ -262,6 +263,7 @@ class Recorder:
             if not vid.exists():
                 continue
             m["size_bytes"] = vid.stat().st_size
+            m.setdefault("favorite", False)
             out.append(m)
         out.sort(key=lambda m: m.get("started", 0), reverse=True)
         return out
@@ -285,6 +287,22 @@ class Recorder:
             p.unlink(missing_ok=True)
             p.with_suffix(".json").unlink(missing_ok=True)
         return True
+
+    def set_favorite(self, file_name: str, favorite: bool) -> dict | None:
+        """Pin/unpin a clip. Favorites are exempt from age + count pruning (but
+        can still be deleted explicitly). Returns the updated metadata or None."""
+        with self._lock:
+            vid = self.clip_path(file_name)
+            if vid is None:
+                return None
+            jp = vid.with_suffix(".json")
+            try:
+                m = json.loads(jp.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+            m["favorite"] = bool(favorite)
+            jp.write_text(json.dumps(m), encoding="utf-8")
+            return m
 
     # -- internals ---------------------------------------------------------- #
     def _scale(self, bgr: "np.ndarray", cv2) -> "np.ndarray":
@@ -389,13 +407,21 @@ class Recorder:
         except OSError:
             return 0.0
 
+    def _is_favorite(self, json_path: Path) -> bool:
+        try:
+            return bool(json.loads(json_path.read_text(encoding="utf-8")).get("favorite", False))
+        except (OSError, ValueError):
+            return False
+
     def _prune_by_age(self) -> int:
-        """Delete clips older than ``max_age_days`` (0 disables). Returns count."""
+        """Delete non-favorite clips older than ``max_age_days`` (0 disables)."""
         if self.cfg.max_age_days <= 0:
             return 0
         cutoff = time.time() - self.cfg.max_age_days * 86400.0
         removed = 0
         for j in list(self.dir.glob("clip-*.json")):
+            if self._is_favorite(j):
+                continue                           # favorites are never auto-deleted
             if self._clip_started(j) < cutoff:
                 self._delete_meta(j)
                 removed += 1
@@ -412,7 +438,8 @@ class Recorder:
 
     def _prune(self) -> None:
         self._prune_by_age()                       # age first...
-        clips = sorted(self.dir.glob("clip-*.json"),
-                       key=lambda p: p.stat().st_mtime, reverse=True)
-        for old in clips[self.cfg.max_clips:]:     # ...then the count cap
+        # ...then the count cap, over non-favorites only (favorites always kept).
+        others = [p for p in self.dir.glob("clip-*.json") if not self._is_favorite(p)]
+        others.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in others[self.cfg.max_clips:]:
             self._delete_meta(old)

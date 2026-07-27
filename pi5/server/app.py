@@ -1627,6 +1627,19 @@ async def delete_recording(name: str, _: str = Depends(auth.require_api_key)):
     return {"status": "deleted", "file": name}
 
 
+@app.post("/api/recordings/{name}/favorite")
+async def favorite_recording(name: str, payload: dict,
+                             _: str = Depends(auth.require_api_key)):
+    """Pin/unpin a clip: {"favorite": bool}. Favorites are never auto-deleted."""
+    if _recorder is None:
+        return Response(status_code=503, content="recorder unavailable")
+    fav = bool(payload.get("favorite", True))
+    m = await asyncio.to_thread(_recorder.set_favorite, name, fav)
+    if m is None:
+        return Response(status_code=404, content="clip not found")
+    return {"status": "ok", "file": name, "favorite": m.get("favorite", False)}
+
+
 @app.get("/api/recordings/{name}")
 async def get_recording(name: str, request: Request):
     """Serve a clip for the <video> tag. Auth via ?key= like /video."""

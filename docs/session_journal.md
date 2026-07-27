@@ -77,6 +77,10 @@ deleted, alongside the existing `max_clips` count cap. Pruned on every save, at 
 and hourly by the server feed (`prune_old()`), so stale clips go even with no new recordings. Age comes
 from the clip's metadata `started` (falls back to file mtime); `0` keeps forever. Config
 `recording.max_age_days`; +2 tests.
+**Follow-up (favorites):** a clip can be **favorited** (★) to pin it — favorites are exempt from both the
+age sweep and the count cap (but can still be deleted explicitly). `favorite` bool in the clip metadata;
+`Recorder.set_favorite()` + `POST /api/recordings/{name}/favorite`; the recordings modal footer got a
+FAVORITE toggle and rows show a ★. +2 tests; verified the endpoint + guard on the sim.
 
 ## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
 
