@@ -1030,6 +1030,12 @@
             <button class="cbtn" onclick="toggleDetect()">◉ TOGGLE DETECT</button>
           </div>
           <div class="cmd-group">
+            <span class="cmd-glabel">VISION</span>
+            <button class="cbtn" onclick="toggleYolo()" title="Toggle YOLO object detection (Tier 2)">◉ YOLO</button>
+            <button class="cbtn" onclick="toggleSegmentation()" title="Toggle water-surface segmentation (Tier 1)">◉ WATER SEG</button>
+            <button class="cbtn" onclick="toggleAvoidance()" title="Toggle reactive obstacle avoidance (Tier 3)">◉ AVOIDANCE</button>
+          </div>
+          <div class="cmd-group">
             <span class="cmd-glabel">RADAR BAR</span>
             <button class="cbtn" onclick="stepperCmd('CENTER','Centering radar bar')">CENTER</button>
             <button class="cbtn" onclick="stepperCmd('SCAN','Scanning')">SCAN</button>
@@ -1040,6 +1046,12 @@
             <button class="cbtn" onclick="checkNetwork()">NETWORK</button>
             <button class="cbtn" onclick="checkPod()">POD STATUS</button>
             <button class="cbtn" onclick="checkStatus()">FULL STATUS</button>
+          </div>
+          <div class="cmd-group">
+            <span class="cmd-glabel">DIAGNOSTICS</span>
+            <button class="cbtn" onclick="checkTelemetry()" title="Position, heading, speed and battery">TELEMETRY</button>
+            <button class="cbtn" onclick="checkEnvironment()" title="Air, water temp and conductivity">ENVIRONMENT</button>
+            <button class="cbtn" onclick="checkVision()" title="Vision pipeline toggle state">VISION</button>
           </div>
         </div>
       </div>
@@ -2206,6 +2218,27 @@ async function checkStatus(){
   try{
     const s = await getApi('status');
     toast(`link=${s.connected ? 'up' : 'down'} · hull=${s.telemetry.hull} · batt=${s.telemetry.batt_pct}% · mission=${s.mission.running ? (s.mission.paused ? 'PAUSED' : 'RUNNING') : 'IDLE'}`, s.connected);
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+async function checkTelemetry(){
+  try{
+    const t = await getApi('telemetry');
+    toast(`POS ${t.lat.toFixed(5)}, ${t.lon.toFixed(5)} · hdg ${Math.round(t.heading)}° · ${t.speed_knots.toFixed(1)} kn · ${t.batt_v.toFixed(1)}V ${t.batt_pct}%`, true);
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+async function checkEnvironment(){
+  try{
+    const e = await getApi('environment');
+    toast(`AIR ${e.air_temp}°C/${e.air_humidity}% · WATER ${e.water_temp.toFixed(1)}°C · EC ${e.water_ec.toFixed(0)} µS/cm`, true);
+  }catch(err){ toast('✗ ' + err.message, false); }
+}
+async function checkVision(){
+  try{
+    const r = await fetch('/vision/status', { headers: apiHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const v = await r.json();
+    if (!v.available){ toast('vision: not running', false); return; }
+    toast(`VISION yolo=${v.yolo_enabled ? 'on' : 'off'} · seg=${v.segmentation_enabled ? 'on' : 'off'}`, true);
   }catch(e){ toast('✗ ' + e.message, false); }
 }
 function openModal(id){ $(id).classList.add('show'); }
