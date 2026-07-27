@@ -202,15 +202,6 @@ class ThreatAssessor:
         return best
 
     # -- approach vector ---------------------------------------------------- #
-    def is_approaching(self, obj: TrackedObject) -> bool:
-        """Apparent size growing over the recent window → getting closer."""
-        h = obj.size_history
-        if len(h) < self.approach_frames:
-            return False
-        recent = sum(h[-3:]) / 3.0
-        earlier = sum(h[-6:-3]) / 3.0 if len(h) >= 6 else sum(h[:3]) / 3.0
-        return earlier > 0 and recent > earlier * self.approach_threshold
-
     def _approach_vector(self, obj: TrackedObject) -> str:
         h = obj.size_history
         if len(h) < self.approach_frames:
