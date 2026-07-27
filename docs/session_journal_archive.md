@@ -9,6 +9,70 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-25 — Full on-Pi review (9 agents) + ESC KISS telemetry (temp + current)
+
+**Worked on:** first review actually **run on the Pi** (prior 3 sessions were Windows/static-only).
+Then built per-motor ESC telemetry end-to-end at the user's request.
+**Review (executed):** baseline healthy — `pytest pi5/tests` **164 green**, ruff clean, firmware
+py_compiles, both Vite builds pass. 9 parallel subsystem agents + own pass on scripts/services/CI/deploy.
+Findings relayed to user; **nothing auto-fixed**. Headline:
+- **CRITICAL firmware (verified by hand):** (S2) `serial_handler._send()` `sys.stdout.write` is
+  unguarded — a hung Pi fills the USB TX buffer, stalls the single asyncio loop, watchdog never ESTOPs
+  (read path IS guarded, write path isn't). (S1) UART1 double-drain — `gps.read()` in `task_fast_sensors`
+  (main.py:209) races `task_uart1_reader`, shredding GPS **and** `$POD` leak frames; fix = delete line 209.
+- **HIGH:** pod-leak only alerts (no ESTOP/decision); single-hull hull-leak ESTOP needs *both* sensors so
+  never fires; watchdog ESTOP is one-shot under `except: pass`.
+- **MED:** cloud `list_missions` unbounded; server blocking file IO in async save/delete; `pod_bridge`
+  `_pod_ok` not cleared on parse error; uploader overflow truncation; `detector.py` dead; doc rot
+  (`main.py`/`pin_map.md` "2× M18 series"→parallel; pin_map still production board); orphaned
+  `mission:`/`pod:`/`logging:` config; Caddyfile only proxies /api+/ws.
+- **Rejected on verify:** rate-limiter "race" (no `await` in critical section → atomic single-worker) and
+  SBUS S3 "9 cycles/bit" (it's 8, correct). *But* SBUS uses an 8-byte PIO FIFO < a 25-byte frame → likely
+  under-drains too (bench-check).
+**ESC telemetry (built; runs in sim; UNTESTED on hardware):** new `firmware/boat-pico/esc_telem.py` — PIO
+UART RX ×2 (**GP16** L / **GP19** R), KISS 10-byte frames (CRC-8, big-endian), **32-byte FIFO**
+(`push_thresh=32` — the fix SBUS lacks). `escs.py` telemetry stubs now delegate to it; `main.py` inits +
+100 Hz drain task + edge-triggered `MOTOR_HOT` WARN (80 °C, WARN-only by choice — one-liner to ESTOP).
+Current appended to `TEL` as `curr_l,curr_r` (backward-compat v1.1 appendix) → `pico_serial`
+(parse-if-present) → server model/status dict → command center + `TelemetryPanel.jsx`. Simulator emits
+synthetic load-based temp/current. Fixed the "series"→"parallel" doc rot in `main.py`/`sensors`/`simulator`
+while here. Docs: new `docs/esc_telemetry.md` (+ `esc_setup.md`, `serial-protocol.md §4.1`).
+**Verified:** 164 tests still green, ruff clean, firmware compiles, KISS parser unit-checked
+(CRC/scaling/resync/reject); **booted the sim on the Pi** — a `goto` drove the boat and `/api/status`
+showed `curr 12.0/3.2 A`, `temp 45/37 °C` tracking throttle.
+**Decisions / open questions:** ESC telem has 3 bench unknowns (AM32 emitting telem in PWM mode; PIO byte
+order `_BYTE_ORDER_LE`; drain cadence via `esc_telem.stats()`) — see the doc. Review fixes NOT applied —
+awaiting user's pick.
+**Next steps:** (1) fix S1 (1-line) + S2 (writer-queue) — top safety value; (2) bench-validate ESC telem
+per `docs/esc_telemetry.md`; (3) regen stale `pin_map.md`; (4) pi5/cloud one-liners. Nothing committed.
+**Follow-up (2026-07-26) — on-bench ESC bring-up with a real NeutronRC G071 + 4S:**
+- **ESC passthrough bench-tested → found + fixed real bugs.** Arming the Pico bridge stranded the Pico
+  (needed power-cycles). Root causes fixed in `firmware/boat-pico/esc_passthrough.py`: `stdin.read(64)`
+  blocks until 64 bytes (rp2 `select.poll` on USB-CDC is unreliable) → drain byte-at-a-time; added a
+  **hardware `machine.WDT(8s)`** so a hang self-recovers (also the only HW WDT in the firmware now);
+  moved its PIO SMs 0/4→6/7 (collided with SBUS SM0 + esc_telem SM4/5); dropped the `ESC_PASS: bridging`
+  print in `main.py` that leaked into the CDC as a false "reply". Still not functionally validated for
+  am32.ca-through-Pico (poll/read + half-duplex link unproven) — WDT just makes iterating safe.
+- **am32.ca can't see the Pi's GPIO UART** (Chromium Web Serial lists USB serial only), so the browser
+  path is out without a USB-TTL adapter (user has none). **Pivoted to a CLI configurator.**
+- **NEW `pi5/scripts/am32_config.py` — WORKS.** AM32 one-wire bootloader protocol over the Pi's GPIO
+  UART (transcribed from AM32-bootloader `main.c`: 19200, CRC16 0xA001, SET_ADDRESS/READ/SET_BUFFER/
+  PROG_FLASH). Enabled `uart0` (`/dev/ttyAMA0`, GPIO14/15) at runtime + stopped the serial getty. Read
+  the ESC (name "NeutronRC G0", 64K, flash code 0x35 → EEPROM at 0xf800), then **wrote + read-back-verified
+  bidirectional (byte 18=1) + 30ms telemetry (byte 31=1)**. `read` + `set --bidir/--telemetry/--lvc`.
+  Doc `docs/am32_config.md`; `esc_setup.md` updated (Pi-GPIO path now the recommended bench route).
+- **Telemetry still 0 on GP16.** Traced AM32 firmware: serial telem is emitted on the **MCU's PB6**
+  (USART1 115200 8N1 open-drain) and the transmit sits in the commutation path → **likely only streams
+  while a motor is spinning**. No motor connected, so `esc_telem` correctly sees 0 bytes. Left for the
+  user to finish: motor (props off) + throttle, and confirm GP16 is on the ESC's actual telemetry pad (PB6).
+**Committed + pushed** as `c70a8f0`. Then **fixed the two firmware safety criticals** (deployed to the
+Pico + verified telemetry still flows with valid checksums): **S1** — removed the racing `gps.read()` from
+`task_fast_sensors` so `task_uart1_reader` is the sole UART1 reader (it demuxes GPS + `$POD`; the double
+read was shredding GPS fixes and the pod leak frame). **S2** — `serial_handler._send()` now writes
+byte-at-a-time behind a `POLLOUT` poll (`_stdout_poll`) and drops the rest of a frame under back-pressure,
+so a Pi that stops draining the CDC can no longer wedge the asyncio loop and starve the heartbeat
+watchdog. S1/S2 changes (`main.py`, `serial_handler.py`) + this note uncommitted.
+
 ## 2026-07-25 — Deep review: LOS nav, obstacle avoidance wired, vision perf, Abyssal Indigo UI
 
 **Worked on:** user asked for an extremely thorough review + make it run *great*, research-backed
