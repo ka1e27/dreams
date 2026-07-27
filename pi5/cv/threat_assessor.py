@@ -178,7 +178,7 @@ class ThreatAssessor:
             matched_ids.add(id(obj))
             obj.size_history.append(area)
             if len(obj.size_history) > self.history_len:
-                obj.size_history = obj.size_history[-self.history_len:]
+                del obj.size_history[:-self.history_len]  # trim oldest in place
             obj.approach_vector = self._approach_vector(obj)
 
         # Prune objects not seen recently.
@@ -189,14 +189,16 @@ class ThreatAssessor:
     def _match(self, cls: str, cx: float, cy: float,
                used: set[int]) -> TrackedObject | None:
         """Nearest same-class object within the centroid gate, else None."""
-        best, best_d = None, self.match_gate_px
+        # Compare squared distances so this per-frame matching loop avoids a
+        # sqrt per candidate; monotonic, so nearest selection is unchanged.
+        best, best_d2 = None, self.match_gate_px ** 2
         for o in self._objects:
             if o.class_name != cls or id(o) in used:
                 continue
             ox, oy = o.center
-            d = ((ox - cx) ** 2 + (oy - cy) ** 2) ** 0.5
-            if d <= best_d:
-                best, best_d = o, d
+            d2 = (ox - cx) ** 2 + (oy - cy) ** 2
+            if d2 <= best_d2:
+                best, best_d2 = o, d2
         return best
 
     # -- approach vector ---------------------------------------------------- #

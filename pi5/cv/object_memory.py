@@ -315,13 +315,21 @@ class ObjectMemory:
         return list(self._objects)
 
     def stats(self) -> dict:
-        """Compact counts for the vision-state snapshot."""
-        confirmed = [o for o in self._objects if o.confirmed]
+        """Compact counts for the vision-state snapshot (single pass)."""
+        conf = perm = trans = 0
+        for o in self._objects:
+            if not o.confirmed:
+                continue
+            conf += 1
+            if o.category == Category.PERMANENT:
+                perm += 1
+            else:
+                trans += 1
         return {
             "total": len(self._objects),
-            "confirmed": len(confirmed),
-            "permanent": sum(1 for o in confirmed if o.category == Category.PERMANENT),
-            "transient": sum(1 for o in confirmed if o.category == Category.TRANSIENT),
+            "confirmed": conf,
+            "permanent": perm,
+            "transient": trans,
         }
 
     def clear(self) -> None:
