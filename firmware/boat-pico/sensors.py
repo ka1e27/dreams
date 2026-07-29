@@ -33,8 +33,18 @@ Pin assignments:
       — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]  — open air
   - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]  — electronics enclosure
-  - Hull leak left:  GP17
-  - Hull leak right: GP18
+  - Hull leak left:  GP19  [J16 "Hull Leak Left"]
+  - Hull leak right: GP20  [J15 "Hull Leak Right"]
+
+Hull leak moved GP17/GP18 -> GP19/GP20 on 2026-07-28 to match the Boat_PCB V2
+connectors. On that board GP17/GP18 are the BNO085's RST and INT lines on J5, so
+the old assignment read the IMU's control pins rather than any leak contact.
+
+!! The divider values quoted above are the M18 TARGET, not what V2 has fitted.
+As built: drive R2/R4 = 220k/13k (x17.92, not x14.0) and electronics R5/R6 =
+100k/30k (x4.33, not x6.6 — and over-range on an M18: 18 V gives 4.15 V at a
+3.3 V pin). Only the winch divider is right. Fit 56k/10k on all three and set
+INV_P_RATIO = 6.6. See docs/pin_map.md.
 """
 from machine import Pin, ADC, SoftI2C
 import sht41
@@ -138,8 +148,11 @@ def init():
     except:
         _sht_b = None
     try:
-        _hull_l = Pin(17, Pin.IN, Pin.PULL_UP)
-        _hull_r = Pin(18, Pin.IN, Pin.PULL_UP)
+        # J16 "Hull Leak Left" = GP19, J15 "Hull Leak Right" = GP20 (Boat_PCB V2
+        # netlist). Both connectors are pin 1 = GND, pin 2 = signal, so a closed
+        # contact pulls the pin low — hence PULL_UP + active-low below.
+        _hull_l = Pin(19, Pin.IN, Pin.PULL_UP)
+        _hull_r = Pin(20, Pin.IN, Pin.PULL_UP)
     except:
         pass
 

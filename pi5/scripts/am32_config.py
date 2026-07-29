@@ -115,7 +115,7 @@ FIELDS = [
                 "command → forward thrust on both hulls."),
     _Field("telemetry", 31, "bool", "30 ms Telemetry", "drive", important=True,
            help="ON streams KISS temp+current to the dashboard. Needs the ESC's TX pad "
-                "wired to Pico GP16 (L) / GP19 (R). See docs/esc_telemetry.md."),
+                "wired to Pico GP16 (L) / GP11 (R). See docs/esc_telemetry.md."),
 
     # --- PROTECT (battery + fault behaviour) ---
     _Field("lvc_enable", 36, "bool", "Low-Voltage Cutoff", "protect",

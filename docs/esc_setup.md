@@ -77,7 +77,7 @@ the USB "linker" is just a CH340 USB-serial adapter on that wire. So:
 | **Sinusoidal startup** | ON | Smoother, quieter low-speed starts under a big prop load than damped-light. |
 | **Motor timing** | tune up if rough | Larger boat props at low KV often want more advance than the drone default; raise if startup is rough. |
 | **Current limit** | ~45 A/motor *if available* | Newer AM32 exposes a current limit. If yours does, cap each motor so the pair stays within a 2× M18 parallel pack (~90 A). If not, prop-size for it — see below. |
-| **Current telemetry** | **enable it** | The TX pad emits KISS telemetry (temp + current). Now wired: ESC **TX → GP16 (L) / GP19 (R)**, received by `esc_telem.py` → per-motor temp/current on the dashboard + a motor-overheat WARN. Turn on the telemetry / auto-telemetry option in am32.ca so it streams in servo-PWM mode. Full bring-up: **`docs/esc_telemetry.md`**. |
+| **Current telemetry** | **enable it** | The TX pad emits KISS telemetry (temp + current). Now wired: ESC **TX → GP16 (L) / GP11 (R)**, received by `esc_telem.py` → per-motor temp/current on the dashboard + a motor-overheat WARN. Turn on the telemetry / auto-telemetry option in am32.ca so it streams in servo-PWM mode. Full bring-up: **`docs/esc_telemetry.md`**. |
 
 ## Current management (the pack is the tighter limit)
 

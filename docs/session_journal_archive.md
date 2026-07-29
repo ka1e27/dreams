@@ -9,6 +9,53 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-26 — 5-agent code audit (fixes applied) + dashboard HTML redesign to "10/10"
+
+**Worked on:** user asked to (a) finish the interrupted verification — 5 max-effort (Opus) agents
+checking the whole stack for correctness + efficiency — and (b) lift the served HTML dashboards from
+a self-rated 7/10 to a 10/10.
+**Audit (5 parallel Opus agents; baseline healthy: 234 tests green, ruff clean, both Vite builds pass,
+both inline `<script>`s valid).** Applied the *verified, safe* findings; rejected/​skipped the rest with
+reasons:
+- `pi5/navigation/navigator.py` — **CRITICAL** div-by-zero guard: `compute_throttle`'s turn-blend
+  divided by `(max_heading_error_deg − heading_tolerance_deg)` unguarded while the sibling `_steer_to`
+  already used `max(1.0, …)`; made them consistent.
+- `pi5/server/app.py` — **event-loop unblocking**: `/ws/camera` now offloads StereoSGBM + `cv2.imencode`
+  to the executor (mirrors `/video`); `/api/paths` read/write moved to `asyncio.to_thread`; `/api/pod/history`
+  `limit` clamped to ≤5000 (was unbounded → OOM/DoS vector).
+- `pi5/cv/wave_detector.py` — vectorised the water-mask horizon scan (per-column Python loop → numpy
+  `argmax`/`where`; dormant path, ~30× when used).
+- `firmware/boat-pico/main.py` — health-flag battery bits now use the real `is_prop_critical()`/
+  `is_elec_critical()` predicates (were `>5.0`/`>3.0` → always "healthy"; telemetry-accuracy only).
+- `cloud/api/app.py` — `list_missions` now bounded (`limit` Query ≤2000, was unbounded).
+- `dashboard/src/components/BoatMap.jsx` — waypoint markers use a stable key, not the array index.
+- **Rejected on verify:** the "WebSocket client-list race" (single-thread asyncio; no iteration during
+  send) and the SBUS `push_thresh 8→32` one-liner (8 = autopush **bit** count = 1 byte/word; bumping it
+  repacks 4 bytes/word and **breaks SBUS framing** unless the reader is redesigned — left as a real
+  follow-up, not a one-liner). Skipped `threat_assessor` deque (negligible, deque-slice risk) and the
+  `run_sim` ObjectMemory-config wiring (sim harness ignores `config.yaml` for *every* component — kept
+  consistent).
+**HTML redesign — command_center.html + waypoint_planner.html → "Abyssal Indigo v2":** used the dataviz
+skill's method. New layered-glass design system (elevation/hairline/surface tokens, restrained glow as a
+*signal* not decoration, `tabular-nums` on every live readout so digits don't jitter, ambient aurora
+wash). Header became a real command bar (live local clock + mission-elapsed **T+** timer keyed off the
+mission badge, grouped connection cluster with breathing live-dots, animated hairline scan). Section/panel
+shells got glass depth + a left accent-tab header rule. Flagship upgrade: the crude rotating-border ESC
+temp gauge → a proper **animated conic-sweep ring** (`@property --deg`, colour-shifts ok→warn→crit) inside
+framed per-motor instrument cards; ESC current bars, status chips, buttons, dots, wave-alert + boat-health
+tiles all refined. Planner brought onto the same system.
+**Verified (on the Pi):** `pytest pi5/tests` **234 green**, ruff clean, firmware `py_compile` OK, both
+templates' inline `<script>` pass `node --check`, dashboard Vite build clean. Booted the sim and
+round-tripped the changed endpoints over real HTTP: `/api/paths` GET/POST/DELETE, `/api/pod/history?limit=
+999999999` clamps (no OOM), `/` and `/planner` both 200. Rendered both templates in headless Chromium
+(fonts/leaflet/monaco stubbed, canned telemetry through the real render path) and eyeballed the result —
+reads as designer-grade in both. Screenshots in the session scratchpad.
+**Decisions / open questions:** SBUS FIFO under-drain is still a *plausible* margin risk — wants a real
+PIO redesign (pack 4 bytes/word + unpack in the reader), not the mislabelled one-liner. The headless
+render falls back off Orbitron (web font hangs headless Chromium on this ARM Pi) — live page unaffected.
+**Next steps:** on-bench/on-water passes still outstanding from prior entries (ESC over `/dev/ttyAMA0`,
+telemetry-on-GP16 with a motor spinning, real maritime model). Nothing committed — tree left for review.
+
 ## 2026-07-26 — GPS-anchored object memory (buoys/landmarks charted on the map)
 
 **Worked on:** new feature — the boat now **remembers where objects are on the water**. When vision

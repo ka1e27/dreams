@@ -73,4 +73,4 @@ verified. It refuses to write if the boot byte isn't `0x01` (safety).
   actual **telemetry** pad (the one routed to PB6), not the signal/RX pad.
 
 See also `docs/esc_setup.md` (settings reference) and `docs/esc_telemetry.md`
-(the Pico-side receiver on GP16/GP19).
+(the Pico-side receiver on GP16/GP11).

@@ -27,8 +27,17 @@ comfortably holds a whole frame between drains. (The same fix would harden sbus.
 
 Pin assignment (free Pico header pins, hand-tapped on the bench like GP2/3/6/7):
     Left  ESC TX → GP16   (was the unused DHT11 pin)
-    Right ESC TX → GP19
+    Right ESC TX → GP11
 Change TELEM_L_PIN / TELEM_R_PIN if you tap different pins.
+
+GP16 and GP11 are the only two pins left unconnected on Boat_PCB V2, so neither
+collides with a board net — but for the same reason neither is routed to a
+connector: solder the ESC telemetry leads directly to the Pico pins.
+
+Right ESC telemetry was moved GP19 -> GP11 on 2026-07-28. GP19 is the board's
+"Hull Leak Left" connector (J16); a leak switch there shorts to GND and would
+have held the telemetry line low. Hull leak now reads GP19/GP20 to match the
+board's connectors (see sensors.py and docs/pin_map.md).
 
 Bench-verify items (documented in docs/esc_telemetry.md):
   1. AM32 must actually *emit* telemetry in servo-PWM mode — enable the telemetry
@@ -53,7 +62,7 @@ LEFT = 0
 RIGHT = 1
 
 TELEM_L_PIN = 16
-TELEM_R_PIN = 19
+TELEM_R_PIN = 11   # moved off GP19 — that's the J16 hull-leak connector on Boat_PCB V2
 BAUD = 115200
 
 # PIO state-machine ids: SBUS uses SM 0 (PIO0). Put telem on PIO1 (SM 4/5) so the

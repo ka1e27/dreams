@@ -26,7 +26,7 @@ compiles-now / bench-validate-later spirit as `docs/esc_passthrough.md`.
 
 | ESC pad | Boat Pico | Notes |
 |---|---|---|
-| **TX** (telemetry) | left → **GP16**, right → **GP19** | hand-tapped header pins, like GP2/3/6/7; change `TELEM_L_PIN`/`TELEM_R_PIN` in `esc_telem.py` |
+| **TX** (telemetry) | left → **GP16**, right → **GP11** | the only two pins left unconnected on `Boat_PCB V2`, so neither clashes with a board net — but neither reaches a connector either, so solder direct to the Pico. Right moved off GP19 (the J16 hull-leak connector) on 2026-07-28. Change `TELEM_L_PIN`/`TELEM_R_PIN` in `esc_telem.py` |
 | **GND** | shared Pico GND | already common for the PWM signal |
 | RC (signal) | GP2 / GP3 | unchanged — drives the motor + carries AM32 config |
 
@@ -43,7 +43,7 @@ TX — the two lines can't be joined.
 
 ```
 ESC TX ─PIO UART RX─> esc_telem.py ─delegates─> escs.get_motor_temp()/get_current()
-        (GP16/GP19)   (CRC + parse)             │
+        (GP16/GP11)   (CRC + parse)             │
                                                 ├─ TEL mt_l/mt_r,curr_l,curr_r (main.py)
                                                 └─ MOTOR_HOT WARN (task_watchdog)
    → pico_serial (parse "if present") → server TelemetryOut / status dict → both UIs
@@ -78,7 +78,7 @@ Three things this code can't verify without hardware:
    healthy link climbs `frames_ok` with few `crc_fail`. Persistent `crc_fail`
    with `frames_ok == 0` → wrong baud / byte order / no telem (unknown #1).
 
-Steps: flash AM32 ≥ v1.99, enable telemetry, wire TX→GP16/GP19 + common GND →
+Steps: flash AM32 ≥ v1.99, enable telemetry, wire TX→GP16/GP11 + common GND →
 spin a motor (props off, bench PSU) → confirm `frames_ok` climbs and the dashboard
 shows sane temp/current → cross-check current against a clamp meter.
 

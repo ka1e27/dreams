@@ -55,16 +55,17 @@ hardware is attached.
      │  motors, GPS, IMU,    │
      │  winch, RC, sensors   │
      └───────────────────────┘
-            │ UART0 (GP12/13)         │ UART1 (GP4/5)
+            │ 50 Hz PWM GP2/GP3       │ UART1 (GP4/5)
      ┌──────┴──────┐           ┌───────┴────────┐
-     │  VESC Master│           │   Pod Pico     │ underwater, via slip ring
-     └──────┬──────┘           └────────────────┘
-            │ CAN-forward
-     ┌──────┴──────┐
-     │  VESC Slave │   (two brushless motors, one per hull)
+     │  AM32 ESCs  │           │   Pod Pico     │ underwater, via slip ring
+     │   (L + R)   │           └────────────────┘
      └─────────────┘
+   Test-bench branch: direct servo PWM, no VESC / CAN chain. ESC telemetry
+   (AM32 KISS) returns on GP16/GP11 via PIO UART.
+   ⚠ Boat_PCB V2 instead fits an MCP2515 + TJA1051 on GP2/3/4/6/7 → J2 for the
+     VESC architecture. The board and this firmware collide — see docs/pin_map.md.
 
-Pi 5 USB peripherals (NO GPIO/UART/I2C/SPI on the 40-pin header):
+Pi 5 USB peripherals (+ the radar-bar A4988 stepper on the 40-pin header, the one GPIO user):
   USB-A (1) → Boat Pico (CDC ACM → /dev/ttyACM0)
   USB-A (2) → Left USB camera  (cv2.VideoCapture(0))
   USB-A (3) → Right USB camera (cv2.VideoCapture(1), stereo pair, 120mm baseline)
@@ -86,16 +87,23 @@ The KiCad 10 project lives in the repo (schematic format version `20260306`, gen
   wiring). Detailed component list in `docs/pcb_design_notes.md`.
 
 ### Boat_PCB highlights
+Verified from the `Boat_PCB V2` netlist (silkscreen reads `Boat_PCB V2`) on 2026-07-28, cross-checked
+with `kicad-cli`. Component/footprint detail in `docs/pcb_design_notes.md`; per-pin detail in
+`docs/pin_map.md` (authoritative).
+
 | Group | Refs | Notes |
 |-------|------|-------|
 | Compute | A1 | RaspberryPi_Pico |
-| Batteries | 2× M18 (drive, parallel — test bench), 1× M18 (electronics), 1× M18 (winch) | Three fully isolated domains — see `docs/battery_architecture.md` |
-| Fuses | Drive 200A ANL + 100A ANL per ESC; elec 15A blade; winch 20A blade | Per-pack overcurrent handled by M18 REDLINK BMS |
-| Battery dividers | Drive 130k/10k → GP26 (test bench, ×14; 21 V→1.5 V), Elec 56k/10k → GP27, Winch 56k/10k → GP28 | All ≤3.18 V at the Boat Pico ADC — see `docs/battery_architecture.md` |
-| Drive output | J4/J5 (XT90, VESC L/R), J6 (XT60, tow-ESC stub) | |
-| VESC comms | J2 ("CAN chain", 7-pin) → Pico UART0 GP12/13 | |
-| Winch | J8 (M18 power), J9 (PWM, GP14) | |
-| Sensors | J7 (GPS+compass), J10 (IMU), J11/J13 (DHT11), J12 (LED), J15/J16 (hull leak) | |
+| CAN interface | U1 (MCP2515), U2 (TJA1051T-3), Y1 + C1/C2 | SPI on GP2/3/4, ~INT GP6, ~RESET GP7. ⚠ `~CS` (U1.16) is **tied to GND** — SPI can't frame; ⚠ Y1 frequency and C1/C2 values unset |
+| Stepper | A2 (Pololu A4988), J18 (motor) | Driven by **Pi 5 GPIO** via J3, not the Pico. Half step (MS1 high, MS2/MS3 → GND) |
+| Batteries | BT1 (XT60, "3s" → electronics), BT4 (XT60, "4s" → VMOT) | Only two battery inlets on V2 — no BT2/BT3 |
+| Fuses | All **off-board** on V2 | No fuse footprints; per-pack overcurrent handled by M18 REDLINK BMS |
+| Battery dividers | **As built:** Drive 220k/13k (×17.92) → GP26, Elec 100k/30k (×4.33) → GP27, Winch 100k/18k (×6.56) → GP28 | ⚠ Firmware expects ×14.0 / ×6.6 / ×6.6 — **GP26 and GP27 read wrong, GP27 is over-range on an M18**. Fit 56k/10k on all three. No ADC filter caps fitted |
+| Power out | J6 (XT60, VMOT), J4 (2-pin JST — **sense tap only**, not a power output) | V2 has **no XT90 drive outputs** — motor power is off-board |
+| CAN comms | J2 (3-pin JST-XH: GND / CANH / CANL) | ⚠ **no 120 Ω termination fitted**, no ESD on an off-board connector |
+| Winch | J8 (signal, GP21), J9 (RC, GP21 — parallel) | Both are signal-only 2-pin connectors |
+| Sensors | J7 (GPS+compass), **J5** (IMU, 10-pin), J11/J13 (**SHT41**, not DHT11), J12 (LED, GP10), J15/J16 (hull leak, GP20/GP19) | ⚠ J7/J11/J13 supply **5 V**; SHT41 is 3.6 V max. ⚠ No I²C pull-ups on any of the three buses |
+| Pi 5 header | J3 (2×20), J14/J17 (1×20 breakouts) | ⚠ J3's footprint has the **odd/even rows transposed** — schematic pad *N* = Pi pin *N∓1* |
 
 ### No HC-12 on the boat PCB
 The HC-12 radio is **not** on either PCB and is no longer part of the old Shore-Pico architecture.
@@ -111,9 +119,16 @@ The authoritative pin maps live in **`docs/pin_map.md`**, generated from the Boa
 `main.py` docstrings. Do not duplicate them here — edit `docs/pin_map.md` and the firmware docstrings
 together. Quick orientation only:
 
-- **Boat Pico:** GP0/GP1 dead. GP4/5 UART1 (GPS M10Q + Pod, shared 9600). GP8/9 I²C0 (BNO085 @ 0x4A).
-  GP10 status NeoPixel. GP12/13 UART0 (VESC master, 115200). GP14 winch PWM. GP15 SBUS (PIO).
-  GP16 DHT11. GP17/18 hull leak. GP26 ADC drive (2× M18 parallel), GP27 ADC electronics (M18), GP28 ADC winch (M18).
+- **Boat Pico (test-bench firmware):** GP0/GP1 dead. GP2/3 drive ESC PWM. GP4/5 UART1 (GPS M10Q +
+  Pod, shared 9600). GP6 winch PWM. GP7 SBUS (PIO). GP8/9 I²C0 (BNO085 @ 0x4A). GP10 status NeoPixel.
+  GP11/16 AM32 ESC telemetry RX (PIO). GP12/13 SHT41 #A, GP14/15 SHT41 #B (both SoftI2C).
+  GP19/20 hull leak (J16/J15). GP26 ADC drive (2× M18 parallel), GP27 ADC electronics (M18),
+  GP28 ADC winch (M18).
+  > ⚠ **Board divergence.** On `Boat_PCB V2` the MCP2515 CAN interface owns GP2/3/4/6/7 and GP5 is
+  > tied to GND, so the drive-ESC / winch / SBUS / GPS assignments above collide with the board —
+  > and with GP0/GP1 dead there is no free pin left to move them to. The board's winch signal is
+  > GP21, not GP6. Hull leak and ESC telemetry *were* realigned to the board (2026-07-28). Full
+  > board-vs-firmware table in `docs/pin_map.md`.
 - **Pod Pico:** GP0/1 UART to Boat Pico (slip ring). GP17 EC drive, GP20 leak, GP21 bottom contact,
   GP22 pressure, GP26 water-temp NTC, GP27 EC sense, GP28 light.
 

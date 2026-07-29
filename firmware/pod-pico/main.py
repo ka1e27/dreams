@@ -8,6 +8,7 @@ Pin map:
   GP17     — EC drive pin (digital out, pulsed)
   GP20     — Leak detection sensor (pull-up, active low)
   GP21     — Bottom contact switch (pull-up, active low)
+  GP22     — Submersible pressure transducer (ADC, 0.5-4.5 V via divider)
   GP25     — Onboard LED (heartbeat indicator)
   GP26     — Temperature NTC (ADC0)
   GP27     — EC probe ADC (ADC1)

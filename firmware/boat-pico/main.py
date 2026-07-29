@@ -24,12 +24,12 @@ Pin map (test bench):
   GP7       — SBUS receiver (PIO)          [free header pin]
   GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
   GP10      — Status NeoPixel (WS2812, 1 pixel)
+  GP11      — Right ESC telemetry RX (AM32 KISS, PIO UART 115200)
   GP12/GP13 — SHT41 #A air temp/humidity (SoftI2C, J11)
   GP14/GP15 — SHT41 #B air temp/humidity (SoftI2C, J13)
   GP16      — Left  ESC telemetry RX (AM32 KISS, PIO UART 115200)
-  GP17      — Hull leak left
-  GP18      — Hull leak right
-  GP19      — Right ESC telemetry RX (AM32 KISS, PIO UART 115200)
+  GP19      — Hull leak left  [J16]
+  GP20      — Hull leak right [J15]
   GP26      — Drive battery (2× M18 parallel) ADC — 130k/10k divider (×14.0)
   GP27      — Electronics battery (1× M18) ADC — 56k/10k divider (×6.6)
   GP28      — Winch battery (1× M18) ADC — 56k/10k divider (×6.6)
@@ -37,6 +37,24 @@ Pin map (test bench):
 Both SHT41 temp sensors are kept on their native as-built pins (GP12-15); the
 drive ESCs, winch and SBUS moved to free Pico header pins (GP2/3/6/7) so nothing
 collides with them. See docs/hardware_changes_v2_to_testbench.md.
+
+Hull leak and ESC telemetry were realigned to the board on 2026-07-28: leak now
+reads GP19/GP20 (the J16/J15 connectors) and right-ESC telemetry moved GP19 -> GP11.
+GP11 and GP16 are the only pins left unconnected on Boat_PCB V2, so the telemetry
+taps clash with nothing — but neither reaches a connector, so solder those two
+leads directly to the Pico pins.
+
+!! Board divergence — GP2/3/6/7 are NOT free on Boat_PCB V2. That board fits an
+MCP2515 + TJA1051 CAN interface (for the VESC architecture) which owns GP2 (SCK),
+GP3 (SI), GP4 (SO), GP6 (~INT) and GP7 (~RESET). This test-bench pin map assumes
+no CAN, so the two are mutually exclusive. Also on V2:
+  - GP5 is tied to GND, so UART1 RX (GPS) cannot work as wired, and GP4 (TX) sits
+    on the MCP2515's SO output — two drivers on one net
+  - GP17/GP18 go to the BNO085 RST/INT pins on J5, which is why hull leak moved off
+    them; the winch signal connectors (J8/J9) are on GP21, not GP6
+  - the battery dividers are still pre-M18 values: GP26 is x17.92 (not x14.0) and
+    GP27 is x4.33 (not x6.6) and over-range on an M18 pack
+See docs/pin_map.md for the full board-vs-firmware table before wiring anything.
 """
 import uasyncio as asyncio
 import time

@@ -31,6 +31,61 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-28 — Boat_PCB V2 netlist audit; pin maps rebuilt from the board; hull leak + ESC telem realigned
+
+**Worked on:** full wiring double-check of `Boat_PCB V2` against the KiCad netlist, then updating every
+pin map to match reality. Verified three ways: an S-expression parse of `Boat_PCB.kicad_pcb`, a raw
+regex extraction, and `kicad-cli sch export netlist` from the schematic. DRC + ERC run with
+`kicad-cli` 10.0.5. Board files were unchanged by the 18 commits pulled from origin, so the audit
+holds against current `single-hull-test-bench`.
+
+**Changed:**
+- `firmware/boat-pico/sensors.py` — hull leak **GP17/GP18 → GP19/GP20** to match the board's actual
+  J16/J15 connectors. On V2, GP17/GP18 are the BNO085's RST/INT on J5, so the old pins were reading
+  the IMU's control lines, not leak contacts. Docstring now flags that the quoted divider values are
+  the M18 *target*, not what's fitted.
+- `firmware/boat-pico/esc_telem.py` — right ESC telemetry **GP19 → GP11**. GP19 is the J16 hull-leak
+  connector; a leak switch shorts to GND and would have held the telemetry line low. GP11/GP16 are
+  the only unconnected pins on V2, so both taps are now clash-free — all four inputs fit.
+- `docs/pin_map.md` — Boat Pico table was missing **ten pins** (GP2/3/6/7/11/16/19/20/21/22). Added
+  them plus a verified `Board (V2)` column, a full connector index, the divider-mismatch table, and
+  the missing-pull-up / 5 V-on-sensor-connectors warnings. Corrected the stepper section: it claimed
+  1/16 microstepping but MS2/MS3 are grounded → **half step**.
+- `docs/pcb_design_notes.md` — described a board that doesn't exist (BT2/BT3, F1–F4, XT90 outputs
+  J4/J5, DHT11, IMU on J10, "no Pi 5 on this board"). Rebuilt from the netlist; added the CAN
+  interface, A4988, DRC/ERC status. It also mislabelled R9 as a leak pull-up.
+- `CLAUDE.md` — quick-orientation pin list, Boat_PCB highlights table, architecture diagram.
+- `docs/esc_telemetry.md`, `docs/esc_setup.md`, `docs/am32_config.md`, `pi5/scripts/am32_config.py` —
+  GP19 → GP11 for the right telemetry tap.
+- `firmware/pod-pico/main.py` — docstring was missing GP22 (pressure ADC), which `sensors.py` uses.
+
+**Decisions / open questions:**
+- **`pi5/cv/stepper.py` has an 8× error and is NOT yet fixed.** It assumes 1/16 microstepping
+  (`steps_per_rev = 3200`) but the board is half step (400). A commanded 10° pan travels 80° and blows
+  through the soft limits. One-line fix, left for a deliberate change.
+- **Three hard board faults, all inherited from V1:** MCP2515 `~CS` (U1.16) tied to GND (SPI can't
+  frame transactions); Pico **GP5 tied to GND** (kills UART1 RX / GPS, and GP4 sits on the MCP2515's
+  `SO` output — two drivers on one net); A4988 VDD has no on-board supply, fed only from the Pi's 3V3
+  via J3 pad 2.
+- **GP2/3/4/6/7 conflict is unresolved and unresolvable by pin moves** — the V2 board commits them to
+  the MCP2515, this branch drives ESCs/winch/SBUS/GPS on them, and no free pins remain.
+- **Silkscreen swap:** R9's and R11's reference text sit over each other's footprints (verified
+  geometrically — 6.32 mm offsets vs. 5.08 mm elsewhere). Fit 1 kΩ at the pad printed "R11" and 10 kΩ
+  at "R9". R2's label has drifted over J4.
+- **J3's pad numbering is transposed** (odd/even rows shifted one position), so schematic pad *N* =
+  Pi pin *N∓1*. Confirmed by 6/6 power-pin alignment and by matching `stepper.py`'s BCM numbers.
+  Reading Pi pins off the schematic pad numbers gives a wrong — and alarming — answer.
+- Dividers still pre-M18: drive ×17.92 (firmware expects ×14.0), elec ×4.33 (expects ×6.6, and
+  over-range on an M18 at 4.15 V into a 3.3 V pin). Fitting 56k/10k on all three gives ×6.6 exactly;
+  then set `INV_P_RATIO = 6.6`. Also no ADC filter caps and no I²C pull-ups anywhere.
+
+**Next steps:** fix `stepper.py`'s `steps_per_rev`; rework the three dividers + add the 100 nF ADC
+caps and I²C pull-ups; route `~CS` and free GP5 before expecting CAN or GPS to work; reposition the
+three reference texts and annotate the mounting holes MH1–MH4; re-export the gerbers (those in
+`Boat_PCB V2/` predate the current `.kicad_pcb`) and get them under version control.
+
+---
+
 ## 2026-07-28 — Buoy detection was dead on hardware; inference thread budget; health-loop forks; dashboard safety UI
 
 **Worked on:** `/goal` — three max-effort passes: make the stack cheaper on the Pi, *verify* buoy +
@@ -235,54 +290,6 @@ AA-clean and I can't render it here, so the next step needs the user to view `lo
 specific visual directions (colours / density / typography), or enable a browser tool.
 **Next steps:** (unchanged) on-bench/on-water ESC + telemetry passes; optional user-directed dashboard
 restyle.
-
-
-## 2026-07-26 — 5-agent code audit (fixes applied) + dashboard HTML redesign to "10/10"
-
-**Worked on:** user asked to (a) finish the interrupted verification — 5 max-effort (Opus) agents
-checking the whole stack for correctness + efficiency — and (b) lift the served HTML dashboards from
-a self-rated 7/10 to a 10/10.
-**Audit (5 parallel Opus agents; baseline healthy: 234 tests green, ruff clean, both Vite builds pass,
-both inline `<script>`s valid).** Applied the *verified, safe* findings; rejected/​skipped the rest with
-reasons:
-- `pi5/navigation/navigator.py` — **CRITICAL** div-by-zero guard: `compute_throttle`'s turn-blend
-  divided by `(max_heading_error_deg − heading_tolerance_deg)` unguarded while the sibling `_steer_to`
-  already used `max(1.0, …)`; made them consistent.
-- `pi5/server/app.py` — **event-loop unblocking**: `/ws/camera` now offloads StereoSGBM + `cv2.imencode`
-  to the executor (mirrors `/video`); `/api/paths` read/write moved to `asyncio.to_thread`; `/api/pod/history`
-  `limit` clamped to ≤5000 (was unbounded → OOM/DoS vector).
-- `pi5/cv/wave_detector.py` — vectorised the water-mask horizon scan (per-column Python loop → numpy
-  `argmax`/`where`; dormant path, ~30× when used).
-- `firmware/boat-pico/main.py` — health-flag battery bits now use the real `is_prop_critical()`/
-  `is_elec_critical()` predicates (were `>5.0`/`>3.0` → always "healthy"; telemetry-accuracy only).
-- `cloud/api/app.py` — `list_missions` now bounded (`limit` Query ≤2000, was unbounded).
-- `dashboard/src/components/BoatMap.jsx` — waypoint markers use a stable key, not the array index.
-- **Rejected on verify:** the "WebSocket client-list race" (single-thread asyncio; no iteration during
-  send) and the SBUS `push_thresh 8→32` one-liner (8 = autopush **bit** count = 1 byte/word; bumping it
-  repacks 4 bytes/word and **breaks SBUS framing** unless the reader is redesigned — left as a real
-  follow-up, not a one-liner). Skipped `threat_assessor` deque (negligible, deque-slice risk) and the
-  `run_sim` ObjectMemory-config wiring (sim harness ignores `config.yaml` for *every* component — kept
-  consistent).
-**HTML redesign — command_center.html + waypoint_planner.html → "Abyssal Indigo v2":** used the dataviz
-skill's method. New layered-glass design system (elevation/hairline/surface tokens, restrained glow as a
-*signal* not decoration, `tabular-nums` on every live readout so digits don't jitter, ambient aurora
-wash). Header became a real command bar (live local clock + mission-elapsed **T+** timer keyed off the
-mission badge, grouped connection cluster with breathing live-dots, animated hairline scan). Section/panel
-shells got glass depth + a left accent-tab header rule. Flagship upgrade: the crude rotating-border ESC
-temp gauge → a proper **animated conic-sweep ring** (`@property --deg`, colour-shifts ok→warn→crit) inside
-framed per-motor instrument cards; ESC current bars, status chips, buttons, dots, wave-alert + boat-health
-tiles all refined. Planner brought onto the same system.
-**Verified (on the Pi):** `pytest pi5/tests` **234 green**, ruff clean, firmware `py_compile` OK, both
-templates' inline `<script>` pass `node --check`, dashboard Vite build clean. Booted the sim and
-round-tripped the changed endpoints over real HTTP: `/api/paths` GET/POST/DELETE, `/api/pod/history?limit=
-999999999` clamps (no OOM), `/` and `/planner` both 200. Rendered both templates in headless Chromium
-(fonts/leaflet/monaco stubbed, canned telemetry through the real render path) and eyeballed the result —
-reads as designer-grade in both. Screenshots in the session scratchpad.
-**Decisions / open questions:** SBUS FIFO under-drain is still a *plausible* margin risk — wants a real
-PIO redesign (pack 4 bytes/word + unpack in the reader), not the mislabelled one-liner. The headless
-render falls back off Orbitron (web font hangs headless Chromium on this ARM Pi) — live page unaffected.
-**Next steps:** on-bench/on-water passes still outstanding from prior entries (ESC over `/dev/ttyAMA0`,
-telemetry-on-GP16 with a motor spinning, real maritime model). Nothing committed — tree left for review.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
