@@ -21,6 +21,7 @@ import os
 
 import numpy as np
 
+from .cpu_budget import inference_threads
 from .onnx_detector import MARITIME_CLASSES, decode, letterbox
 
 logger = logging.getLogger(__name__)
@@ -68,11 +69,13 @@ class NcnnYolo:
     vision_overlay is backend-agnostic."""
 
     def __init__(self, model_dir: str, names: list[str] | None = None,
-                 conf: float = 0.40, iou: float = 0.45) -> None:
+                 conf: float = 0.40, iou: float = 0.45,
+                 num_threads: int | None = None) -> None:
         self.model_dir = model_dir
         self.conf = float(conf)
         self.iou = float(iou)
         self.net = None
+        self.num_threads = inference_threads(num_threads)
         self.names, self.imgsz, self._in, self._out = _load_meta(model_dir)
         if names:
             self.names = list(names)
@@ -88,14 +91,19 @@ class NcnnYolo:
             return
         try:
             net = ncnn.Net()
-            # Use all 4 Pi cores; light threads for the small yolov8n graph.
-            net.opt.num_threads = 4
+            # Leave cores for the rest of the stack — see cpu_budget for the
+            # measurements. NB ncnn latches this at load time: changing
+            # net.opt.num_threads after load_model() is silently ignored for
+            # convolution layers ("will use load-time value"), so it must be set
+            # here, before load_param/load_model.
+            net.opt.num_threads = self.num_threads
             net.opt.use_vulkan_compute = False
             net.load_param(param)
             net.load_model(bin_)
             self.net = net
-            logger.info("NCNN detector loaded: %s (imgsz=%d, %d classes)",
-                        os.path.basename(model_dir), self.imgsz, len(self.names))
+            logger.info("NCNN detector loaded: %s (imgsz=%d, %d classes, %d threads)",
+                        os.path.basename(model_dir), self.imgsz, len(self.names),
+                        self.num_threads)
         except Exception as e:  # noqa: BLE001 — degrade, never crash startup
             logger.warning("NCNN load failed (%s): %s", model_dir, e)
             self.net = None

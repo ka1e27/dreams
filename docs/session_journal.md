@@ -31,6 +31,121 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-28 — Buoy detection was dead on hardware; inference thread budget; health-loop forks; dashboard safety UI
+
+**Worked on:** `/goal` — three max-effort passes: make the stack cheaper on the Pi, *verify* buoy +
+person-in-water detection, and fix the dashboard's buttons/clutter. Pass 1 = 4 parallel Opus audits
+(read-only, so they added no CPU load); pass 2 = 3 fresh Opus agents re-reviewing my own diff; pass 3 =
+verification on the Pi. Everything ran under a 1 Hz `EXT5V`/throttle watchdog with heavy commands pinned
+to 2 cores (`nice -n 15 taskset -c 0,1`).
+
+**Headline: the boat could not detect a buoy at all.** The active detector is
+`pi5/cv/models/yolov8n_ncnn_model` — generic **COCO, 80 classes, no `buoy`**. `maritime_yolov8n_info.json`
+is a placeholder (`mAP50: 0.0`) and its weights are absent, so *nothing* ever emitted the label that
+`threat_assessor` grades WARNING and `object_memory` charts as a PERMANENT marker. The entire
+"confirm a buoy → drop a GPS marker" feature (docs/object_memory.md) was only ever exercised by the
+sim's ground-truth `SimObjectMapper`. The existing buoy/person tests pass because `FakeOverlay` injects
+detections — YOLO never runs in them. `water_seg.onnx` is also absent, so Tier-1b hybrid seg is off.
+
+**Changed:**
+- `pi5/cv/buoy_detector.py` (NEW) — classical colour/shape buoy screen: one HSV threshold pass +
+  contour filter (saturation / solidity / area / aspect), **measured 0.62–0.96 ms/frame** on this Pi
+  (640×480→1280×720, ripple noise) vs ~30 ms for a YOLO pass. Emits the same
+  `(x1,y1,x2,y2,label,conf)` tuples, so boxes/distance/radar/threat/map all work unchanged.
+  **Suppression uses containment, not IoU** — an orange life jacket is a small blob *inside* a large
+  `person` box where IoU is tiny, so an IoU gate would have charted a phantom PERMANENT buoy on a
+  swimmer. Green is off by default (sunlit foliage) and the top 35% of frame is skipped (sky/treeline).
+- `pi5/cv/vision_overlay.py` — `class_conf` per-class confidence floors (backend runs at the lowest
+  floor, each box then filtered by its own class) so a distant swimmer survives at 0.25 without
+  flooding other classes; `buoy_fallback` that **auto-disables when the loaded model emits `buoy`
+  itself**; `_infer_conf` is a property (the CONF slider mutates `_cfg.conf`, so a cached copy went stale).
+- `pi5/cv/threat_assessor.py` — `swimmer` was graded **INFO, i.e. not tracked at all**, while
+  `object_memory` canonicalises it to `person`. Added it plus jetski/raft/canoe/paddleboard as CRITICAL.
+- `pi5/cv/cpu_budget.py` (NEW) + `ncnn_detector`/`onnx_detector`/`ort_utils`/`segmentation` — inference
+  no longer pins **all four** Pi 5 cores. Measured (yolov8n@320, NCNN, median of 15): 1 thread 27.9 ms /
+  2 → 18.4 / 3 → 19.2 / 4 → 17.7. Thread 2 gets ~96% of the speed-up; **the 4-thread pass drove this Pi's
+  sticky throttle flags `0x0` → `0x50000` (under-voltage occurred + throttling occurred)**. Since
+  `detect_max_fps: 15` is a 66.7 ms budget, even one thread clears the cap with 2.4× headroom — the extra
+  threads bought latency nobody consumes and cost a brown-out. Default is now cores−2; override via
+  `camera.detection.num_threads` / `vision.seg_num_threads`.
+- `pi5/server/app.py` — the 1 Hz health loop forked **7 `vcgencmd` subprocesses every second, forever**
+  (604,800/day). Temp + ARM clock now come from sysfs (~37 µs for both), the 4 voltage rails are sampled
+  every 10 s, and `get_throttled` still forks every tick because it *is* the under-voltage alarm.
+  Measured 7 → 1.4 forks/s, child CPU **2.5 → 0.5 ms/s**, tick wall time 19.2 → 2.7 ms. During an
+  **active** throttle (`_throttled_now`, live bits 0-3 only — the sticky 16-19 bits latch until reboot)
+  it spends the fork on `measure_clock arm` so the operator never sees a masked clock while debugging.
+- `pi5/server/templates/command_center.html` — removed two **duplicated live-handler** control groups
+  from COMMANDS (VISION SEG/YOLO/AVOID and RADAR BAR CENTER/SCAN/STOP); both existed twice, and only
+  the surviving copies are the ones `renderVision()` actually keeps in sync. Replaced **every** native
+  `window.confirm()` with an in-page `#mConfirm` dialog (a browser can suppress native dialogs
+  permanently — unacceptable for ABORT / CLEAR E-STOP / DELETE clip / CLEAR MARKS / ARM PASSTHROUGH /
+  ESC WRITE). Added a real focus trap + focus restore + ESC-to-close to back up the new
+  `role=dialog aria-modal=true` (aria-modal without a trap is a promise the page was breaking). Put a
+  deliberate gap between E-STOP and CLEAR E-STOP. Moved CLEAR MARKS out of the sim-only group — the
+  buoy screen charts real markers on hardware now. Added `min-width:0` + 1200/820 px breakpoints for the
+  8-group camera bar and `pointer:coarse` tap targets for dockside tablet use.
+
+**Verified (on the Pi):** `pytest pi5/tests` **293 green** (from 247, **+46**), ruff clean, firmware
+`py_compile` OK, inline `<script>` passes `node --check`, div balance 304/304, no undefined onclick
+handlers. Proved the detection chain on the **live** backend, not a mock: ncnn loads (80 COCO classes) →
+fallback auto-activates → `_raw_detect` returned `('buoy', 0.681)` boxed on the target →
+`threat_level_for` = WARNING → `category_for` = PERMANENT. Sim booted, `/` and `/planner` 200, `/ws/health`
+frames carry correct `temp_c` / `clock_mhz` (tracked 1500↔2400 MHz) / decoded throttle / volts, and
+`sysfs` vs `vcgencmd` cross-checked (clock delta 0.0 MHz over 6 samples).
+
+**Pass-2 reviewers found 4 real bugs in my own changes — all fixed:** (1) the volts cache guard used
+`_volts_cache is not None`, but off a Pi the reading legitimately *is* None, so it re-forked 4 probes
+every tick — worse than before; now keyed off a separate `_volts_sampled` flag. (2) Buoy suppression ran
+against *unfiltered* YOLO boxes, so a sub-threshold box (boat @ 0.32 vs its 0.40 floor) could kill a buoy
+and then be dropped itself, leaving the operator with neither. (3) `x1`/`y1` weren't clamped to the frame.
+(4) The segmentation model silently inherited the new thread count — now explicit via config.
+**Rejected:** the per-client telemetry-recompute "MED" finding (~300 µs/s with 1–2 dashboards; not worth
+the staleness risk), a raw-BGR recorder pre-roll (+330 MB on a 4 GB Pi — worse than the JPEG ring), and a
+claim that `scaling_cur_freq` systematically masks throttling (6 back-to-back samples showed *exact*
+agreement with `measure_clock arm` at both 1500 and 2400 MHz; the RPi cpufreq driver queries the
+firmware). The concern was still addressed via the throttle-aware fallback above.
+
+**Decisions / open questions:** the classical screen is a **stopgap, not a substitute for a trained
+model** — it finds red/orange/yellow buoys by colour, so it will miss unlit black/green marks and wants
+on-water tuning of `min_sat` / `roi_top_frac`. Charting a buoy as a *map marker* still needs **stereo
+range**, so a mono rig detects and grades buoys but won't place them. This Pi now carries sticky
+`0x50000` flags from the thread benchmark — the 27 W PSU swap from the 2026-07-27 entry is still
+outstanding and still recommended. Nothing committed — tree left for review.
+
+**Next steps:** on-water pass with a real buoy + camera to tune the colour gates; train/export the
+maritime model so the fallback can switch itself off; still-open UI ideas the reviewer and I both rated
+low priority (auto-refreshing DIAGNOSTICS instead of 3 manual poll buttons, folding TRIM/ESC into one
+DRIVE settings modal).
+
+## 2026-07-27 — Pi 5 power-off during camera record/replay = computer-USB brown-out
+
+**Worked on:** the on-camera hardware pass flagged last session. User reported the Pi 5 **fully powered
+off** twice — once while recording, once while replaying a clip — and asked why.
+**Root cause: a 5 V brown-out from underpowering.** The bench Pi 5 was powered from the user's **computer
+USB port** (~0.5–0.9 A @ 5 V); a Pi 5 needs 5 A/25 W and pulls 1.5–2.5 A+ under the always-on CV stack +
+both USB cameras. `vcgencmd pmic_read_adc` showed `EXT5V` idling at only ~5.0 V *with the software
+stopped* (no headroom). Recording adds a **VP8 software encode** (`pi5/cv/recorder.py:337`, `VP80`)
+across all cores; replay is a cheap static serve (`pi5/server/app.py:1643`) but the CV pipeline still
+runs under it — either tips total draw past the port's limit → PMIC undervoltage cutoff → instant off.
+Active Cooler fitted + 49 °C idle → thermal ruled out. No code bug.
+**Why the crashes left no logs:** journald was volatile (`/var/log/journal` empty, logs in tmpfs) and
+rsyslog absent → wiped on reboot.
+**Changed (system state, NOT the repo):**
+- Enabled **persistent journald** — drop-in `/etc/systemd/journald.conf.d/99-persistent.conf`
+  (`Storage=persistent`; machine-id dir now present) so a future hard-off is captured in
+  `journalctl -b -1 -k`.
+- Added `~/pi_power_monitor.py` (off-repo) — a black-box logger sampling EXT5V/Vcore/temp/throttle to
+  `~/pi_power_monitor.csv` with **fsync per line**, so a brown-out preserves readings to the last second.
+**Fix given to user:** power the Pi from a real **5 V/5 A USB-C PSU** (official 27 W); do **not** set
+`usb_max_current_enable=1` on a weak supply (removes the USB safety cap → worse brown-outs).
+**Decisions / open questions:** on the deployed boat the Pi runs off the **M18 → 5 V UBEC**, which faces
+the same CV+record peak — offered to switch the recorder **VP8 → MJPG** (cameras already emit MJPG,
+near-zero CPU) or trim record fps/res to widen the power margin. **Awaiting user go-ahead**; no code
+touched this session.
+**Next steps:** user swaps to the 27 W PSU + re-runs record/replay (optionally under
+`~/pi_power_monitor.py` to confirm `EXT5V` stays ~5.1 V flat); then decide on the MJPG recorder change
+for the boat's UBEC budget.
+
 ## 2026-07-26 — Camera recording + Tesla-style sentry mode + Recordings dashboard section
 
 **Worked on:** `/goal` — record the camera to the Pi, auto-record critical moments like Tesla Sentry,
@@ -168,107 +283,6 @@ PIO redesign (pack 4 bytes/word + unpack in the reader), not the mislabelled one
 render falls back off Orbitron (web font hangs headless Chromium on this ARM Pi) — live page unaffected.
 **Next steps:** on-bench/on-water passes still outstanding from prior entries (ESC over `/dev/ttyAMA0`,
 telemetry-on-GP16 with a motor spinning, real maritime model). Nothing committed — tree left for review.
-
-## 2026-07-26 — GPS-anchored object memory (buoys/landmarks charted on the map)
-
-**Worked on:** new feature — the boat now **remembers where objects are on the water**. When vision
-confirms a buoy (or dock/rock/person), it geolocates it and drops a marker on the GPS map; once
-charted it re-verifies the coordinate on each later sighting instead of re-dropping, and doesn't tie
-up the radar re-observing it — so it keeps scanning for the unknown even with known things nearby.
-Permanent marks (buoys/docks/rocks) are kept; transient movers (people/boats) expire after a TTL.
-**Changed:**
-- `pi5/navigation/geo.py` — new `destination_point()` (forward geodesic): boat fix + true bearing +
-  range → object lat/lon. The inverse of `bearing`/`haversine`. +6 tests.
-- `pi5/cv/object_memory.py` (NEW) — `ObjectMemory`: geolocates detections, matches by **world
-  coordinate** (survives looking away/back), confirms after N agreeing sightings (then a marker
-  drops), refines with an inverse-distance²-weighted mean, and ages out transients/candidates.
-  Class→category (PERMANENT vs TRANSIENT) here. +32 tests.
-- `pi5/cv/pipeline.py` — feeds every ranged detection into the memory (bearing off the bow =
-  `heading + bbox offset`; cameras are fixed-forward, the stepper is a *separate* radar bar), ages it
-  each tick, exposes `map_objects()` + `vision_state()["object_memory"]`, and **releases the radar
-  from confirmed non-CRITICAL landmarks** (`release_radar_on_known`) so it keeps scanning. +6 pipeline
-  tests.
-- `pi5/server/app.py` — `GET /api/map/objects`, `POST /api/map/objects/clear` (reads the pipeline's
-  memory on hardware, a standalone one in sim); `configure(object_memory=…)`.
-- `pi5/navigation/sim_obstacles.py` — `SimObjectMapper` feeds the memory from ground truth (the sim's
-  stand-in for vision), wired into `run_sim.py`. +4 tests.
-- UI: command center `command_center.html` — object marker layer polling `/api/map/objects` (cyan
-  permanent / amber transient, hover label + detail popup) + **SIM MAP** DROP BUOY / DROP PERSON /
-  CLEAR MARKS buttons (sim-only). React `dashboard/` — `useMapObjects` hook + `BoatMap.jsx` markers.
-- `pi5/config.yaml` — new `vision.object_memory` block. Docs: `docs/object_memory.md`.
-**Verified (on the Pi):** `pytest pi5/tests` **234 green** (+40), ruff clean, command-center inline
-`<script>` passes `node --check`, `dashboard` Vite build clean. Booted the sim and drove the whole
-lifecycle over the real endpoints twice: dropped a buoy 18 m ahead → confirmed **PERMANENT** marker
-geolocated to **18.1 m / bearing 359.8°** (matches ground truth to ~0.1 m); person → **TRANSIENT**;
-markers **persist after the obstacles are removed** (remembered); two buoys stay distinct (9.1 m
-apart) while an out-of-cone one isn't seen; a repeat drop **refines, not duplicates**; CLEAR MARKS
-wipes them. Transient TTL / permanent persistence are covered by deterministic unit tests.
-**Decisions / open questions:** object memory needs **stereo range** to place a detection → no-op on a
-mono rig (documented). Marker identity is the world coordinate + class; the vessel synonym set
-(boat/vessel/boats) is canonicalised. Not yet exercised on-water with a real detector (bench next).
-**Next steps:** on-water pass with the camera + a real buoy; tune `confirm_sightings`/`match_radius_m`
-against live stereo noise; consider persisting the memory across restarts. Nothing committed — tree
-left for review.
-**Follow-up (independent verification pass — on the Pi):** re-verified the whole feature end to end,
-nothing changed in the code. Static: `pytest pi5/tests` **234 green** (targeted object-memory/geodesic
-subset **35 green**), ruff clean across all 10 touched files, command-center inline `<script>` passes
-`node --check`, dashboard **Vite build clean**. Independent numerical check of the forward geodesic
-(`destination_point` round-tripped against `haversine`/`bearing`): **worst distance error 0.000 cm over
-77 cases** (bearings 0-359.5°, ranges 1 m-5 km), bearings back to <0.05°, +180° meridian wraps
-correctly. Independent live lifecycle over the **real HTTP endpoints** (fresh sim boot): buoy dropped
-18 m ahead confirmed after 3 sightings and **geolocated 0.19 m from sim ground truth**; person →
-TRANSIENT; two distinct markers; repeat sightings **refined one object** (id stable, sightings 7→11,
-0.04 m drift, no duplicate); markers **persisted after the obstacles were deleted**; CLEAR wiped them.
-Code confirmations: the `distance_m` fed to the memory is the overlay's **stereo** value (mono
-`_fallback_distance` is used only on the avoidance path) → the "mono rig = no-op" claim holds; the
-hardware pipeline maps all 11 `vision.object_memory` config keys 1:1; both UIs (command center +
-`BoatMap.jsx`) render markers identically (cyan permanent / amber transient) and XSS-safe. The
-sim-only path the live run can't reach — **radar-release-on-known** — is covered by
-`test_pipeline_radar_releases_known_buoy_keeps_scanning`. **Two benign notes (not bugs):** (1)
-`run_sim.py` builds `ObjectMemory()` with defaults — consistent with the sim harness ignoring
-`config.yaml` for every component; config wiring lives on the hardware path + unit tests, so a config
-change is only felt in sim if `run_sim` is taught to load it. (2) `known_confirmed_near` uses a fixed
-6 m radius in the radar-release check (not range-scaled), so releasing the bar may under-fire for a
-landmark geolocated from a long/noisy range — conservative (keeps tracking), an on-water tuning knob.
-Still nothing committed.
-
-## 2026-07-26 — Designer-grade ESC Settings editor (dashboard) + endpoints + tests
-
-**Worked on:** finished the interrupted ESC-config UI. A prior session had refactored
-`am32_config.py` into a library (`FIELDS` registry, `read/write_settings`, `decode_eeprom`, mock EEPROM,
-wiring/setup constants) explicitly *"for the dashboard ESC editor"* — but the server endpoints and the
-actual editor were never built; the modal was still the old "arm am32.ca passthrough" stub. Built the
-whole thing and verified it on the Pi.
-**Changed:**
-- `pi5/server/app.py` — new `POST /api/esc/read`, `POST /api/esc/write`, `GET /api/esc/meta` (+ a
-  persistent `_esc_mock` sim buffer). Hardware path runs `am32_config.read/write_settings` in a
-  threadpool (blocking pyserial) and refuses during a running mission; sim path serves + mutates the
-  mock so the editor is fully usable with no hardware. 400 (bad key/value) vs 502 (link/verify) split.
-- `pi5/scripts/am32_config.py` — `_decode_field` now emits `warn_when` for bool fields so the UI
-  recomputes the amber "risky state" live on toggle (the registry itself already existed).
-- `pi5/server/templates/command_center.html` — replaced the passthrough stub with a full
-  **⚡ ESC SETTINGS** modal rendered straight from the field registry: grouped Drive/Protection/Tuning/
-  Info sections, real toggle switches + range sliders + info chips, ★ important flags, amber warn rows
-  (⚠ + reason) that flip live, dirty/"EDITED" tracking with a sticky Read / Revert / Write action bar
-  (Write sends only changed keys, server-verified), and a **Wiring & Setup** tab with the pin table +
-  copy-paste one-time `uart0` commands + doc links + the am32.ca passthrough demoted to an Advanced
-  collapsible. New `⚡ ESC SETTINGS` button in COMMANDS→DRIVE; ⚙ MOTORS renamed ⚙ TRIM and links to it.
-  All device-derived text set via textContent (no innerHTML).
-- `pi5/tests/test_am32_config.py` (NEW, 21 tests) — decode/scaling/warn-flags/encode-validate/
-  all-or-nothing/round-trip on the library the endpoints call.
-- Docs: `docs/am32_config.md` + `docs/esc_setup.md` now present the dashboard editor as the easiest
-  setup path (same GPIO-UART backend as the CLI).
-**Verified on the Pi:** `pytest pi5/tests` **194 green** (+21), ruff clean, the inline `<script>` passes
-`node --check`. Booted the sim and hit the live endpoints via curl — meta/read/write, sim-write
-persistence, warn-flip (bidir OFF → warn), and 400s on out-of-range/unknown/empty. Rendered the modal
-with a faithful chromium harness (real CSS + markup + render fns + live payload): the Settings tab, the
-edited+warn state, and the Wiring tab all read as designer-grade.
-**Decisions / open questions:** the underlying `am32_config` read/write was already hardware-proven on
-the NeutronRC G071; only the new FastAPI/threadpool wrapper is unexercised on metal — wants one on-bench
-pass over `/dev/ttyAMA0`. Web-font (Orbitron) fetch hangs headless chromium on this ARM Pi, so the render
-harness strips it (live page is unaffected).
-**Next steps:** on-bench — wire an ESC to the Pi UART, open ⚡ ESC SETTINGS, Read/Write a real ESC end to
-end; then the outstanding telemetry-on-GP16 check (motor spinning). Nothing committed — tree left for review.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

@@ -241,6 +241,10 @@
   .cmd-group{display:flex;align-items:center;gap:6px}
   .cmd-glabel{font-size:9px;letter-spacing:.2em;color:var(--muted);margin-right:2px}
   .cmd-div{width:1px;align-self:stretch;background:var(--accent-dim);margin:0 2px}
+  /* Wider separation for safety-critical neighbours (E-STOP vs CLEAR E-STOP).
+     The plain .cmd-div is only a 5px break — barely more than the 6px flex gap. */
+  .cmd-div.gap{margin:0 9px;background:var(--crit);opacity:.35}
+  .confirm-body{color:var(--muted);font-size:12px;line-height:1.55;margin-bottom:16px}
   .cbtn{cursor:pointer;background:linear-gradient(180deg,var(--accent-soft),rgba(129,140,248,.03));
     color:var(--accent-2);border:1px solid var(--accent-dim);
     border-radius:var(--r-sm);padding:7px 13px;letter-spacing:.1em;font-size:11px;font-weight:500;
@@ -738,6 +742,37 @@
   .rec-del{background:transparent;border:1px solid var(--hairline);color:var(--muted);
     border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;flex-shrink:0;transition:.15s}
   .rec-del:hover{color:var(--crit);border-color:var(--crit)}
+  /* ---- narrow viewports + touch ----
+     The dashboard is used dockside on a laptop and a tablet, not only on a
+     1920px desktop. Two problems showed up on small widths: the camera control
+     bar carries eight control groups in one wrap-flex row (SOURCE, DEV L/R,
+     TRACK, DET FPS, IMG, CONF, QUALITY, STREAM FPS) and shredded into ragged
+     rows, and flex/grid children with long text had no `min-width:0` so they
+     pushed their container wider instead of shrinking. */
+  .sec-body,.cmd-group,.cam-ctl .cs,.vis-col{min-width:0}
+  @media (max-width:1200px){
+    .cam-ctl{gap:8px 12px}
+    .cam-ctl .cs{flex:1 1 auto}
+    .cam-ctl input[type=range]{width:72px}
+  }
+  @media (max-width:820px){
+    /* One control group per row: predictable, scannable, nothing half-clipped. */
+    .cam-ctl .cs{flex:1 1 100%;justify-content:space-between}
+    .cam-ctl input[type=range]{width:auto;flex:1 1 auto;min-width:90px}
+    .cmd-bar.cmd-rows .cmd-group{flex:1 1 100%;flex-wrap:wrap}
+    /* Keep E-STOP and CLEAR E-STOP on one line: splitting them across a wrap
+       destroys the visual pairing that tells the operator they're related. */
+    .cmd-group .cmd-div.gap{margin:0 5px}
+  }
+  /* Coarse pointers get real tap targets. Desktop density is left alone — the
+     compact rows are wanted there. 40px is the practical floor for a wet finger
+     on a boat deck. */
+  @media (pointer:coarse){
+    .cbtn{padding:11px 15px;font-size:12px}
+    .srcbtn{padding:9px 12px;font-size:12px}
+    .rec-del{padding:8px 12px}
+    .cam-ctl .imgsel{padding:8px 8px;font-size:12px}
+  }
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{
       animation-duration:.001ms !important;
@@ -926,8 +961,8 @@
           <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8" aria-label="Detection frames per second"><span class="csv" id="detFpsV">8</span></span>
           <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
             title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
-            <option value="256">256</option><option value="320">320</option>
-            <option value="416" selected>416</option><option value="512">512</option>
+            <option value="256">256</option><option value="320" selected>320</option>
+            <option value="416">416</option><option value="512">512</option>
             <option value="640">640</option></select></span>
           <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40" aria-label="Detection confidence threshold"><span class="csv" id="confV">0.40</span></span>
           <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60" aria-label="Camera stream JPEG quality"><span class="csv" id="jqV">60</span></span>
@@ -1060,15 +1095,19 @@
           <div class="cmd-group">
             <span class="cmd-glabel">SAFETY</span>
             <button class="cbtn danger" onclick="cmd('estop','E-STOP engaged')">E-STOP</button>
-            <button class="cbtn" onclick="cmd('resume','E-stop cleared')">CLEAR E-STOP</button>
+            <!-- Deliberate gap: CLEAR E-STOP used to sit flush against E-STOP, so a
+                 mis-aimed click while clearing re-triggered the stop. -->
+            <span class="cmd-div gap" aria-hidden="true"></span>
+            <button class="cbtn" onclick="cmdc('resume','E-stop cleared','CLEAR E-STOP','The motors go live again as soon as this is cleared. Confirm the water around the boat is clear.','CLEAR E-STOP')">CLEAR E-STOP</button>
           </div>
           <div class="cmd-group">
             <span class="cmd-glabel">MISSION</span>
             <button class="cbtn" onclick="cmd('mission/start','Mission started')">START</button>
             <button class="cbtn" onclick="cmd('mission/pause','Mission paused')">PAUSE</button>
             <button class="cbtn" onclick="cmd('mission/resume','Mission resumed')">RESUME</button>
-            <button class="cbtn warn" onclick="cmd('mission/skip','Skipping site')">SKIP SITE</button>
-            <button class="cbtn danger" onclick="cmd('mission/abort','Mission aborted')">ABORT</button>
+            <button class="cbtn warn" onclick="cmd('mission/skip','Skipping site')"
+              title="Abandon the current sampling site and move on to the next waypoint">SKIP SITE</button>
+            <button class="cbtn danger" onclick="cmdc('mission/abort','Mission aborted','ABORT MISSION','Navigation stops and the remaining waypoints are abandoned. This cannot be resumed — the mission must be re-loaded.','ABORT')">ABORT</button>
             <button class="cbtn" onclick="openUploadModal()">LOAD PATH…</button>
           </div>
           <div class="cmd-group">
@@ -1089,7 +1128,13 @@
             <span class="cmd-glabel">SIM MAP</span>
             <button class="cbtn" onclick="dropMapObject('buoy')" title="Drop a buoy ~18 m ahead — once confirmed it's charted as a PERMANENT marker (simulator only)">DROP BUOY</button>
             <button class="cbtn" onclick="dropMapObject('person')" title="Drop a person ~18 m ahead — charted as a TRANSIENT marker that's forgotten a while after it's out of sight (simulator only)">DROP PERSON</button>
-            <button class="cbtn ghost2" onclick="clearMapObjects()" title="Forget all remembered map objects">CLEAR MARKS</button>
+          </div>
+          <!-- CLEAR MARKS lives outside simMapGroup: the classical buoy screen
+               charts real markers on hardware now, so the operator needs to be
+               able to forget them there too, not just in the simulator. -->
+          <div class="cmd-group">
+            <span class="cmd-glabel">MAP</span>
+            <button class="cbtn danger" onclick="confirmClearMarks()" title="Forget every charted buoy / landmark">CLEAR MARKS</button>
           </div>
           <div class="cmd-group">
             <span class="cmd-glabel">DRIVE</span>
@@ -1101,18 +1146,12 @@
             <button class="cbtn" onclick="swapCam()">⇄ SWAP VIEW</button>
             <button class="cbtn" onclick="toggleDetect()">◉ TOGGLE DETECT</button>
           </div>
-          <div class="cmd-group">
-            <span class="cmd-glabel">VISION</span>
-            <button class="cbtn" onclick="toggleYolo()" title="Toggle YOLO object detection (Tier 2)">◉ YOLO</button>
-            <button class="cbtn" onclick="toggleSegmentation()" title="Toggle water-surface segmentation (Tier 1)">◉ WATER SEG</button>
-            <button class="cbtn" onclick="toggleAvoidance()" title="Toggle reactive obstacle avoidance (Tier 3)">◉ AVOIDANCE</button>
-          </div>
-          <div class="cmd-group">
-            <span class="cmd-glabel">RADAR BAR</span>
-            <button class="cbtn" onclick="stepperCmd('CENTER','Centering radar bar')">CENTER</button>
-            <button class="cbtn" onclick="stepperCmd('SCAN','Scanning')">SCAN</button>
-            <button class="cbtn warn" onclick="stepperCmd('STOP','Holding position')">STOP</button>
-          </div>
+          <!-- The VISION (SEG/YOLO/AVOID) and RADAR BAR (CENTER/SCAN/STOP)
+               groups used to be duplicated here. Both sets were live handlers for
+               the same functions, so toggling one left the other's label stale and
+               an operator could double-toggle believing they were separate
+               controls. They now live only where their state is displayed: the
+               VISION panel and the RADAR BAR section. -->
           <div class="cmd-group">
             <span class="cmd-glabel">LINK</span>
             <button class="cbtn" onclick="checkNetwork()">NETWORK</button>
@@ -1297,9 +1336,9 @@
 </div>
 
 <!-- Load Path modal — paths come from the waypoint planner (/planner) -->
-<div class="modal-bg" id="mUpload">
+<div class="modal-bg" id="mUpload" role="dialog" aria-modal="true" aria-labelledby="mUploadTitle">
   <div class="modal">
-    <h3>LOAD PATH → BOAT</h3>
+    <h3 id="mUploadTitle">LOAD PATH → BOAT</h3>
     <div id="pathList" style="max-height:260px;overflow-y:auto;margin-bottom:10px;
       border:1px solid var(--accent-dim);border-radius:5px"></div>
     <label class="chk"><input type="checkbox" id="mStart" checked> start immediately</label>
@@ -1313,9 +1352,9 @@
 </div>
 
 <!-- MOTOR TRIM -->
-<div class="modal-bg" id="mMotors">
+<div class="modal-bg" id="mMotors" role="dialog" aria-modal="true" aria-labelledby="mMotorsTitle">
   <div class="modal" style="max-width:520px">
-    <h3>⚙ MOTOR TRIM</h3>
+    <h3 id="mMotorsTitle">⚙ MOTOR TRIM</h3>
 
     <div class="sec-ttl">PER-MOTOR SOFTWARE GAIN</div>
     <div style="color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 8px">
@@ -1349,7 +1388,7 @@
 </div>
 
 <!-- ESC SETTINGS EDITOR (AM32) -->
-<div class="modal-bg" id="mEsc">
+<div class="modal-bg" id="mEsc" role="dialog" aria-modal="true" aria-label="ESC settings">
   <div class="modal esc-modal">
     <div class="esc-top">
       <div class="esc-hd">
@@ -1406,7 +1445,7 @@
 </div>
 
 <!-- RECORDINGS BROWSER (opened from the camera panel) -->
-<div class="modal-bg" id="mRec">
+<div class="modal-bg" id="mRec" role="dialog" aria-modal="true" aria-label="Recordings">
   <div class="modal rec-modal">
     <div class="esc-top">
       <div class="esc-hd">
@@ -1431,6 +1470,23 @@
       <button class="cbtn ghost2" id="recFsBtn" onclick="fullscreenClip()" disabled>⛶ FULLSCREEN</button>
       <button class="cbtn" id="recDlBtn" onclick="downloadClip()" disabled>⤓ DOWNLOAD</button>
       <button class="cbtn danger" id="recDelBtn" onclick="deleteSelected()" disabled>DELETE</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic confirmation dialog. Deliberately NOT window.confirm(): a browser
+     lets the user tick "prevent this page from creating more dialogs", after
+     which a native confirm() returns false forever — so on a boat either the
+     destructive command silently stops working or, worse, a future refactor
+     inverts it and it fires unconfirmed. An in-page modal can't be suppressed. -->
+<div class="modal-bg" id="mConfirm" role="dialog" aria-modal="true" aria-labelledby="mConfirmTitle">
+  <div class="modal" style="max-width:430px">
+    <h3 id="mConfirmTitle">CONFIRM</h3>
+    <div id="mConfirmBody" class="confirm-body"></div>
+    <div class="esc-act">
+      <button class="cbtn ghost2" onclick="closeModal('mConfirm')">CANCEL</button>
+      <span class="sp"></span>
+      <button class="cbtn danger" id="mConfirmOk" onclick="confirmAccept()">CONFIRM</button>
     </div>
   </div>
 </div>
@@ -2205,6 +2261,18 @@ async function cmd(path, okMsg){
   try{ await postApi(path); toast('✓ ' + (okMsg || 'OK'), true); }
   catch(e){ toast('✗ ' + e.message, false); }
 }
+// cmd() behind a confirmation — for the commands that can't be undone by
+// clicking again (ABORT drops the remaining waypoints, CLEAR E-STOP re-arms the
+// motors). E-STOP itself is deliberately NOT confirmed: it must always be one
+// click.
+function cmdc(path, okMsg, title, body, okLabel){
+  askConfirm(title, body, okLabel, () => cmd(path, okMsg));
+}
+function confirmClearMarks(){
+  askConfirm('CLEAR CHARTED MARKS',
+    'Forget every charted buoy and landmark? The map is rebuilt only as objects are re-sighted.',
+    'CLEAR MARKS', clearMapObjects);
+}
 async function sendGoto(){
   const lat = parseFloat($('gotoLat').value), lon = parseFloat($('gotoLon').value);
   if (isNaN(lat) || isNaN(lon)){ toast('enter lat & lon', false); return; }
@@ -2383,7 +2451,15 @@ function downloadClip(){
   a.href = recSrc(recSelected); a.download = recSelected;
   document.body.appendChild(a); a.click(); a.remove();
 }
-async function deleteSelected(){
+function deleteSelected(){
+  if(!recSelected) return;
+  // Clips are the only forensic record of a sentry event — deleting one is
+  // unrecoverable, and the button sits next to DOWNLOAD/FULLSCREEN.
+  askConfirm('DELETE RECORDING',
+    recSelected + ' will be permanently deleted. This cannot be undone.',
+    'DELETE', _doDeleteSelected);
+}
+async function _doDeleteSelected(){
   if(!recSelected) return;
   const file = recSelected;
   try{
@@ -2453,8 +2529,43 @@ async function checkVision(){
     toast(`VISION yolo=${v.yolo_enabled ? 'on' : 'off'} · seg=${v.segmentation_enabled ? 'on' : 'off'}`, true);
   }catch(e){ toast('✗ ' + e.message, false); }
 }
-function openModal(id){ $(id).classList.add('show'); }
-function closeModal(id){ $(id).classList.remove('show'); }
+// Focus is moved into a dialog on open and restored on close, and Tab is cycled
+// inside it (see the Tab handler below). Without this the modals claimed
+// aria-modal="true" while everything behind them stayed tabbable — a screen
+// reader would announce a modal it could walk straight out of.
+const _focusStack = [];
+function _focusables(bg){
+  return [...bg.querySelectorAll(
+    'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')]
+    .filter(el => !el.disabled && el.offsetParent !== null);
+}
+function openModal(id){
+  const bg = $(id);
+  _focusStack.push(document.activeElement);
+  bg.classList.add('show');
+  const f = _focusables(bg);
+  if (f.length) f[0].focus();
+}
+function closeModal(id){
+  $(id).classList.remove('show');
+  if (id === 'mConfirm') _confirmCb = null;   // cancelled — never fire the action
+  const back = _focusStack.pop();
+  if (back && typeof back.focus === 'function') back.focus();
+}
+// ---- confirmation dialog ----
+let _confirmCb = null;
+function askConfirm(title, body, okLabel, cb){
+  $('mConfirmTitle').textContent = title;
+  $('mConfirmBody').textContent = body;
+  $('mConfirmOk').textContent = okLabel || 'CONFIRM';
+  _confirmCb = cb;
+  openModal('mConfirm');
+}
+function confirmAccept(){
+  const cb = _confirmCb; _confirmCb = null;
+  closeModal('mConfirm');
+  if (cb) cb();
+}
 async function sendHeading(){
   const h = parseFloat($('setHdg').value);
   if (isNaN(h) || h < 0 || h > 360){ toast('enter a heading 0–360°', false); return; }
@@ -2480,10 +2591,15 @@ async function applyMotorTrim(){
     toast('✓ Motor trim applied', true);
   }catch(e){ $('trimMsg').textContent = '✗ ' + e.message; toast('✗ ' + e.message, false); }
 }
-async function escConfig(){
+function escConfig(){
   const esc = $('escSel').value, baud = parseInt($('escBaud').value, 10) || 19200;
-  if (!confirm('This STOPS the boat and drops the serial link so you can configure the '
-      + esc.toUpperCase() + ' ESC with am32.ca. Continue?')) return;
+  askConfirm('ARM ESC PASSTHROUGH',
+    'This STOPS the boat and drops the serial link so you can configure the '
+    + esc.toUpperCase() + ' ESC with am32.ca. Control returns only after the '
+    + 'link is re-established.',
+    'ARM PASSTHROUGH', () => _escConfigGo(esc, baud));
+}
+async function _escConfigGo(esc, baud){
   $('escMsg').textContent = 'Arming…';
   try{
     const r = await postApi('esc/passthrough', {esc, baud});
@@ -2664,12 +2780,17 @@ function escApply(r){
   escUpdatePill(escS.sim ? 'sim' : 'live');
   escUpdateDirty();
 }
-async function escWrite(){
+function escWrite(){
   const changes = Object.assign({}, escS.pending);
   const keys = Object.keys(changes);
   if (!keys.length) return;
-  if (!escS.sim && !confirm('Write ' + keys.length + ' setting' + (keys.length > 1 ? 's' : '')
-      + ' to the ESC EEPROM?\n\nProps off, boat on the bench.')) return;
+  if (escS.sim){ _escWriteGo(changes); return; }   // sim writes nothing real
+  askConfirm('WRITE ESC EEPROM',
+    'Write ' + keys.length + ' setting' + (keys.length > 1 ? 's' : '')
+    + ' to the ESC EEPROM. Props off, boat on the bench before continuing.',
+    'WRITE', () => _escWriteGo(changes));
+}
+async function _escWriteGo(changes){
   const w = $('escWriteBtn'), orig = w.textContent;
   w.disabled = true; w.textContent = 'WRITING…';
   try{
@@ -2762,7 +2883,29 @@ async function sendMission(){
 }
 // close modal on backdrop click
 document.querySelectorAll('.modal-bg').forEach(bg =>
-  bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('show'); }));
+  bg.addEventListener('click', e => { if (e.target === bg) closeModal(bg.id); }));
+
+// ESC closes the topmost open modal. Without this a keyboard operator had no way
+// out of a dialog but to find the CLOSE button with the mouse.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = [...document.querySelectorAll('.modal-bg.show')].pop();
+  if (open){ e.preventDefault(); closeModal(open.id); }
+});
+// Keep Tab inside the open dialog. aria-modal="true" is a promise to assistive
+// tech that the rest of the page is inert; without this the promise is a lie and
+// Tab walks out into the live boat controls behind the overlay.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const bg = [...document.querySelectorAll('.modal-bg.show')].pop();
+  if (!bg) return;
+  const f = _focusables(bg);
+  if (!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  else if (!bg.contains(document.activeElement)){ e.preventDefault(); first.focus(); }
+});
 
 // ---- camera / detection controls (POST to /api/camera) --------------------
 let camT;

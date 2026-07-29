@@ -7,9 +7,12 @@ defaults for a small edge box:
 
 * **Graph optimisation** — ``ORT_ENABLE_ALL`` fuses ops and folds constants,
   which is a free single-digit-percent speed-up and lower memory.
-* **Thread count** — pinning ``intra_op_num_threads`` to the core count keeps all
-  four A76 cores busy on the single inference instead of onnxruntime's
-  conservative default, roughly halving latency for a YOLOv8n forward pass.
+* **Thread count** — ``intra_op_num_threads`` is set from ``cpu_budget`` rather
+  than the raw core count. Measured on this Pi 5, a second thread gives most of
+  the available speed-up and threads 3-4 add ~4% while pushing the 5 V rail into
+  a PMIC under-voltage event — so inference deliberately leaves cores for the
+  water screen, stereo, encode, nav and the server. See ``cpu_budget`` for the
+  numbers and ``camera.detection.num_threads`` to override.
 
 Both are wrapped here so the detector and the segmenter share one tuned config.
 Everything is best-effort: if a knob isn't supported it's skipped, never fatal.
@@ -20,16 +23,10 @@ a **Hailo-8L** on the Pi 5 AI HAT+ (real-time 30 fps+). See ``docs/vision_optimi
 """
 from __future__ import annotations
 
-import os
+from .cpu_budget import inference_threads
 
 
-def _cpu_threads() -> int:
-    """Physical core count to hand onnxruntime (Pi 5 = 4). Clamped to [1, 8]."""
-    n = os.cpu_count() or 4
-    return max(1, min(8, int(n)))
-
-
-def ort_session_options(ort):
+def ort_session_options(ort, num_threads: int | None = None):
     """Tuned ``SessionOptions`` for CPU inference on the Pi 5."""
     opts = ort.SessionOptions()
     try:
@@ -37,7 +34,7 @@ def ort_session_options(ort):
     except Exception:  # noqa: BLE001 — older onnxruntime may lack the enum
         pass
     try:
-        opts.intra_op_num_threads = _cpu_threads()
+        opts.intra_op_num_threads = inference_threads(num_threads)
         opts.inter_op_num_threads = 1
         opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     except Exception:  # noqa: BLE001

@@ -1030,6 +1030,58 @@ async def _vcgencmd(*args: str) -> str | None:
         return None
 
 
+# ---- Fork-free health sources ----------------------------------------------
+# _gather_health runs once a second for the whole uptime of the boat, and every
+# vcgencmd is a fork+exec. Measured on this Pi 5, the original 7 probes per tick
+# cost ~19 ms wall / ~1.3 ms parent-CPU *per second* and 604,800 process spawns a
+# day. Temperature and ARM clock are both readable straight from sysfs for ~37 us
+# total, so those two forks are simply unnecessary.
+_SYSFS_TEMP = "/sys/class/thermal/thermal_zone0/temp"          # millidegrees C
+_SYSFS_ARM_CLOCK = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"  # kHz
+
+# The four measure_volts rails are slow-moving diagnostics, not safety signals,
+# so they are sampled on a longer cadence instead of every tick. get_throttled
+# stays at 1 Hz — it is the under-voltage/throttle alarm and the one probe that
+# genuinely needs to be live (it is how this project diagnosed its brown-outs).
+_VOLTS_INTERVAL_S = 10.0
+_volts_cache: dict[str, float | None] | None = None
+_volts_cache_at: float = 0.0
+# Separate "have we sampled yet" flag: off a Pi the sample legitimately IS None,
+# so a `_volts_cache is not None` guard would never hit the cache and would
+# re-fork all four probes every tick — worse than before the cache existed.
+_volts_sampled: bool = False
+
+
+def _read_sysfs_float(path: str, scale: float) -> float | None:
+    """Read a single-number sysfs file, scaled. None if absent/unreadable."""
+    try:
+        with open(path, encoding="ascii") as f:
+            return float(f.read().strip()) * scale
+    except (OSError, ValueError):
+        return None
+
+
+async def _sampled_volts() -> dict[str, float | None] | None:
+    """The measure_volts rails, refreshed at most every _VOLTS_INTERVAL_S.
+
+    A None result (not a Pi) is cached just like a real reading — otherwise the
+    dev-laptop path would fork four probes a second forever.
+    """
+    global _volts_cache, _volts_cache_at, _volts_sampled
+    now = time.monotonic()
+    if _volts_sampled and (now - _volts_cache_at) < _VOLTS_INTERVAL_S:
+        return _volts_cache
+    srcs = ("core", "sdram_c", "sdram_i", "sdram_p")
+    raws = await asyncio.gather(*(_vcgencmd("measure_volts", s) for s in srcs))
+    volts: dict[str, float | None] | None = {
+        s: _parse_eq_float(v) for s, v in zip(srcs, raws)
+    }
+    if not any(v is not None for v in volts.values()):
+        volts = None            # off-Pi: report N/A, but still cache the miss
+    _volts_cache, _volts_cache_at, _volts_sampled = volts, now, True
+    return volts
+
+
 _THROTTLE_BITS = {
     0: "under-voltage", 1: "arm freq capped", 2: "currently throttled",
     3: "soft temp limit", 16: "under-voltage occurred", 17: "arm freq cap occurred",
@@ -1050,6 +1102,21 @@ def _decode_throttled(raw: str | None) -> tuple[str | None, str | None]:
         return hexval, "OK"
     active = [name for bit, name in _THROTTLE_BITS.items() if bits & (1 << bit)]
     return hexval, ", ".join(active) if active else "OK"
+
+
+def _throttled_now(raw_hex: str | None) -> bool:
+    """True if a throttle/under-voltage condition is active *right now*.
+
+    Only bits 0-3 count. Bits 16-19 are the sticky "has occurred since boot"
+    flags — they never clear until reboot, so treating them as live would make
+    any conditional probe run forever after the first dip.
+    """
+    if not raw_hex:
+        return False
+    try:
+        return bool(int(raw_hex, 16) & 0xF)
+    except ValueError:
+        return False
 
 
 def _parse_eq_float(text: str | None) -> float | None:
@@ -1177,22 +1244,30 @@ async def _gather_health() -> dict:
     net_rx_kbps = ps.get("net_rx_kbps")
     net_tx_kbps = ps.get("net_tx_kbps")
 
-    # Run the vcgencmd probes concurrently — each is an independent subprocess
-    # spawn with its own bounded timeout, so awaiting them one at a time only
-    # added latency (up to ~7x) to this once-a-second background loop.
-    volt_srcs = ("core", "sdram_c", "sdram_i", "sdram_p")
-    temp_raw, throttled_raw_out, clock_raw, *volt_raws = await asyncio.gather(
-        _vcgencmd("measure_temp"),
+    # Temperature and ARM clock come from sysfs (~37 us for both) instead of two
+    # vcgencmd forks; the voltage rails are sampled on a slow cadence. Only
+    # get_throttled still forks every tick — see the notes by _sampled_volts.
+    # This took the always-on health loop from 7 spawns/s to ~1.4.
+    temp_c = _read_sysfs_float(_SYSFS_TEMP, 1e-3)          # milli°C → °C
+    clock_hz = _read_sysfs_float(_SYSFS_ARM_CLOCK, 1e3)    # kHz → Hz
+    throttled_raw_out, volts = await asyncio.gather(
         _vcgencmd("get_throttled"),
-        _vcgencmd("measure_clock", "arm"),
-        *(_vcgencmd("measure_volts", src) for src in volt_srcs),
+        _sampled_volts(),
     )
-    temp_c = _parse_eq_float(temp_raw)
     throttled_raw, throttled = _decode_throttled(throttled_raw_out)
-    clock_hz = _parse_eq_float(clock_raw)
-    volts = {src: _parse_eq_float(v) for src, v in zip(volt_srcs, volt_raws)}
-    if not any(v is not None for v in volts.values()):
-        volts = None
+    if temp_c is None:      # not a Pi (or sysfs moved) — fall back to the fork
+        temp_c = _parse_eq_float(await _vcgencmd("measure_temp"))
+    # `scaling_cur_freq` is the cpufreq driver's view. On a Pi that driver asks
+    # the firmware, so it tracks the real clock (verified here: exact agreement
+    # with `measure_clock arm` at both 1500 and 2400 MHz). But the authoritative
+    # value is `cpuinfo_cur_freq`, which is root-only, so during an ACTIVE
+    # throttle — precisely when the operator is diagnosing a brown-out and a
+    # masked clock drop would mislead them — spend the fork and ask the firmware
+    # directly. Sticky "occurred" bits are ignored on purpose: they latch until
+    # reboot and would make this fork forever.
+    if clock_hz is None or _throttled_now(throttled_raw):
+        clock_hz = _parse_eq_float(
+            await _vcgencmd("measure_clock", "arm")) or clock_hz
 
     # Pod Pico status (reached via the Boat Pico; tracked by PodBridge).
     pod_ok = pod_leak = pod_age_s = None

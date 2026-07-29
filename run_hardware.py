@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from dataclasses import fields as dc_fields
 from pathlib import Path
 
 import uvicorn
@@ -27,6 +28,7 @@ import yaml
 import pi5.server.app as server_app
 from pi5.comms.pico_serial import PicoSerial
 from pi5.comms.pod_bridge import PodBridge
+from pi5.cv.buoy_detector import BuoyDetectorConfig
 from pi5.cv.camera import CameraConfig, CameraProducer
 from pi5.cv.pipeline import SurveyVisionPipeline
 from pi5.cv.radar_tracker import RadarTracker
@@ -167,6 +169,16 @@ def main() -> None:
 
     # Live YOLO detection overlay on the /video feed (configurable model).
     det_cfg = cam_cfg.get("detection", {})
+    # Classical buoy screen — only the keys BuoyDetectorConfig actually declares,
+    # so a typo in config.yaml fails loudly here instead of being ignored.
+    buoy_raw = det_cfg.get("buoy") or {}
+    buoy_fields = {f.name for f in dc_fields(BuoyDetectorConfig)}
+    unknown = set(buoy_raw) - buoy_fields
+    if unknown:
+        logger.warning("Ignoring unknown camera.detection.buoy keys: %s",
+                       ", ".join(sorted(unknown)))
+    buoy_cfg = BuoyDetectorConfig(**{k: v for k, v in buoy_raw.items()
+                                     if k in buoy_fields})
     overlay = DetectionOverlay(camera, DetectionConfig(
         enabled=det_cfg.get("enabled", True),
         model=det_cfg.get("model", "yolov8n.pt"),
@@ -176,6 +188,10 @@ def main() -> None:
         target_classes=det_cfg.get("target_classes") or [],
         highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
         track_class=det_cfg.get("track_class", "") or "",
+        class_conf=det_cfg.get("class_conf") or {},
+        num_threads=int(det_cfg.get("num_threads", 0) or 0),
+        buoy_fallback=buoy_cfg.enabled,
+        buoy_cfg=buoy_cfg,
     ), stereo=stereo_depth)
 
     # Radar-bar pan stepper on the Pi 5 GPIO header (the only Pi 5 GPIO use in

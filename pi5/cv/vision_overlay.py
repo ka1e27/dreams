@@ -25,6 +25,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .buoy_detector import BuoyDetector, BuoyDetectorConfig
+
 if TYPE_CHECKING:
     from .stereo import StereoDepth
 
@@ -52,6 +54,21 @@ class DetectionConfig:
     target_classes: list[str] = field(default_factory=list)            # empty = keep all
     highlight_classes: list[str] = field(default_factory=lambda: ["boat", "person"])
     track_class: str = ""    # lock the tracker to this one class; "" = auto (any highlight)
+    # Per-class confidence floors, e.g. {"person": 0.25}. The model runs at the
+    # LOWEST floor present and each box is then filtered by its own class's
+    # threshold, so a hard-to-see swimmer can be kept at 0.25 without flooding
+    # every other class with low-confidence boxes. Case-insensitive.
+    # Also how the classical buoy screen is kept out of the CONF slider's way —
+    # its score is a quality proxy, not a probability. See config.yaml.
+    class_conf: dict[str, float] = field(default_factory=dict)
+    # Cores the inference session may use. 0/None = auto (leave headroom for the
+    # rest of the stack — see pi5/cv/cpu_budget.py for why 4 is the wrong choice).
+    num_threads: int = 0
+    # Classical colour/shape buoy screen — supplies the 'buoy' class the COCO
+    # model has no weights for. Auto-disables if the loaded model already emits
+    # a 'buoy' label (i.e. a real maritime model was dropped in).
+    buoy_fallback: bool = True
+    buoy_cfg: "BuoyDetectorConfig | None" = None
 
 
 class DetectionOverlay:
@@ -75,6 +92,16 @@ class DetectionOverlay:
         self._fps: float = 0.0
         self.enabled: bool = self._cfg.enabled
         self.track_marker: bool = True         # draw a lock reticle on the primary
+        # Classical buoy screen. Built eagerly (it is stateless and costs
+        # nothing idle) but only *run* when the loaded model can't emit 'buoy' —
+        # see _load_model, which flips _buoy_active.
+        self._buoy = (BuoyDetector(self._cfg.buoy_cfg or BuoyDetectorConfig())
+                      if self._cfg.buoy_fallback else None)
+        self._buoy_active: bool = False
+        # Lowest per-class floor: the backend must run at least this permissive
+        # or a class with a reduced threshold would be dropped before we see it.
+        self._class_conf = {k.lower(): float(v) for k, v in
+                            (self._cfg.class_conf or {}).items()}
 
     # -- model -------------------------------------------------------------- #
     def _resolve_model_path(self) -> str:
@@ -85,7 +112,7 @@ class DetectionOverlay:
             return str(_MARITIME_ONNX)
         return cfg or "yolov8n.pt"
 
-    def _load_model(self) -> None:
+    def _load_backend(self) -> None:
         """Pick the inference backend: onnxruntime for an .onnx model (no torch
         needed), else ultralytics for a .pt. Sets self._onnx / self._model and
         self._names. Falls back to yolov8n.pt if the .onnx can't be loaded."""
@@ -99,7 +126,8 @@ class DetectionOverlay:
                 f.endswith(".param") for f in os.listdir(path)):
             try:
                 from .ncnn_detector import NcnnYolo
-                nc = NcnnYolo(path, conf=self._cfg.conf)
+                nc = NcnnYolo(path, conf=self._cfg.conf,
+                              num_threads=self._cfg.num_threads)
             except Exception as e:  # noqa: BLE001
                 nc = None
                 logger.warning("NCNN backend import failed: %s", e)
@@ -114,7 +142,8 @@ class DetectionOverlay:
         if path.lower().endswith(".onnx"):
             try:
                 from .onnx_detector import OnnxYolo
-                onnx = OnnxYolo(path, conf=self._cfg.conf)
+                onnx = OnnxYolo(path, conf=self._cfg.conf,
+                                num_threads=self._cfg.num_threads)
             except Exception as e:  # noqa: BLE001
                 onnx = None
                 logger.warning("ONNX backend import failed: %s", e)
@@ -140,6 +169,29 @@ class DetectionOverlay:
         except Exception as e:  # noqa: BLE001 — degrade, never crash startup
             logger.warning("YOLO load failed (%s): %s", path, e)
             self._model = None
+
+    def _load_model(self) -> None:
+        """Load the backend, then decide whether the buoy fallback is needed.
+
+        The classical screen exists only because the shipped COCO model has no
+        ``buoy`` class. If a real maritime model is dropped in, it emits ``buoy``
+        itself and the fallback switches off — so the two never double-report the
+        same object and there is no config edit to remember.
+        """
+        self._load_backend()
+        self._buoy_active = self._buoy is not None and "buoy" not in self._label_set()
+        if self._buoy_active:
+            logger.info("Buoy fallback ON — loaded model has no 'buoy' class "
+                        "(%d classes); using the colour/shape screen.",
+                        len(self._label_set()))
+        elif self._buoy is not None:
+            logger.info("Buoy fallback OFF — the loaded model emits 'buoy' itself.")
+
+    def _label_set(self) -> set[str]:
+        """Lowercased class labels the loaded model can emit."""
+        names = self._names
+        values = names.values() if isinstance(names, dict) else (names or [])
+        return {str(n).lower() for n in values}
 
     # -- lifecycle ---------------------------------------------------------- #
     async def start(self) -> None:
@@ -193,12 +245,29 @@ class DetectionOverlay:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
         }
 
+    @property
+    def _infer_conf(self) -> float:
+        """Threshold to run the backend at: the most permissive floor in play.
+
+        Derived, not cached — the CONF slider mutates ``_cfg.conf`` at runtime
+        (apply_controls), so a stored copy would go stale and silently re-raise
+        the floor on a class we deliberately lowered.
+        """
+        if not self._class_conf:
+            return self._cfg.conf
+        return min([self._cfg.conf, *self._class_conf.values()])
+
     def class_names(self) -> list[str]:
         """Sorted unique class labels the loaded model can emit (for the UI's
         target picker). Empty until a model is loaded."""
         names = self._names
         vals = names.values() if isinstance(names, dict) else names
-        return sorted({str(v) for v in vals})
+        labels = {str(v) for v in vals}
+        if self._buoy_active:
+            # The classical screen emits this label even though the model can't,
+            # so the operator can pick it in the TRACK picker.
+            labels.add(self._buoy.cfg.label if self._buoy else "buoy")
+        return sorted(labels)
 
     def controls(self) -> dict:
         return {
@@ -283,9 +352,10 @@ class DetectionOverlay:
         in _infer so it's identical across backends.
         """
         if self._onnx is not None:
-            return self._onnx.infer(frame_bgr, self._cfg.conf)
+            out = self._onnx.infer(frame_bgr, self._infer_conf)
+            return self._add_buoys(frame_bgr, out)
         results = self._model(frame_bgr, imgsz=self._cfg.imgsz,
-                              conf=self._cfg.conf, verbose=False)
+                              conf=self._infer_conf, verbose=False)
         names = self._names
         out: list[tuple] = []
         for box in getattr(results[0], "boxes", []) or []:
@@ -297,7 +367,34 @@ class DetectionOverlay:
                 label = names[cid] if cid < len(names) else str(cid)
             x1, y1, x2, y2 = (int(v) for v in box.xyxy[0])
             out.append((x1, y1, x2, y2, label, conf))
-        return out
+        return self._add_buoys(frame_bgr, out)
+
+    def _add_buoys(self, frame_bgr, dets: list[tuple]) -> list[tuple]:
+        """Append classical buoy candidates to a YOLO detection list.
+
+        Runs on the same frame and at the same rate as inference (so it is
+        already capped by ``detect_max_fps``), and costs a measured 0.6-1.0 ms
+        against ~30 ms for the forward pass. ``dets`` is passed in so an overlapping classified
+        object keeps its label — see BuoyDetector._suppress_overlaps.
+        """
+        if not self._buoy_active or self._buoy is None:
+            return dets
+        # Suppress against only the boxes that will actually survive _infer's
+        # per-class floor. Otherwise a sub-threshold box (say boat @ 0.32 when
+        # boat's floor is 0.40) could suppress a buoy and then be dropped itself,
+        # leaving the operator with neither detection. `dets` is still returned
+        # whole — _infer does the real filtering.
+        keepers = [d for d in dets if self._passes_conf(str(d[4]).lower(), d[5])]
+        found = self._buoy.detect(frame_bgr, keepers)
+        return dets + found if found else dets
+
+    def _passes_conf(self, label_l: str, conf: float) -> bool:
+        """Per-class confidence floor, falling back to the global threshold.
+
+        The backend already ran at the lowest floor of any class, so this is
+        where a class without a reduced threshold gets held to the strict value.
+        """
+        return conf >= self._class_conf.get(label_l, self._cfg.conf)
 
     def _infer(self, frame_bgr, right_bgr=None) -> tuple[list[tuple], list[dict], tuple | None]:
         try:
@@ -330,6 +427,11 @@ class DetectionOverlay:
         for x1, y1, x2, y2, label, conf in raw:
             label_l = label.lower()
             if target and label_l not in target:
+                continue
+            # Per-class floor: the backend ran at the most permissive threshold
+            # so a low-floor class (e.g. a distant swimmer) survives to here;
+            # every other class is held to the strict global conf.
+            if not self._passes_conf(label_l, conf):
                 continue
             # Highlight the configured classes; when a specific track class is
             # chosen, highlight it too so the picked target is always visible.

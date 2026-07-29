@@ -247,11 +247,77 @@ camera:
     # more per frame (the real lever on detection FPS — detect_max_fps only caps).
     imgsz: 320
     conf: 0.40            # min confidence to keep a detection
+    # Per-class confidence floors, overriding `conf` for that class only. The
+    # model is run at the LOWEST floor in play and each box is then filtered by
+    # its own class's threshold — so a swimmer can be kept at 0.25 without
+    # flooding every other class with junk boxes.
+    # A person in the water is the hardest and most important target on the
+    # water: at any range you only see a head and shoulders, low-contrast
+    # against glare, often part-submerged, so COCO scores them far below a
+    # standing person. 0.40 silently drops most of them. Case-insensitive.
+    class_conf:
+      person: 0.25
+      swimmer: 0.25
+      surfer: 0.30
+      kayak: 0.30
+      # 'buoy' comes from the classical screen below, not the model. Its score is
+      # a saturation/solidity quality proxy in the 0.35-0.80 band, NOT a learned
+      # probability, so judging it against the YOLO threshold is a category
+      # error: at conf 0.40 the weakest real buoys were dropped, and dragging the
+      # CONF slider up would have silently switched buoy detection off entirely.
+      # Its own geometric gates (min_sat / min_solidity / area / aspect) are the
+      # real filter, so give it a floor below its minimum score.
+      buoy: 0.30
+    # ---- Classical buoy screen (pi5/cv/buoy_detector.py) ----
+    # The shipped COCO model has NO 'buoy' class, so without this nothing ever
+    # emits the label that threat_assessor grades WARNING and object_memory
+    # charts as a PERMANENT map marker — the whole "confirm a buoy → drop a GPS
+    # marker" feature is dead on real hardware (only the sim's ground-truth
+    # mapper exercised it). This finds buoys by colour+shape instead: one HSV
+    # threshold pass plus a contour filter, measured 0.6-1.0 ms/frame on this
+    # Pi 5 against ~30 ms for the YOLO pass. It runs at the inference rate, not the camera
+    # rate. AUTO-DISABLES if the loaded model already emits 'buoy' (i.e. a real
+    # maritime model was dropped in), so the two never double-report.
+    buoy:
+      enabled: true
+      proc_width: 320       # downscale width for the mask pass (cost ∝ pixels)
+      min_sat: 90           # HSV saturation floor — open water sits well below
+      min_val: 60           # HSV value floor — rejects dark reflections
+      # Green buoys exist, but so does sunlit foliage on the bank — which is the
+      # dominant false positive on a river. Red/orange/yellow is both the
+      # standard buoy colouring and the least foliage-like. Turn on only if you
+      # actually need green cans and can accept bank false positives.
+      include_green: false
+      roi_top_frac: 0.35    # ignore the top of the frame (sky + treeline)
+      max_area_frac: 0.06   # reject big blobs (own hull, dock, glare band)
+      min_solidity: 0.55    # contour area / bbox area — buoys are convex-ish
+      max_candidates: 6
+      # A candidate is dropped when this fraction of it already lies inside a
+      # YOLO box, so a person in an orange life jacket stays a CRITICAL 'person'
+      # and no phantom PERMANENT buoy marker is charted on a swimmer. This is
+      # containment, NOT IoU, precisely because the life jacket is a small blob
+      # inside a much larger person box — IoU would be tiny there and let it
+      # through. Do not raise this casually.
+      overlap_suppress: 0.50
+      dedupe_iou: 0.25      # merge candidates overlapping each other this much
     # Upper cap on inference rate (decoupled from Tier-1 seg and the video stream).
     # Actual FPS = min(this, 1 / inference_time). With the NCNN backend yolov8n@320
     # runs ~34 fps on the Pi 5, so we lift the cap to 15 (matching the Tier-1 water
     # screen / camera rate) for more detection frames while stereo/nav keep headroom.
     detect_max_fps: 15
+    # ---- Cores the inference session may use (0 = auto) ----
+    # Measured on this Pi 5 (yolov8n @ 320, NCNN, median of 15): 1 thread 27.9 ms
+    # / 2 threads 18.4 ms / 3 threads 19.2 ms / 4 threads 17.7 ms. Thread 2 gets
+    # essentially all the speed-up; threads 3-4 add ~4% between them. Meanwhile
+    # detect_max_fps above is 15 Hz = a 66.7 ms budget, so even ONE thread clears
+    # the cap with 2.4x headroom — the extra threads buy latency nobody consumes.
+    # They are not free: during that sweep the Pi's sticky throttle flags went
+    # 0x0 -> 0x50000 (under-voltage occurred + throttling occurred) on the 4-thread
+    # pass, which is the documented cause of this project's power-off incidents
+    # (2026-07-27 journal entry), and they starve the concurrent 15 fps water
+    # screen / stereo / encode / nav / server. Auto = cores - 2 (so 2 on a Pi 5).
+    # Raise only if you know the power budget (real 27 W PSU, stack otherwise idle).
+    num_threads: 0
     target_classes: []    # keep only these class names; [] = keep all
     # Highlighted (amber) classes — covers both the COCO fallback ('boat','person')
     # and the maritime model ('vessel','kayak'). Others are drawn muted.
@@ -298,6 +364,11 @@ vision:
   seg_ignore_classes: [2]
   # Input normalisation: "imagenet" (WaSR/torchvision convention) or "01" (/255).
   seg_normalize: "imagenet"
+  # Cores the DNN water model may use (0 = auto, same policy as the detector —
+  # see pi5/cv/cpu_budget.py). Only affects the ONNX seg backend; the default
+  # classical screen is single-threaded OpenCV. Stated explicitly so the Tier-1
+  # loop's CPU budget is a visible choice, not inherited by accident.
+  seg_num_threads: 0
   # Optional [w, h] input override when the model exports dynamic axes.
   # seg_input_size: [512, 384]
   # Fraction of the frame that must read as non-water to wake Tier 2 (YOLO).

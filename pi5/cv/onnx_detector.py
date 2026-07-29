@@ -138,8 +138,10 @@ class OnnxYolo:
     ultralytics path produces so ``vision_overlay`` is backend-agnostic."""
 
     def __init__(self, model_path: str, names: list[str] | None = None,
-                 conf: float = 0.40, iou: float = 0.45) -> None:
+                 conf: float = 0.40, iou: float = 0.45,
+                 num_threads: int | None = None) -> None:
         self.model_path = model_path
+        self.num_threads = num_threads
         self.names = _load_names(model_path, names)
         self.conf = float(conf)
         self.iou = float(iou)
@@ -157,7 +159,7 @@ class OnnxYolo:
         try:
             from .ort_utils import ort_providers, ort_session_options
             self.session = ort.InferenceSession(
-                model_path, sess_options=ort_session_options(ort),
+                model_path, sess_options=ort_session_options(ort, num_threads),
                 providers=ort_providers(ort))
             inp = self.session.get_inputs()[0]
             self.input_name = inp.name

@@ -52,7 +52,18 @@ THREAT_LEVELS: dict[str, ThreatLevel] = {
     "sailboat":      ThreatLevel.CRITICAL,
     "surfer":        ThreatLevel.CRITICAL,   # person on the water
     "person":        ThreatLevel.CRITICAL,   # person in water
+    "swimmer":       ThreatLevel.CRITICAL,   # object_memory canonicalises this
+                                             # to 'person'; without an entry here
+                                             # a model emitting 'swimmer' graded
+                                             # INFO — i.e. not tracked at all.
     "kayak":         ThreatLevel.CRITICAL,   # small craft, hard to see
+    # Small human-powered craft sit low and are easy to miss — object_memory
+    # already remembers all of these as TRANSIENT movers, so grading them below
+    # CRITICAL would track them on the map but not on the water.
+    "jetski":        ThreatLevel.CRITICAL,
+    "raft":          ThreatLevel.CRITICAL,
+    "canoe":         ThreatLevel.CRITICAL,
+    "paddleboard":   ThreatLevel.CRITICAL,
     # WARNING — track if moving toward the boat
     "debris":        ThreatLevel.WARNING,    # large floating debris
     "buoy":          ThreatLevel.WARNING,    # navigation marker

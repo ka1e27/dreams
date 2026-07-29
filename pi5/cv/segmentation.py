@@ -124,6 +124,11 @@ class WaterSegmentation:
         self._water_class = int(cfg.get("seg_water_class", 1))
         self._ignore_classes = {int(c) for c in (cfg.get("seg_ignore_classes") or [])}
         self._normalize = str(cfg.get("seg_normalize", "imagenet")).lower()
+        # Cores the DNN water model may use. 0/None = the shared auto policy in
+        # pi5/cv/cpu_budget.py (leave headroom for the rest of the stack). Only
+        # applies to the ONNX backend — the classical screen is single-threaded
+        # OpenCV and is the default (seg_model_path empty).
+        self._num_threads = int(cfg.get("seg_num_threads", 0) or 0)
         override = cfg.get("seg_input_size")  # optional [w, h] override
         self._size_override = (tuple(int(v) for v in override)
                                if override and len(override) == 2 else None)
@@ -191,8 +196,14 @@ class WaterSegmentation:
             return
         try:
             from .ort_utils import ort_providers, ort_session_options
+            # Explicit, not inherited: the water screen shares the CPU budget
+            # helper with the detector, so it also stops taking all four Pi 5
+            # cores. Stated here rather than defaulted silently — this is the
+            # always-on Tier-1 loop and its thread count matters. `None` = the
+            # shared auto policy (see pi5/cv/cpu_budget.py).
             sess = ort.InferenceSession(
-                str(path), sess_options=ort_session_options(ort),
+                str(path),
+                sess_options=ort_session_options(ort, self._num_threads),
                 providers=ort_providers(ort))
             inp = sess.get_inputs()[0]
             self._in_name = inp.name

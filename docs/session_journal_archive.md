@@ -9,6 +9,107 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-26 — GPS-anchored object memory (buoys/landmarks charted on the map)
+
+**Worked on:** new feature — the boat now **remembers where objects are on the water**. When vision
+confirms a buoy (or dock/rock/person), it geolocates it and drops a marker on the GPS map; once
+charted it re-verifies the coordinate on each later sighting instead of re-dropping, and doesn't tie
+up the radar re-observing it — so it keeps scanning for the unknown even with known things nearby.
+Permanent marks (buoys/docks/rocks) are kept; transient movers (people/boats) expire after a TTL.
+**Changed:**
+- `pi5/navigation/geo.py` — new `destination_point()` (forward geodesic): boat fix + true bearing +
+  range → object lat/lon. The inverse of `bearing`/`haversine`. +6 tests.
+- `pi5/cv/object_memory.py` (NEW) — `ObjectMemory`: geolocates detections, matches by **world
+  coordinate** (survives looking away/back), confirms after N agreeing sightings (then a marker
+  drops), refines with an inverse-distance²-weighted mean, and ages out transients/candidates.
+  Class→category (PERMANENT vs TRANSIENT) here. +32 tests.
+- `pi5/cv/pipeline.py` — feeds every ranged detection into the memory (bearing off the bow =
+  `heading + bbox offset`; cameras are fixed-forward, the stepper is a *separate* radar bar), ages it
+  each tick, exposes `map_objects()` + `vision_state()["object_memory"]`, and **releases the radar
+  from confirmed non-CRITICAL landmarks** (`release_radar_on_known`) so it keeps scanning. +6 pipeline
+  tests.
+- `pi5/server/app.py` — `GET /api/map/objects`, `POST /api/map/objects/clear` (reads the pipeline's
+  memory on hardware, a standalone one in sim); `configure(object_memory=…)`.
+- `pi5/navigation/sim_obstacles.py` — `SimObjectMapper` feeds the memory from ground truth (the sim's
+  stand-in for vision), wired into `run_sim.py`. +4 tests.
+- UI: command center `command_center.html` — object marker layer polling `/api/map/objects` (cyan
+  permanent / amber transient, hover label + detail popup) + **SIM MAP** DROP BUOY / DROP PERSON /
+  CLEAR MARKS buttons (sim-only). React `dashboard/` — `useMapObjects` hook + `BoatMap.jsx` markers.
+- `pi5/config.yaml` — new `vision.object_memory` block. Docs: `docs/object_memory.md`.
+**Verified (on the Pi):** `pytest pi5/tests` **234 green** (+40), ruff clean, command-center inline
+`<script>` passes `node --check`, `dashboard` Vite build clean. Booted the sim and drove the whole
+lifecycle over the real endpoints twice: dropped a buoy 18 m ahead → confirmed **PERMANENT** marker
+geolocated to **18.1 m / bearing 359.8°** (matches ground truth to ~0.1 m); person → **TRANSIENT**;
+markers **persist after the obstacles are removed** (remembered); two buoys stay distinct (9.1 m
+apart) while an out-of-cone one isn't seen; a repeat drop **refines, not duplicates**; CLEAR MARKS
+wipes them. Transient TTL / permanent persistence are covered by deterministic unit tests.
+**Decisions / open questions:** object memory needs **stereo range** to place a detection → no-op on a
+mono rig (documented). Marker identity is the world coordinate + class; the vessel synonym set
+(boat/vessel/boats) is canonicalised. Not yet exercised on-water with a real detector (bench next).
+**Next steps:** on-water pass with the camera + a real buoy; tune `confirm_sightings`/`match_radius_m`
+against live stereo noise; consider persisting the memory across restarts. Nothing committed — tree
+left for review.
+**Follow-up (independent verification pass — on the Pi):** re-verified the whole feature end to end,
+nothing changed in the code. Static: `pytest pi5/tests` **234 green** (targeted object-memory/geodesic
+subset **35 green**), ruff clean across all 10 touched files, command-center inline `<script>` passes
+`node --check`, dashboard **Vite build clean**. Independent numerical check of the forward geodesic
+(`destination_point` round-tripped against `haversine`/`bearing`): **worst distance error 0.000 cm over
+77 cases** (bearings 0-359.5°, ranges 1 m-5 km), bearings back to <0.05°, +180° meridian wraps
+correctly. Independent live lifecycle over the **real HTTP endpoints** (fresh sim boot): buoy dropped
+18 m ahead confirmed after 3 sightings and **geolocated 0.19 m from sim ground truth**; person →
+TRANSIENT; two distinct markers; repeat sightings **refined one object** (id stable, sightings 7→11,
+0.04 m drift, no duplicate); markers **persisted after the obstacles were deleted**; CLEAR wiped them.
+Code confirmations: the `distance_m` fed to the memory is the overlay's **stereo** value (mono
+`_fallback_distance` is used only on the avoidance path) → the "mono rig = no-op" claim holds; the
+hardware pipeline maps all 11 `vision.object_memory` config keys 1:1; both UIs (command center +
+`BoatMap.jsx`) render markers identically (cyan permanent / amber transient) and XSS-safe. The
+sim-only path the live run can't reach — **radar-release-on-known** — is covered by
+`test_pipeline_radar_releases_known_buoy_keeps_scanning`. **Two benign notes (not bugs):** (1)
+`run_sim.py` builds `ObjectMemory()` with defaults — consistent with the sim harness ignoring
+`config.yaml` for every component; config wiring lives on the hardware path + unit tests, so a config
+change is only felt in sim if `run_sim` is taught to load it. (2) `known_confirmed_near` uses a fixed
+6 m radius in the radar-release check (not range-scaled), so releasing the bar may under-fire for a
+landmark geolocated from a long/noisy range — conservative (keeps tracking), an on-water tuning knob.
+Still nothing committed.
+
+## 2026-07-26 — Designer-grade ESC Settings editor (dashboard) + endpoints + tests
+
+**Worked on:** finished the interrupted ESC-config UI. A prior session had refactored
+`am32_config.py` into a library (`FIELDS` registry, `read/write_settings`, `decode_eeprom`, mock EEPROM,
+wiring/setup constants) explicitly *"for the dashboard ESC editor"* — but the server endpoints and the
+actual editor were never built; the modal was still the old "arm am32.ca passthrough" stub. Built the
+whole thing and verified it on the Pi.
+**Changed:**
+- `pi5/server/app.py` — new `POST /api/esc/read`, `POST /api/esc/write`, `GET /api/esc/meta` (+ a
+  persistent `_esc_mock` sim buffer). Hardware path runs `am32_config.read/write_settings` in a
+  threadpool (blocking pyserial) and refuses during a running mission; sim path serves + mutates the
+  mock so the editor is fully usable with no hardware. 400 (bad key/value) vs 502 (link/verify) split.
+- `pi5/scripts/am32_config.py` — `_decode_field` now emits `warn_when` for bool fields so the UI
+  recomputes the amber "risky state" live on toggle (the registry itself already existed).
+- `pi5/server/templates/command_center.html` — replaced the passthrough stub with a full
+  **⚡ ESC SETTINGS** modal rendered straight from the field registry: grouped Drive/Protection/Tuning/
+  Info sections, real toggle switches + range sliders + info chips, ★ important flags, amber warn rows
+  (⚠ + reason) that flip live, dirty/"EDITED" tracking with a sticky Read / Revert / Write action bar
+  (Write sends only changed keys, server-verified), and a **Wiring & Setup** tab with the pin table +
+  copy-paste one-time `uart0` commands + doc links + the am32.ca passthrough demoted to an Advanced
+  collapsible. New `⚡ ESC SETTINGS` button in COMMANDS→DRIVE; ⚙ MOTORS renamed ⚙ TRIM and links to it.
+  All device-derived text set via textContent (no innerHTML).
+- `pi5/tests/test_am32_config.py` (NEW, 21 tests) — decode/scaling/warn-flags/encode-validate/
+  all-or-nothing/round-trip on the library the endpoints call.
+- Docs: `docs/am32_config.md` + `docs/esc_setup.md` now present the dashboard editor as the easiest
+  setup path (same GPIO-UART backend as the CLI).
+**Verified on the Pi:** `pytest pi5/tests` **194 green** (+21), ruff clean, the inline `<script>` passes
+`node --check`. Booted the sim and hit the live endpoints via curl — meta/read/write, sim-write
+persistence, warn-flip (bidir OFF → warn), and 400s on out-of-range/unknown/empty. Rendered the modal
+with a faithful chromium harness (real CSS + markup + render fns + live payload): the Settings tab, the
+edited+warn state, and the Wiring tab all read as designer-grade.
+**Decisions / open questions:** the underlying `am32_config` read/write was already hardware-proven on
+the NeutronRC G071; only the new FastAPI/threadpool wrapper is unexercised on metal — wants one on-bench
+pass over `/dev/ttyAMA0`. Web-font (Orbitron) fetch hangs headless chromium on this ARM Pi, so the render
+harness strips it (live page is unaffected).
+**Next steps:** on-bench — wire an ESC to the Pi UART, open ⚡ ESC SETTINGS, Read/Write a real ESC end to
+end; then the outstanding telemetry-on-GP16 check (motor spinning). Nothing committed — tree left for review.
+
 ## 2026-07-26 — CV overlay fixed (no model → COCO ONNX), MJPG 720p, HUD de-conflict, auto-exposure
 
 **Worked on:** user reported the command-center CV showed **no bounding boxes**, the top-right
