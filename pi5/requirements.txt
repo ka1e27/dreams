@@ -17,3 +17,19 @@ psutil>=5.9
 onnxruntime>=1.17
 # mpremote is a CLI tool used by /pico/push (firmware reflash); install with
 # `pip install mpremote` on the Pi. Not importable, so not pinned here.
+#
+# ---- Pi-5-only: radar-bar stepper GPIO (pi5/cv/stepper.py) ----
+# REQUIRED ON THE PI. Without these, StepperMotor silently falls back to mock
+# mode: the command center reports the bar panning and the angle readout moves,
+# but no pulse ever reaches the A4988 and the motor never turns. Off-Pi (laptop /
+# simulator) mock mode is the correct behaviour, which is why the import is soft.
+#
+# `pip install lgpio` needs liblgpio-dev to build. On Raspberry Pi OS the apt
+# build is already present system-wide, so the cheap route for a venv is:
+#     sudo apt install python3-lgpio python3-gpiozero
+#     ln -s /usr/lib/python3/dist-packages/{gpiozero,colorzero,lgpio.py,_lgpio*.so} \
+#           .venv/lib/python3*/site-packages/
+# (Same-ABI symlink; that's how this bench Pi is set up.) Otherwise:
+#     sudo apt install liblgpio-dev && pip install lgpio gpiozero
+gpiozero>=2.0 ; platform_machine == "aarch64"
+lgpio>=0.2 ; platform_machine == "aarch64"

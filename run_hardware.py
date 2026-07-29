@@ -338,7 +338,19 @@ def main() -> None:
         # must stay off the event loop). Never let it block startup.
         try:
             radar.start()
-            logger.info("Radar tracker started (stepper mock=%s)", stepper.mock)
+            if stepper.mock:
+                # Mock is correct off-Pi, but in hardware mode it means the bar
+                # will never move while the command center still reports every
+                # pan as a success — a silent failure worth shouting about.
+                logger.warning(
+                    "STEPPER IS IN MOCK MODE — the radar bar will NOT physically move, "
+                    "but pan/scan commands will still appear to succeed. Cause is almost "
+                    "always gpiozero/lgpio missing from the running interpreter "
+                    "(see pi5/requirements.txt) or the GPIO pins already claimed by "
+                    "another process."
+                )
+            else:
+                logger.info("Radar tracker started (stepper driving real GPIO)")
         except Exception as e:  # noqa: BLE001
             logger.error("Radar tracker failed to start: %s", e)
 
