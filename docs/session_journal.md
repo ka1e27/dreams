@@ -31,6 +31,53 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-28 — Applied the pin-map audit to code: winch → GP21, stepper 8× fix, divider ratio
+
+**Worked on:** pulled `e27ee7f` (the Boat_PCB V2 netlist audit below) and applied the three items it
+had flagged but left unfixed in code.
+
+**Changed:**
+- `firmware/boat-pico/motor_control.py` — winch PWM **GP6 → GP21** (`MW_PIN`). The board routes the
+  winch signal to GP21 (J8.1 + J9.1 in parallel); GP6 is the MCP2515's `~INT`, so the old pin drove
+  the CAN chip, not the winch ESC. GP21 was unused by firmware, making this the **only** one of the
+  five CAN-contested pins (GP2/3/4/6/7) that a pin move can resolve.
+- `pi5/cv/stepper.py`, `pi5/config.yaml`, `pi5/cv/stepper_test.py`, `run_hardware.py` —
+  `steps_per_rev` **3200 → 400**. The A4988 is half step (MS1 high off the Pi's 3V3, MS2/MS3
+  hard-grounded), not 1/16. Verified: a commanded 10° pan now moves 9.9°, not 80°. It also fixes an
+  8× *overspeed* — the pulse train ran at 8× the commanded rpm, so the motor was likely skipping
+  steps rather than tracking. Docstring rewritten: RESET is tied to SLEEP on the board (so
+  `reset_pin` stays null), plus the auto-sleep-resets-the-translator drift caveat and the
+  VDD-comes-from-the-Pi dependency.
+- `firmware/boat-pico/sensors.py` — **`INV_P_RATIO` 14.0 → 6.6.** User confirmed the physical board
+  has **56k/10k fitted on all three** dividers, so every rail reconstructs at ×6.6. At ×14.0 a full
+  21 V drive pack reported 16.4 V — under `P_WARN` (17.0), a hair over `P_CRIT` (16.0) — i.e. return-
+  to-home on a full battery. Verified all three rails now report 21.00/18.00/17.00/16.00 V exactly
+  and trip WARN/CRIT at the right pack voltages.
+- Docs synced: `docs/pin_map.md`, `CLAUDE.md`, `docs/battery_architecture.md`,
+  `docs/pcb_design_notes.md`, `docs/PROJECT_CONTEXT.md`, `docs/hardware_changes_v2_to_testbench.md`,
+  and the `main.py`/`sensors.py`/`esc_telem.py` docstrings. Also fixed a stale row the pulled pin map
+  still carried: the PIO buses table listed ESC telemetry on GP19 (the hull-leak connector) after the
+  table above it had already moved it to GP11.
+
+**Verified (on the Pi):** `pytest pi5/tests` **293 green**, ruff clean, firmware `py_compile` OK, sim
+boots with `/` and `/planner` 200. A static pin-claim sweep over the Boat Pico firmware shows **zero
+collisions** and matches `docs/pin_map.md` exactly (GP2/3, 4/5, 7, 8/9, 10, 11, 12–15, 16, 19/20, 21,
+26–28 claimed; GP6/17/18/22 free).
+
+**Decisions / open questions:** the audit's "as-built" divider values (×17.92/×4.33/×6.56) came from
+the **KiCad netlist, which is the stale copy** — the populated board is 56k/10k throughout. Docs now
+say so in all five places and flag the KiCad edit as the outstanding task; 13k/30k/18k aren't in the
+on-hand resistor kit, which corroborates they were never fitted. That also **voids the GP27
+over-range warning** (4.15 V into a 3.3 V pin) from the previous entry. Nothing committed — tree left
+for review.
+
+**Next steps:** unchanged from the entry below except the three items now closed — still open: route
+the MCP2515 `~CS`, free GP5 before expecting CAN or GPS to work, fit the 100 nF ADC caps + I²C
+pull-ups, update the six divider values in KiCad, reposition the R9/R11/R2 reference texts, re-export
+the gerbers under version control.
+
+---
+
 ## 2026-07-28 — Boat_PCB V2 netlist audit; pin maps rebuilt from the board; hull leak + ESC telem realigned
 
 **Worked on:** full wiring double-check of `Boat_PCB V2` against the KiCad netlist, then updating every
@@ -251,45 +298,6 @@ from the clip's metadata `started` (falls back to file mtime); `0` keeps forever
 age sweep and the count cap (but can still be deleted explicitly). `favorite` bool in the clip metadata;
 `Recorder.set_favorite()` + `POST /api/recordings/{name}/favorite`; the recordings modal footer got a
 FAVORITE toggle and rows show a ★. +2 tests; verified the endpoint + guard on the sim.
-
-## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
-
-**Worked on:** `/goal` — recursively hunt codebase + efficiency improvements, research-driven, ≥5
-iterations; user also invited a big HTML overhaul (rated the dashboard 7/10). Ran 5 verified rounds off
-a clean baseline (234 tests green, ruff clean, both Vite builds pass). Verified every audit finding by
-hand first — **rejected more than I applied.** Each round committed separately + pushed.
-**R1 — discovery + research:** 3 parallel Opus audit agents (cv / navigation+comms / server) + web
-research on modern control-room/ECDIS dashboards and numpy/OpenCV/asyncio efficiency.
-**R2 — CV perf:** `threat_assessor._match` compares squared centroid distances (no per-candidate sqrt
-each frame; monotonic); `size_history` trimmed in place (`del h[:-n]`) not rebuilt; `object_memory.stats()`
-one pass not four. Rejected: `size_history`→deque (breaks the slice reads in `_approach_vector`), the
-(0,0) GPS guard "bug" (deliberate sentinel), `_enforce_cap` "every frame" (already early-returns).
-**R3 — server perf:** `_gather_health` ran psutil (`disk_usage` statvfs + `/proc`) on the event loop
-every 1 s → extracted `_gather_psutil_stats()` + `asyncio.to_thread` (also unblocks the `/ws/health`
-cold-start); `/api/camera/devices` POST write offloaded. Verified end-to-end against a real
-`_gather_health()` call (psutil 7.2.2). Rejected the TEL/ENV "partial field" findings (the `>=12` gates
-match the protocol's all-or-nothing v1.1 appendix) and the module-load `asyncio.Lock` nit (fine on 3.10+).
-Also rejected on nav: the WINCH_UP `skip_site` "bug" — the winch *must* fully retrieve the pod before
-moving on, so ignoring skip during ascent is intentionally safer.
-**R4 — dashboard a11y (NOT a blind rewrite):** measured the existing design first — **every text token
-passes WCAG AA on all four surfaces** (muted 5.3–6.4, crit 4.7–5.7), and global
-`prefers-reduced-motion` + `:focus-visible` + a semantically-valid palette are already present. It's
-objectively strong; "7/10" is subjective and **I could not render on this ARM Pi** (headless chromium is
-killed in the sandbox; user declined the Chrome tool this session), so a blind restyle of a tuned design
-wasn't defensible. Applied verifiable wins: `role=alert`/`aria-live` on the estop banner + toast (were
-silent to screen readers) and `aria-label` on the 8 unlabeled sliders.
-**R5 — simplification + tests:** removed genuinely-dead `ThreatAssessor.is_approaching` (0 callers;
-superseded by `_approach_vector`); the graph's other 76 "dead" hits are framework/dispatch false
-positives (`require_api_key` Depends, ASGI middleware, `MockPicoSerial`, argparse `cmd_*`) and were left
-alone. Added `test_threat_assessor.py` (nearest-track association, previously covered only indirectly).
-**Verified (on the Pi):** `pytest pi5/tests` **236 green** (+2), ruff clean, both templates' inline
-`<script>` pass `node --check`, dashboard Vite build clean; booted the sim and confirmed `/` still 200
-with the new aria attributes.
-**Decisions / open questions:** the *visual* overhaul is the one open item — the design is objectively
-AA-clean and I can't render it here, so the next step needs the user to view `localhost:8000` and name
-specific visual directions (colours / density / typography), or enable a browser tool.
-**Next steps:** (unchanged) on-bench/on-water ESC + telemetry passes; optional user-directed dashboard
-restyle.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,

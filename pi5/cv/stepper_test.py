@@ -37,7 +37,7 @@ def approx(a: float, b: float, tol: float = 0.2) -> bool:
 
 def main() -> int:
     print("=== StepperMotor bench test ===")
-    m = StepperMotor(steps_per_rev=3200, max_speed_rpm=10, auto_sleep_s=5,
+    m = StepperMotor(steps_per_rev=400, max_speed_rpm=10, auto_sleep_s=5,
                      min_deg=0, max_deg=180)
     print("  config: steps/rev=%d max_rpm=%.0f auto_sleep=%.0fs limits=[%.0f,%.0f] mock=%s"
           % (m.steps_per_rev, m.max_speed_rpm, m.auto_sleep_s, m.min_deg, m.max_deg, m.mock))

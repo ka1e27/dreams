@@ -20,7 +20,6 @@ Pin map (test bench):
   GP2       — Left drive ESC (50 Hz PWM)   [free header pin]
   GP3       — Right drive ESC (50 Hz PWM)  [free header pin]
   GP4/GP5   — UART1 (GPS M10Q + Pod, shared bus, 9600 baud)
-  GP6       — Winch ESC (50 Hz PWM)        [free header pin]
   GP7       — SBUS receiver (PIO)          [free header pin]
   GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
   GP10      — Status NeoPixel (WS2812, 1 pixel)
@@ -30,28 +29,33 @@ Pin map (test bench):
   GP16      — Left  ESC telemetry RX (AM32 KISS, PIO UART 115200)
   GP19      — Hull leak left  [J16]
   GP20      — Hull leak right [J15]
+  GP21      — Winch ESC (50 Hz PWM)        [J8 + J9, wired in parallel]
   GP26      — Drive battery (2× M18 parallel) ADC — 130k/10k divider (×14.0)
   GP27      — Electronics battery (1× M18) ADC — 56k/10k divider (×6.6)
   GP28      — Winch battery (1× M18) ADC — 56k/10k divider (×6.6)
 
 Both SHT41 temp sensors are kept on their native as-built pins (GP12-15); the
-drive ESCs, winch and SBUS moved to free Pico header pins (GP2/3/6/7) so nothing
-collides with them. See docs/hardware_changes_v2_to_testbench.md.
+drive ESCs and SBUS moved to free Pico header pins (GP2/3/7) so nothing collides
+with them. See docs/hardware_changes_v2_to_testbench.md.
 
-Hull leak and ESC telemetry were realigned to the board on 2026-07-28: leak now
-reads GP19/GP20 (the J16/J15 connectors) and right-ESC telemetry moved GP19 -> GP11.
-GP11 and GP16 are the only pins left unconnected on Boat_PCB V2, so the telemetry
-taps clash with nothing — but neither reaches a connector, so solder those two
-leads directly to the Pico pins.
+Realigned to the as-built board after the 2026-07-28 netlist audit:
+  - hull leak GP17/GP18 -> GP19/GP20, the real J16/J15 connectors (GP17/GP18 are
+    the BNO085's RST/INT on J5)
+  - right-ESC telemetry GP19 -> GP11; GP11 and GP16 are the only pins left
+    unconnected on Boat_PCB V2, so both telemetry taps clash with nothing — but
+    neither reaches a connector, so solder those two leads to the Pico pins
+  - winch PWM GP6 -> GP21, the board's actual winch signal net (J8.1 + J9.1 in
+    parallel). GP6 is the MCP2515's ~INT, so the old pin drove the CAN chip
 
-!! Board divergence — GP2/3/6/7 are NOT free on Boat_PCB V2. That board fits an
+!! Board divergence — GP2/3/7 are NOT free on Boat_PCB V2. That board fits an
 MCP2515 + TJA1051 CAN interface (for the VESC architecture) which owns GP2 (SCK),
 GP3 (SI), GP4 (SO), GP6 (~INT) and GP7 (~RESET). This test-bench pin map assumes
-no CAN, so the two are mutually exclusive. Also on V2:
+no CAN, so the two are mutually exclusive. Of those five, only GP6 (winch) had a
+free board-side pin to move to; GP0/GP1 are dead and every other pin is committed,
+so the drive-ESC / SBUS / GPS claims cannot be relieved by pin moves. Also on V2:
   - GP5 is tied to GND, so UART1 RX (GPS) cannot work as wired, and GP4 (TX) sits
-    on the MCP2515's SO output — two drivers on one net
-  - GP17/GP18 go to the BNO085 RST/INT pins on J5, which is why hull leak moved off
-    them; the winch signal connectors (J8/J9) are on GP21, not GP6
+    on the MCP2515's SO output — two drivers on one net. J7 carries no UART at all,
+    only the two I2C pairs, so the GPS needs off-board wiring either way
   - the battery dividers are still pre-M18 values: GP26 is x17.92 (not x14.0) and
     GP27 is x4.33 (not x6.6) and over-range on an M18 pack
 See docs/pin_map.md for the full board-vs-firmware table before wiring anything.

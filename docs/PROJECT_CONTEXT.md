@@ -164,8 +164,9 @@ electronics-pack UBEC; internal WiFi via NetworkManager/`nmcli`.
 stepper:`). This is the *first and only* thing to drive Pi 5 GPIO directly — a deliberate divergence
 from the "USB only" rule, made because the Boat Pico is out of free pins and the bar is tightly coupled
 to the camera/vision stack. BCM pins: GPIO23 STEP, GPIO24 DIR, GPIO25 ENABLE (active-low), GPIO8 SLEEP
-(active-low); RESET must be held HIGH (jumper to SLEEP by default). 1/16 microstepping fixed in
-hardware. Runs in a no-op **mock** mode when gpiozero/lgpio is absent (laptop/simulator), so it never
+(active-low); RESET is tied to SLEEP on `Boat_PCB V2`, so GPIO8 releases both and `reset_pin` stays
+null. **Half step** fixed in hardware (MS1 high off the Pi's 3V3, MS2/MS3 grounded) → **400
+steps/rev**, 0.9°/step; the old `steps_per_rev = 3200` was an 8× error, fixed 2026-07-28. Runs in a no-op **mock** mode when gpiozero/lgpio is absent (laptop/simulator), so it never
 affects the sim.
 
 ### 5.5 The PCB (`Boat_PCB/`, KiCad 10)
@@ -360,15 +361,17 @@ Architecture-of-record lives on **`main`**. Two other branches are active:
 | Branch | What it is |
 |---|---|
 | **`main`** | Production/reference. VESC propulsion, 3× M18 drive, GP12–15 SHT41 (with the unresolved VESC/winch/SBUS pin conflict, §5.2). Latest work: three-tier vision pipeline + threat tracking; stereo depth (per-object distance, live depth view); live camera L/R assignment; align-first steering + waypoint planner; M18 three-domain battery migration. |
-| **`single-hull-test-bench`** | A **firmware-only variant** for a simpler single-hull bench rig to validate the stack on real hardware before the full catamaran. Drops VESC/CAN for **two standard hobby ESCs on 50 Hz PWM**; drive rail **2× M18** (not 3×, divider 130 k/10 k → ×14.0). **Keeps both SHT41s** on GP12–15, so propulsion/winch/SBUS move to **free Pico header pins: left ESC GP2, right ESC GP3, winch GP6, SBUS GP7** — which also sidesteps the §5.2 conflict. New `firmware/boat-pico/escs.py`; `motor_control.py`/`sbus.py`/`sensors.py`/`main.py` edited. Committed locally, **not pushed**. Spec: `docs/hardware_changes_v2_to_testbench.md`. |
+| **`single-hull-test-bench`** | A **firmware-only variant** for a simpler single-hull bench rig to validate the stack on real hardware before the full catamaran. Drops VESC/CAN for **two standard hobby ESCs on 50 Hz PWM**; drive rail **2× M18** (not 3×, divider 56 k/10 k → ×6.6 like the other two rails). **Keeps both SHT41s** on GP12–15, so propulsion/winch/SBUS move off them: **left ESC GP2, right ESC GP3, SBUS GP7** (free header pins) and **winch GP21** (the board's J8/J9 winch net, moved off GP6 = MCP2515 `~INT` on 2026-07-28) — which also sidesteps the §5.2 conflict. New `firmware/boat-pico/escs.py`; `motor_control.py`/`sbus.py`/`sensors.py`/`main.py` edited. Committed locally, **not pushed**. Spec: `docs/hardware_changes_v2_to_testbench.md`. |
 | **`radar-bar-stepper`** | Earlier branch that introduced the radar-bar pan stepper + command-center health UI. Its tip predates the M18 migration (commit messages still say 12S/4S/3S), so treat it as older/divergent; the stepper itself is documented on `main` in `docs/pin_map.md`. |
 
 ### Known discrepancies / open items
-1. **KiCad schematic lags the M18 migration** — firmware/simulator/dashboards/docs use the M18
-   dividers (200k/10k, 56k/10k ×2); `Boat_PCB.kicad_sch` still has the old resistor values. Rework
-   pending.
+1. **KiCad schematic lags the M18 migration** — the board is populated with **56k/10k (×6.6) on all
+   three** dividers and firmware matches (`INV_*_RATIO` = 6.6); `Boat_PCB.kicad_sch` still has the old
+   resistor values (220k/13k, 100k/30k, 100k/18k), so netlist exports disagree with reality. KiCad
+   edit pending — the board and firmware are correct.
 2. **GP12–15 pin conflict on `main`** (§5.2) — VESC/winch/SBUS vs SHT41. Unresolved on `main`;
-   resolved on the test-bench branch by relocating to GP2/3/6/7.
+   resolved on the test-bench branch by relocating to GP2/3/7 (+ winch to GP21, the board's own
+   winch net).
 3. **Unwired MCP2515** placeholder in the schematic — delete when convenient.
 4. **Stale mentions of DHT11** in `README.md` / `docs/system_tree.md` — the real hardware is 2× SHT41
    (per `sensors.py` + `docs/pin_map.md`).

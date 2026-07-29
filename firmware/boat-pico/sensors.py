@@ -5,8 +5,9 @@ thermistors on GP27/GP28; that job moved off-board (the VESCs reported temp on t
 dual-hull boat). The freed ADCs now monitor the electronics and winch batteries.
 
 Air temp/humidity is two Sensirion **SHT41** I2C modules, KEPT on this variant on
-their native as-built pins (the drive ESCs / winch / SBUS moved to free Pico header
-pins instead — see docs/hardware_changes_v2_to_testbench.md). Both SHT41s share the
+their native as-built pins (the drive ESCs / SBUS moved to free Pico header pins
+instead, and the winch to GP21 where the board actually wires it — see
+docs/hardware_changes_v2_to_testbench.md). Both SHT41s share the
 fixed address 0x44, so each sits on its own bit-banged SoftI2C bus:
 
   - SHT41 #A → J11 (GP12 SDA / GP13 SCL)   → `air_temp`  / `air_humidity`
@@ -24,9 +25,7 @@ current capacity, for the twin 2814 drive motors. ADCs are on this Boat Pico
 
 Pin assignments:
   - Drive battery (2× M18 parallel, 18 V nom / 21 V max) ADC: GP26 (ADC0)
-      — existing 130k/10k divider → ×14.0; 21 V now reads ~1.5 V at the pin
-        (safe, correct, ~0.01 V resolution — plenty for a gauge). Swap to
-        56k/10k (×6.6) to match the elec/winch domains for full-scale range.
+      — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - Electronics battery (1× M18, 18 V nom / 21 V max) ADC: GP27 (ADC1)
       — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - Winch battery (1× M18, 18 V nom / 21 V max) ADC: GP28 (ADC2)
@@ -40,11 +39,12 @@ Hull leak moved GP17/GP18 -> GP19/GP20 on 2026-07-28 to match the Boat_PCB V2
 connectors. On that board GP17/GP18 are the BNO085's RST and INT lines on J5, so
 the old assignment read the IMU's control pins rather than any leak contact.
 
-!! The divider values quoted above are the M18 TARGET, not what V2 has fitted.
-As built: drive R2/R4 = 220k/13k (x17.92, not x14.0) and electronics R5/R6 =
-100k/30k (x4.33, not x6.6 — and over-range on an M18: 18 V gives 4.15 V at a
-3.3 V pin). Only the winch divider is right. Fit 56k/10k on all three and set
-INV_P_RATIO = 6.6. See docs/pin_map.md.
+All three dividers are 56k/10k on the physical board (confirmed by the builder,
+2026-07-28), so every rail reconstructs at the same x6.6 and INV_P_RATIO was
+changed 14.0 -> 6.6 to match. NOTE: the KiCad schematic/netlist still carries the
+pre-M18 values (drive 220k/13k, elec 100k/30k, winch 100k/18k) — the board is
+right and the schematic is stale, so trust these constants over a netlist export
+until KiCad is updated. See docs/battery_architecture.md.
 """
 from machine import Pin, ADC, SoftI2C
 import sht41
@@ -54,12 +54,11 @@ import sht41
 # cutoff), double the current. Thresholds are therefore a SINGLE M18's — the same
 # as the elec/winch domains. (This is the change that matters: on the old 2×
 # series 42 V thresholds a full 21 V parallel pack would read as "empty" and
-# ESTOP instantly.) INV_P_RATIO must match the PHYSICAL drive divider: the
-# as-built 130k/10k reads 21 V → ~1.5 V at the pin and reconstructs correctly at
-# ×14.0, so a plain battery swap needs no resistor rework. If you swap the drive
-# divider to 56k/10k (to match elec/winch and use the full ADC range), set
-# INV_P_RATIO = 6.6. `prop_*` names kept for wire/protocol compatibility.
-INV_P_RATIO = 14.0    # 130k/10k as-built; set 6.6 if you fit a 56k/10k divider
+# ESTOP instantly.) INV_P_RATIO must match the PHYSICAL drive divider, which is
+# 56k/10k like the other two domains — all three rails reconstruct at the same
+# ×6.6 and sit at 3.18 V full, just under the 3.3 V ADC ceiling.
+# `prop_*` names kept for wire/protocol compatibility.
+INV_P_RATIO = 6.6     # 56k/10k, same as elec/winch (was 14.0 for the old 130k/10k)
 P_FULL = 21.0   # 1× M18 full (packs in parallel share this voltage)
 P_EMPTY = 15.0  # cutoff → % floor
 P_WARN = 17.0

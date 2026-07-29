@@ -3,27 +3,37 @@
 Drives a Creality BJ42D15-26V12 NEMA-17 (run bipolar) through an A4988
 breakout straight off the **Pi 5 40-pin header** — the first thing in this
 project to use the Pi 5 GPIO directly (every sensor otherwise hangs off the
-Picos; see ``docs/pin_map.md``). 1/16 microstepping is wired in hardware on the
-A4988 (MS1/MS2/MS3 → 3V3), giving 3200 steps/rev = 0.1125° resolution.
+Picos; see ``docs/pin_map.md``). **Half step** is wired in hardware on the A4988
+carrier (A2 on ``Boat_PCB V2``): MS1 is pulled high off the Pi's 3V3 while MS2 and
+MS3 are hard-wired to GND, giving **400 steps/rev = 0.9° resolution** on a
+200-step motor. Real 1/16 stepping would need trace cuts to lift MS2/MS3.
 
-Pi 5 GPIO → A4988 (BCM numbering):
-    GPIO23 → STEP
-    GPIO24 → DIR
-    GPIO25 → ENABLE  (active-LOW: 0 = energised/holding, 1 = freewheel)
-    GPIO8  → SLEEP   (active-LOW: 0 = zero-current sleep, 1 = awake)
+Pi 5 GPIO → A4988 (BCM numbering), verified against the V2 netlist:
+    GPIO23 → STEP    (header pin 16)
+    GPIO24 → DIR     (header pin 18)
+    GPIO25 → ENABLE  (header pin 22 — active-LOW: 0 = energised/holding, 1 = freewheel)
+    GPIO8  → SLEEP   (header pin 24 — active-LOW: 0 = zero-current sleep, 1 = awake)
 
-⚠ **RESET must be HIGH or the motor will not step.** The A4988 has *two* active-low
-control pins — SLEEP **and** RESET — and **both** must be high for STEP pulses to
-take effect. A floating/low RESET is the #1 reason an A4988 looks alive but never
-moves (no error, just silence). Handle it one of two ways:
-  • **Recommended (no extra Pi pin):** jumper the A4988's **RESET pin to its SLEEP
-    pin** on the board. SLEEP (GPIO8) then releases both together — the wake()
-    charge-pump delay below already covers the reset-recovery timing.
-  • **Or** drive RESET from a Pi GPIO by passing ``reset_pin=`` — the driver claims
-    it and holds it HIGH (released) the whole time it's energised.
-If neither is done, ``stepper_test.py`` still prints PASS (it only tracks the step
-*count* in software) but the shaft stays put. Also confirm VMOT (8–35 V motor
-supply, ~100 µF across VMOT/GND) and the VREF current limit are actually set.
+✅ **RESET is handled on the board — leave ``reset_pin`` at None.** The A4988 has
+*two* active-low control pins, SLEEP **and** RESET, and **both** must be high for
+STEP pulses to take effect; a floating/low RESET is the #1 reason an A4988 looks
+alive but never moves (no error, just silence). V2 ties ~RESET (A2.13) to ~SLEEP
+(A2.14) on one net — Pololu's documented approach — so GPIO8 releases both together
+and the wake() charge-pump delay below already covers reset-recovery timing. Pass
+``reset_pin=`` only on a board that does *not* tie them, in which case the driver
+claims that pin and holds it HIGH the whole time it's energised.
+
+⚠ Side effect of that tie: ``auto_sleep_s`` asserts RESET along with SLEEP, which
+resets the A4988's internal microstep translator to its home phase. This class
+can't see that, so expect up to one step (0.9°) of drift per sleep/wake cycle,
+accumulating over a long session — re-home the bar if absolute accuracy matters.
+
+⚠ The driver depends on a mated Pi: A4988 VDD has no on-board supply and is fed
+only from the Pi's 3V3 on header pin 1, so bench-testing the Pico alone won't
+exercise the stepper. Also confirm VMOT (from BT4, 8–35 V, ~100 µF across
+VMOT/GND) and the VREF current limit — logic runs off VDD alone, so the chip will
+happily ACK STEP with no coil power at all, and ``stepper_test.py`` still prints
+PASS (it only tracks the step *count* in software) while the shaft stays put.
 
 GPIO access uses **gpiozero** (which wraps lgpio on the Pi 5 — RPi.GPIO is
 unsupported there). If gpiozero/lgpio isn't importable or the pins can't be
@@ -61,7 +71,7 @@ class StepperMotor:
     def __init__(self, step_pin: int = 23, dir_pin: int = 24,
                  enable_pin: int = 25, sleep_pin: int = 8,
                  reset_pin: int | None = None,
-                 steps_per_rev: int = 3200, max_speed_rpm: float = 10.0,
+                 steps_per_rev: int = 400, max_speed_rpm: float = 10.0,
                  auto_sleep_s: float = 5.0,
                  min_deg: float = 0.0, max_deg: float = 180.0,
                  has_slip_ring: bool = False) -> None:

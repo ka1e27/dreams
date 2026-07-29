@@ -480,12 +480,16 @@ stepper:
   enable_pin: 25         # active-LOW
   sleep_pin: 8           # active-LOW
   # RESET (active-LOW) MUST be HIGH or the A4988 ignores every STEP pulse — the
-  # most common "driver looks alive but the motor never moves" cause. Default
-  # (null) assumes RESET is jumpered to SLEEP on the board (recommended, no extra
-  # Pi pin). Set this to a BCM pin number to instead drive RESET from the Pi
-  # (the driver then holds it HIGH while energised). See docs/pin_map.md.
+  # most common "driver looks alive but the motor never moves" cause. Leave this
+  # null on Boat_PCB V2: the board already ties ~RESET (A2.13) to ~SLEEP (A2.14),
+  # so GPIO8 releases both. Set a BCM pin number only on a board that doesn't tie
+  # them (the driver then holds it HIGH while energised). See docs/pin_map.md.
   reset_pin: null
-  steps_per_rev: 3200    # 200 × 16 (1/16 microstepping wired on the A4988)
+  # 200 × 2 — HALF step, which is what the board wires: MS1 high off the Pi's 3V3
+  # (J3 pad 2) with MS2/MS3 hard-grounded. 0.9°/step. Was 3200 (1/16), an 8× error
+  # that overshot every move and overspun the motor 8×. Verified from the V2
+  # netlist 2026-07-28 — don't raise this without cutting the MS2/MS3 traces.
+  steps_per_rev: 400
   max_rpm: 10
   auto_sleep_seconds: 5
   # has_slip_ring gates *wrapping* (taking the short way across 0°/360°), which

@@ -22,7 +22,7 @@ firmware/Pi 5 stack — only the drive-motor path and the drive battery domain d
 | Steering | Differential thrust, port/starboard hull | Differential thrust, port/starboard motor (same math) |
 | ESCs | 2× VESC (master + CAN-forwarded slave) | 2× standard hobby ESCs (no VESC, no CAN chain) |
 | ESC comms | UART0 (GP12/13) → VESC master; slave via `COMM_FORWARD_CAN` | Direct 50 Hz servo-style PWM, one Pico GPIO per ESC (**GP2 left, GP3 right**) |
-| Winch signal | GP14 PWM | **GP6 PWM** (moved off GP14) |
+| Winch signal | GP14 PWM | **GP21 PWM** (GP14 → GP6 → GP21; GP21 is the board's J8/J9 winch net) |
 | SBUS RC | GP15 (PIO) | **GP7 (PIO)** (moved off GP15) |
 | Air temp/humidity | 2× SHT41 (GP12/13 J11, GP14/15 J13) | **2× SHT41 — kept** on GP12–15 |
 | Drive battery | 3× Milwaukee M18 in series (54 V nom / 63 V max) | 2× Milwaukee M18 in series (36 V nom / 42 V max) |
@@ -67,14 +67,14 @@ them, and the propulsion/winch/SBUS signals move to free Pico GPIO instead:
 |--------|----------------|---------------|
 | Left drive ESC | **GP2** | PWM slice 1, channel A |
 | Right drive ESC | **GP3** | PWM slice 1, channel B (shares slice 1 with GP2 — same 50 Hz, independent duty, which is all two ESCs need) |
-| Winch ESC | **GP6** | PWM slice 3, channel A (moved off GP14) |
+| Winch ESC | **GP21** | PWM slice 2, channel B. Moved GP14 → GP6 → **GP21** on 2026-07-28: GP21 is where `Boat_PCB V2` actually routes the winch signal (J8.1 + J9.1 in parallel), while GP6 is the MCP2515's `~INT`. The one relocated signal that *does* have a board connector |
 | SBUS RC | **GP7** | PIO state machine (moved off GP15; PIO runs on any GPIO) |
 | SHT41 #A | GP12 / GP13 | SoftI2C, J11 — unchanged |
 | SHT41 #B | GP14 / GP15 | SoftI2C, J13 — unchanged |
 
-GP2/GP3/GP6/GP7 are unconnected on the schematic (no connector), so on the test bench you **tap them
-directly on the Pico's breakout header** — fine for a bench rig, where the ESC/winch/SBUS signal
-wires are hand-run anyway. This also happens to *resolve* the dual-hull GP12–15 conflict for this
+GP2/GP3/GP7 are unconnected on the schematic (no connector), so on the test bench you **tap them
+directly on the Pico's breakout header** — fine for a bench rig, where the ESC/SBUS signal wires are
+hand-run anyway. The winch is the exception: **GP21 plugs into J8 (or J9)** on the board. This also happens to *resolve* the dual-hull GP12–15 conflict for this
 build: the temp sensors get their native pins and nothing else contends for them.
 
 **MCP2515 aside:** `Boat_PCB.kicad_sch` has a placed `MCP2515-I_P` (U1) CAN-controller symbol that
@@ -91,7 +91,7 @@ here (worth deleting from the schematic eventually).
   (`get_motor_temp`→None, `get_fault`→0, `max_motor_temp`→0.0, `poll_rx`/`request_values_round_robin`
   →no-op) so `main.py`'s telemetry code runs unchanged.
 - **`motor_control.py`** — imports `escs` instead of `vesc`; `init()`/`update()`/`estop()` drive the
-  ESCs via `escs.*`; winch PWM `MW_PIN` `14` → `6`; `COMP_L = COMP_R = PULLEY_L = PULLEY_R = 1.0`
+  ESCs via `escs.*`; winch PWM `MW_PIN` `14` → `6` → **`21`**; `COMP_L = COMP_R = PULLEY_L = PULLEY_R = 1.0`
   (single hull, no pulley asymmetry). `init()` now returns whether the drive ESCs came up, so the
   ESTOP/watchdog kill path's health is observable. Steering math + `set_throttle`/RC/ESTOP gates
   otherwise unchanged.
@@ -110,6 +110,11 @@ here (worth deleting from the schematic eventually).
 ---
 
 ## Drive Battery: 3× M18 Series → 2× M18 Series
+
+> ⚠ **This section is historical — superseded.** The bench drive rail is now **2× M18 in PARALLEL**
+> (18 V nom / 21 V max, single-pack thresholds), not 2× in series, and all three dividers are
+> **56 k/10 k (×6.6)** with `INV_P_RATIO = 6.6`. The 36 V / ×14.0 numbers below describe the earlier
+> series bench. Current spec: `docs/battery_architecture.md`.
 
 Test bench uses a lower-power drive rail: **2× Milwaukee M18 packs in series** instead of 3.
 
@@ -151,9 +156,9 @@ winch (GP28) dividers and thresholds are untouched — both stay at 1× M18 (56 
 
 ## Open Items / Follow-ups
 
-1. **Wire the four relocated signals to the Pico breakout header** (they have no PCB connector):
-   left ESC → GP2, right ESC → GP3, winch → GP6, SBUS → GP7. GP12–15 keep their J11/J13 SHT41
-   connectors.
+1. **Wire the three header-tapped signals to the Pico breakout header** (they have no PCB connector):
+   left ESC → GP2, right ESC → GP3, SBUS → GP7. The winch is on **GP21 = J8/J9**, a real connector.
+   GP12–15 keep their J11/J13 SHT41 connectors.
 2. **Verify the ESC pulse range before first spin-up.** `escs.py` reuses the winch's 1.0–2.0 ms /
    50 Hz mapping (`STOP_PWM`/`MIN_PWM`/`MAX_PWM`). Not all hobby ESCs share it — some are
    forward-only or use a different neutral. Confirm against the chosen ESCs' datasheet and bench-test

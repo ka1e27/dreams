@@ -13,8 +13,11 @@ Propulsion:
     15:30 pulley ratios here).
 
 Winch:
-  - Standard hobby ESC on GP6, 50 Hz PWM (moved off GP14, which this variant
-    keeps for the SHT41 #B temp sensor).
+  - Standard hobby ESC on GP21, 50 Hz PWM. GP21 is where Boat_PCB V2 actually
+    routes the winch signal (J8.1 and J9.1 are wired in parallel to it), so the
+    pin was moved GP14 -> GP6 -> GP21: GP14 belongs to the SHT41 #B temp sensor
+    on this variant, and GP6 is the MCP2515's ~INT on V2. GP21 is otherwise
+    unused, so this is the one board-vs-firmware clash that a pin move resolves.
   - Spool can be swapped mechanically to repurpose the winch as a fishing
     reel; firmware behavior is identical regardless.
 
@@ -36,7 +39,7 @@ MAX_PWM = 6553
 FWD_RANGE = MAX_PWM - STOP_PWM  # 1638
 REV_RANGE = STOP_PWM - MIN_PWM  # 1638
 
-MW_PIN = 6
+MW_PIN = 21   # Boat_PCB V2 winch signal (J8.1 + J9.1, parallel). PWM slice 2B.
 
 # Compensation (propulsion only). Single hull, two identical motors → unity.
 PULLEY_L = 1.0

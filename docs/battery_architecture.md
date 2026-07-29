@@ -44,20 +44,24 @@ RP2040's 3.3 V limit.
 
 | Ref | Domain | R_high | R_low | Reconstruct × | ADC pin | Full-charge V at pin |
 |---|---|---|---|---|---|---|
-| R_H1, R_L1 | Drive (2× parallel) | 130 kΩ (as-built) | 10 kΩ | 14.0 | GP26 | 21 V → **1.5 V** |
+| R_H1, R_L1 | Drive (2× parallel) | 56 kΩ | 10 kΩ | 6.6 | GP26 | 21 V → 3.18 V |
 | R_H2, R_L2 | Electronics | 56 kΩ | 10 kΩ | 6.6 | GP27 | 21 V → 3.18 V |
 | R_H3, R_L3 | Winch | 56 kΩ | 10 kΩ | 6.6 | GP28 | 21 V → 3.18 V |
 
 Reconstruct × = (R_high + R_low) / R_low. Firmware multiplies the measured pin voltage by this to
-recover the pack voltage (`INV_P_RATIO`, `INV_E_RATIO = INV_W_RATIO = 6.6` in `sensors.py`).
+recover the pack voltage (`INV_P_RATIO = INV_E_RATIO = INV_W_RATIO = 6.6` in `sensors.py`).
 
-> **Drive divider — no rework needed for the parallel swap.** The bench's as-built drive divider is
-> 130k/10k (×14, sized for the old 36 V series rail). At the new 21 V max it reads only ~1.5 V at the
-> pin, which reconstructs **correctly** at `INV_P_RATIO = 14.0` — resolution is ~0.01 V, ample for a
-> gauge. So paralleling the packs needs only a firmware **threshold** change, not a resistor change.
-> *Optional:* fit a 56k/10k divider to match elec/winch and use the full ADC range, then set
-> `INV_P_RATIO = 6.6`. **Do not** set 6.6 while the 130k/10k divider is still fitted — the reading
-> would drop to ~10 V and trip an instant ESTOP.
+> **All three domains use the same 56k/10k divider** (confirmed fitted on the physical board,
+> 2026-07-28) — one ratio, ×6.6, for every rail. `INV_P_RATIO` was **14.0 → 6.6** on 2026-07-28: it
+> had been left at ×14 for a 130k/10k drive divider that isn't what's populated, and at ×14 a full
+> 21 V pack reported **16.4 V** — under `P_WARN` (17.0) and a hair over `P_CRIT` (16.0), so a fully
+> charged boat would trip return-to-home. If you ever refit a 130k/10k drive divider, set
+> `INV_P_RATIO` back to 14.0 in the same commit.
+>
+> ⚠ `Boat_PCB.kicad_sch` still lists the pre-M18 values (drive 220k/13k, elec 100k/30k, winch
+> 100k/18k), so a netlist export contradicts this table. **The board and firmware are right; the
+> schematic is stale** and needs updating in KiCad. 13 k / 30 k / 18 k aren't in the on-hand resistor
+> kit either.
 
 **PCB component notes:** all resistors through-hole axial DIN0207, 1 % tolerance, 0.25 W. Add a 1 kΩ
 series resistor and a 100 nF ceramic filter cap on every ADC input line.
@@ -127,7 +131,7 @@ individual pack fuses required.
 ```
 DRIVE INPUT   : 3× M18 adapter inputs in series → series junction → 200A ANL → drive copper pour
 DRIVE OUTPUT  : XT90 → ESC port (100A ANL) · XT90 → ESC stbd (100A ANL) · XT90 → tow stub (100A, unpop.)
-MONITORING    : drive 200k/10k → GP26 · elec 56k/10k → GP27 · winch 56k/10k → GP28
+MONITORING    : drive 56k/10k → GP26 · elec 56k/10k → GP27 · winch 56k/10k → GP28  (all ×6.6)
 PCB SLOT      : separates drive and logic copper zones
 ```
 
@@ -195,7 +199,7 @@ equal command), the firmware's `COMP_L/COMP_R` in `motor_control.py`, and the cl
 | Electronics battery | 3S Li-ion | 1× M18 standalone |
 | Winch battery | 4S LiPo / 6S midpoint tap (ambiguous) | 1× M18 standalone |
 | Midpoint tap | Yes — PCB copper pour | Removed |
-| Drive divider | 3.3k/47k (firmware) vs 220k/13k (schematic) | 200k/10k → GP26 |
+| Drive divider | 3.3k/47k (firmware) vs 220k/13k (schematic) | 56k/10k → GP26 |
 | Elec divider | 15k/100k (firmware) vs 100k/30k (schematic) | 56k/10k → GP27 |
 | Winch divider | 100k/18k (schematic, unread in firmware) | 56k/10k → GP28 |
 | Balance / pack-swap tracking | Required | Not needed — isolated BMS packs |
@@ -204,5 +208,8 @@ equal command), the firmware's `COMP_L/COMP_R` in `motor_control.py`, and the cl
 
 *June 2026 — three-domain M18 architecture. Supersedes all previous battery documentation.*
 *July 2026 — test-bench drive rail switched to 2× M18 **parallel** (18 V) for the twin 2814 motors:
-single-M18 thresholds, existing 130k/10k divider kept (INV_P_RATIO = 14.0), VESC current capped per
-motor, per-motor trim for Kv mismatch. Firmware (`sensors.py`), `config.yaml`, and the simulator updated.*
+single-M18 thresholds, VESC current capped per motor, per-motor trim for Kv mismatch. Firmware
+(`sensors.py`), `config.yaml`, and the simulator updated.*
+*2026-07-28 — all three dividers confirmed fitted as 56k/10k (×6.6) on the physical board;
+`INV_P_RATIO` corrected 14.0 → 6.6. The KiCad schematic still holds pre-M18 values and is the stale
+copy of record.*

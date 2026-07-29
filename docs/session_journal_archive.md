@@ -9,6 +9,47 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
+
+**Worked on:** `/goal` — recursively hunt codebase + efficiency improvements, research-driven, ≥5
+iterations; user also invited a big HTML overhaul (rated the dashboard 7/10). Ran 5 verified rounds off
+a clean baseline (234 tests green, ruff clean, both Vite builds pass). Verified every audit finding by
+hand first — **rejected more than I applied.** Each round committed separately + pushed.
+**R1 — discovery + research:** 3 parallel Opus audit agents (cv / navigation+comms / server) + web
+research on modern control-room/ECDIS dashboards and numpy/OpenCV/asyncio efficiency.
+**R2 — CV perf:** `threat_assessor._match` compares squared centroid distances (no per-candidate sqrt
+each frame; monotonic); `size_history` trimmed in place (`del h[:-n]`) not rebuilt; `object_memory.stats()`
+one pass not four. Rejected: `size_history`→deque (breaks the slice reads in `_approach_vector`), the
+(0,0) GPS guard "bug" (deliberate sentinel), `_enforce_cap` "every frame" (already early-returns).
+**R3 — server perf:** `_gather_health` ran psutil (`disk_usage` statvfs + `/proc`) on the event loop
+every 1 s → extracted `_gather_psutil_stats()` + `asyncio.to_thread` (also unblocks the `/ws/health`
+cold-start); `/api/camera/devices` POST write offloaded. Verified end-to-end against a real
+`_gather_health()` call (psutil 7.2.2). Rejected the TEL/ENV "partial field" findings (the `>=12` gates
+match the protocol's all-or-nothing v1.1 appendix) and the module-load `asyncio.Lock` nit (fine on 3.10+).
+Also rejected on nav: the WINCH_UP `skip_site` "bug" — the winch *must* fully retrieve the pod before
+moving on, so ignoring skip during ascent is intentionally safer.
+**R4 — dashboard a11y (NOT a blind rewrite):** measured the existing design first — **every text token
+passes WCAG AA on all four surfaces** (muted 5.3–6.4, crit 4.7–5.7), and global
+`prefers-reduced-motion` + `:focus-visible` + a semantically-valid palette are already present. It's
+objectively strong; "7/10" is subjective and **I could not render on this ARM Pi** (headless chromium is
+killed in the sandbox; user declined the Chrome tool this session), so a blind restyle of a tuned design
+wasn't defensible. Applied verifiable wins: `role=alert`/`aria-live` on the estop banner + toast (were
+silent to screen readers) and `aria-label` on the 8 unlabeled sliders.
+**R5 — simplification + tests:** removed genuinely-dead `ThreatAssessor.is_approaching` (0 callers;
+superseded by `_approach_vector`); the graph's other 76 "dead" hits are framework/dispatch false
+positives (`require_api_key` Depends, ASGI middleware, `MockPicoSerial`, argparse `cmd_*`) and were left
+alone. Added `test_threat_assessor.py` (nearest-track association, previously covered only indirectly).
+**Verified (on the Pi):** `pytest pi5/tests` **236 green** (+2), ruff clean, both templates' inline
+`<script>` pass `node --check`, dashboard Vite build clean; booted the sim and confirmed `/` still 200
+with the new aria attributes.
+**Decisions / open questions:** the *visual* overhaul is the one open item — the design is objectively
+AA-clean and I can't render it here, so the next step needs the user to view `localhost:8000` and name
+specific visual directions (colours / density / typography), or enable a browser tool.
+**Next steps:** (unchanged) on-bench/on-water ESC + telemetry passes; optional user-directed dashboard
+restyle.
+
+---
+
 ## 2026-07-26 — 5-agent code audit (fixes applied) + dashboard HTML redesign to "10/10"
 
 **Worked on:** user asked to (a) finish the interrupted verification — 5 max-effort (Opus) agents

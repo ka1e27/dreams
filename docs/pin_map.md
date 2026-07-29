@@ -32,14 +32,14 @@ Source-of-truth for each row:
 
 > ### ⚠ As-built board divergence — read before wiring anything
 >
-> The old GP12–GP15 collision is **resolved**: the drive ESCs, winch and SBUS moved
-> off the temp-sensor pins to GP2/GP3/GP6/GP7, and `sensors.py` matches the board's
-> SHT41 connectors (J11 on GP12/13, J13 on GP14/15).
+> The old GP12–GP15 collision is **resolved**: the drive ESCs and SBUS moved off the
+> temp-sensor pins to GP2/GP3/GP7, the winch to GP21, and `sensors.py` matches the
+> board's SHT41 connectors (J11 on GP12/13, J13 on GP14/15).
 >
-> **But the pins they moved *to* are not free on the V2 board.** `Boat_PCB V2` fits an
-> **MCP2515 + TJA1051 CAN interface** (U1/U2, for the VESC architecture) which owns
-> GP2, GP3, GP4, GP6 and GP7. This branch's firmware is the *test-bench* variant that
-> assumes no CAN. The two cannot coexist:
+> **But the pins the ESCs and SBUS moved *to* are not free on the V2 board.**
+> `Boat_PCB V2` fits an **MCP2515 + TJA1051 CAN interface** (U1/U2, for the VESC
+> architecture) which owns GP2, GP3, GP4, GP6 and GP7. This branch's firmware is the
+> *test-bench* variant that assumes no CAN. The two cannot coexist:
 >
 > | Pin | This branch's firmware | V2 board wires it to | Verdict |
 > |---|---|---|---|
@@ -47,22 +47,25 @@ Source-of-truth for each row:
 > | GP3 | Right drive ESC PWM (`escs.RIGHT_PIN`) | U1.14 — MCP2515 `SI` (MOSI) | **conflict** |
 > | GP4 | UART1 TX (GPS + Pod) | U1.15 — MCP2515 `SO` (MISO) | **conflict** — two outputs fight |
 > | GP5 | UART1 RX (GPS + Pod) | **GND** (tied to ground) | **conflict** — GPS RX reads 0 |
-> | GP6 | Winch ESC PWM (`motor_control.MW_PIN`) | U1.12 — MCP2515 `~INT` | **conflict** (board winch is GP21) |
+> | GP6 | *unused by firmware* (was the winch) | U1.12 — MCP2515 `~INT` | ✅ resolved — winch moved to GP21 |
 > | GP7 | SBUS RC input (`sbus.SBUS_PIN`) | U1.17 — MCP2515 `~RESET` + R11 10 k pull-up | **conflict** |
 > | GP11 | Right ESC telemetry RX (`esc_telem.TELEM_R_PIN`) | *unconnected* | ✅ no clash — **not routed to a connector**, solder to the Pico pin |
 > | GP16 | Left ESC telemetry RX (`esc_telem.TELEM_L_PIN`) | *unconnected* | ✅ no clash — same, solder direct |
 > | GP19 | Hull leak left (`sensors.init`) | J16.2 — "Hull Leak Left" | ✅ matches the board |
 > | GP20 | Hull leak right (`sensors.init`) | J15.2 — "Hull Leak Right" | ✅ matches the board |
+> | GP21 | Winch ESC PWM (`motor_control.MW_PIN`) | J8.1 + J9.1 — "Winch ESC" (parallel) | ✅ matches the board |
 >
 > **The GPS has no UART on this board.** J7 carries only I²C pairs (GP8/9 and GP14/15)
 > plus power; `gps.py` is UART/NMEA on GP4/GP5, and GP5 is grounded.
 >
-> **Hull leak and ESC telemetry were realigned on 2026-07-28.** Leak sensing moved
-> GP17/GP18 → **GP19/GP20** so it reads the board's real J16/J15 connectors (GP17/GP18
-> are the BNO085's RST/INT on J5), and right-ESC telemetry moved GP19 → **GP11**. GP11
-> and GP16 are the only two unconnected pins on V2, so both telemetry taps are now
-> clash-free and all four inputs fit. GP0/GP1 are dead and every other pin is committed,
-> so **there is no free pin left** to relieve the GP2/3/4/6/7 CAN conflict above.
+> **Firmware realigned to the board on 2026-07-28** (three moves, all in this branch):
+> leak sensing GP17/GP18 → **GP19/GP20** so it reads the board's real J16/J15
+> connectors (GP17/GP18 are the BNO085's RST/INT on J5); right-ESC telemetry
+> GP19 → **GP11** (GP11 and GP16 are the only two unconnected pins on V2, so both
+> telemetry taps are clash-free and all four inputs fit); and winch PWM GP6 → **GP21**,
+> the board's actual winch signal net. The winch was the **only** one of the five CAN
+> pins with a free board-side pin to move to — GP0/GP1 are dead and every other pin is
+> committed, so **there is no free pin left** to relieve the GP2/3/4/5/7 conflicts above.
 >
 > The two SHT41 buses are **bit-banged `SoftI2C`** because hardware I²C0 is already
 > held by the BNO085 on GP8/GP9. The `Board (V2)` column below is the **verified
@@ -76,7 +79,7 @@ Source-of-truth for each row:
 | GP3 | OUT | Right drive ESC | AM32 ESC · 50 Hz servo PWM | ⚠ U1.14 — MCP2515 `SI` | `escs.RIGHT_PIN` |
 | GP4 | TX | UART1 TX (shared GPS+pod bus) | u-blox M10Q / Pod Pico · 9600 8N1 | ⚠ U1.15 — MCP2515 `SO` | `gps.init` → `UART(1, …, tx=Pin(4))` |
 | GP5 | RX | UART1 RX (shared GPS+pod bus) | u-blox M10Q / Pod Pico · 9600 8N1 | ⚠ **tied to GND** | `gps.init` → `UART(1, …, rx=Pin(5))` |
-| GP6 | OUT | Winch ESC | Winch ESC · 50 Hz servo PWM | ⚠ U1.12 — MCP2515 `~INT` | `motor_control.MW_PIN` |
+| GP6 | — | *unused by firmware* (was the winch until 2026-07-28) | — | ⚠ U1.12 — MCP2515 `~INT` | — |
 | GP7 | IN | SBUS RC receiver (PIO) | SBUS · 100 kbd inv 8E2 | ⚠ U1.17 — MCP2515 `~RESET` + R11 10 k pull-up | `sbus.SBUS_PIN` |
 | GP8 | SDA | I²C0 data | BNO085 IMU @ 0x4A · 400 kHz | **J7.4** — GPS+Compass, 6-pin JST-XH | `compass.init` → `I2C(0, sda=Pin(8))` |
 | GP9 | SCL | I²C0 clock | BNO085 IMU @ 0x4A · 400 kHz | **J7.3** | `compass.init` → `I2C(0, scl=Pin(9))` |
@@ -91,30 +94,36 @@ Source-of-truth for each row:
 | GP18 | — | *unused by firmware* | — | **J5.8** — BNO085 `INT` | — |
 | GP19 | IN (pull-up) | Hull leak switch (port) | Conductive contact · active-low | **J16.2** — "Hull Leak Left", 2-pin JST-XH | `sensors.init` → `Pin(19, IN, PULL_UP)` |
 | GP20 | IN (pull-up) | Hull leak switch (starboard) | Conductive contact · active-low | **J15.2** — "Hull Leak Right", 2-pin JST-XH | `sensors.init` → `Pin(20, IN, PULL_UP)` |
-| GP21 | — | *unused by firmware* | — | **J8.1 + J9.1** — Winch ESC signal (both in parallel) | — |
+| GP21 | OUT | Winch ESC | Winch ESC · 50 Hz servo PWM | **J8.1 + J9.1** — Winch ESC signal (both in parallel) | `motor_control.MW_PIN` |
 | GP22 | — | *unused by firmware* | — | **J1.12** — 5 V buck `PG` (open-drain) + R1 10 k → A4988 VDD/MS1 | — |
-| GP26 | ADC0 | Drive battery sense | 2× M18 parallel · analog 0–3.3 V | **J4** "12s Tap" → R2/R4 = **×17.92** | `ADC(26)`, `INV_P_RATIO` = 14.0 ⚠ |
-| GP27 | ADC1 | Electronics battery sense | 1× M18 · analog 0–3.3 V | **BT1** "3s" → R5/R6 = **×4.33** | `ADC(27)`, `INV_E_RATIO` = 6.6 ⚠ |
-| GP28 | ADC2 | Winch battery sense | 1× M18 · analog 0–3.3 V | **BT4** "4s" → R8/R10 = **×6.56** | `ADC(28)`, `INV_W_RATIO` = 6.6 ✓ |
+| GP26 | ADC0 | Drive battery sense | 2× M18 parallel · analog 0–3.3 V | **J4** "12s Tap" → R2/R4 = 56k/10k **×6.6** | `ADC(26)`, `INV_P_RATIO` = 6.6 ✓ |
+| GP27 | ADC1 | Electronics battery sense | 1× M18 · analog 0–3.3 V | **BT1** "3s" → R5/R6 = 56k/10k **×6.6** | `ADC(27)`, `INV_E_RATIO` = 6.6 ✓ |
+| GP28 | ADC2 | Winch battery sense | 1× M18 · analog 0–3.3 V | **BT4** "4s" → R8/R10 = 56k/10k **×6.6** | `ADC(28)`, `INV_W_RATIO` = 6.6 ✓ |
 
-### ⚠ Battery dividers — board does not match firmware
+### ✅ Battery dividers — 56 k / 10 k on all three rails
 
-The board still carries the pre-M18 divider values. `sensors.py` scales by `INV_*_RATIO`,
-so every mismatch is a direct voltage-reading error:
+**The physical board carries 56 k / 10 k in all three divider positions** (confirmed by the
+builder, 2026-07-28), so every rail reconstructs at the same ratio and lands just under the
+ADC ceiling at full charge:
 
-| Rail | Board as-built | Actual ratio | Firmware expects | Reading error |
-|---|---|---|---|---|
-| Drive → GP26 | R2 220 k / R4 13 k | ×17.92 | ×14.0 | reads **78 % of true** — a 21 V pack shows 16.4 V, below `P_WARN` |
-| Electronics → GP27 | R5 100 k / R6 30 k | ×4.33 | ×6.6 | reads **1.52× high** — never warns on a dying pack |
-| Winch → GP28 | R8 100 k / R10 18 k | ×6.56 | ×6.6 | 0.7 % — fine |
+| Rail | Fitted | Ratio | Firmware | 18 V nom | 21 V max |
+|---|---|---|---|---|---|
+| Drive → GP26 | R2 56 k / R4 10 k | ×6.6 | `INV_P_RATIO` = 6.6 ✓ | 2.73 V | 3.18 V |
+| Electronics → GP27 | R5 56 k / R6 10 k | ×6.6 | `INV_E_RATIO` = 6.6 ✓ | 2.73 V | 3.18 V |
+| Winch → GP28 | R8 56 k / R10 10 k | ×6.6 | `INV_W_RATIO` = 6.6 ✓ | 2.73 V | 3.18 V |
 
-**GP27 is also over-range.** R5/R6 were sized for a 3S LiPo (12.6 V → 2.91 V). With an
-M18 fitted, GP27 sees 18 × 0.2308 = **4.15 V** (4.85 V at 21 V) against a 3.3 V limit. R7's
-1 kΩ series resistor holds clamp current to ~1.2 mA so the pin should survive, but the
-reading clips across the whole operating range.
+`INV_P_RATIO` was **14.0 → 6.6** on 2026-07-28 to match; at ×14.0 a full 21 V drive pack
+reported 16.4 V, which is under `P_WARN` (17.0) and a hair over `P_CRIT` (16.0), so the boat
+would have tripped return-to-home on a full battery. Divider drain is 318 µA per rail at
+21 V (5.7 mW in the 56 k — trivial for a 1/4 W part).
 
-Fitting **56 k / 10 k on all three** gives ×6.6 exactly (21 V → 3.18 V) and only requires
-setting `INV_P_RATIO = 6.6`. Both values are in the on-hand resistor kit.
+> ⚠ **The KiCad schematic disagrees with the board, and the board is right.**
+> `Boat_PCB.kicad_sch` still carries the pre-M18 values — drive 220 k/13 k (×17.92),
+> electronics 100 k/30 k (×4.33, which would be *over-range* on an M18: 4.15 V into a 3.3 V
+> pin), winch 100 k/18 k (×6.56). A netlist export therefore reports ratios that don't match
+> what's populated or what the firmware expects. **Trust `sensors.py` and this table**; the
+> schematic needs updating in KiCad. 13 k, 30 k and 18 k aren't even in the on-hand resistor
+> kit, which is corroborating evidence they were never fitted.
 
 **The 1 kΩ series resistors (R3/R7/R9) currently filter nothing** — V2 dropped the old
 C3/C4 filter caps and never replaced them. Fit 100 nF from each of GP26/27/28 to GND to
@@ -129,7 +138,7 @@ form the RC (1.6 kHz corner) and to supply the ADC's sample-and-hold charge loca
 | **I²C0** | `compass.py` | GP8 / GP9 | 400 kHz | BNO085 @ 0x4A via J7. ⚠ **no external pull-ups on the board** — 400 kHz needs ~1.5 kΩ to 3V3 |
 | **SoftI2C #A** | `sensors.py` | GP12 / GP13 | 100 kHz | SHT41 #A @ 0x44 (J11). Bit-banged (HW I²C0 taken). ⚠ no pull-ups — fit 4.7 kΩ |
 | **SoftI2C #B** | `sensors.py` | GP14 / GP15 | 100 kHz | SHT41 #B @ 0x44 (J13). **Three connectors on this bus** (J5 + J7 + J13). ⚠ no pull-ups — fit 2.2 kΩ |
-| **PIO** | `sbus.py`, `esc_telem.py` | GP7 (SBUS), GP16 / GP19 (ESC telem) | 100 kbd inv 8E2 / 115200 | 3 of 8 state machines (`esc_telem._SM_L = 4`, `_SM_R = 5`). ⚠ GP7 = MCP2515 `~RESET`, GP19 = hull-leak connector J16 |
+| **PIO** | `sbus.py`, `esc_telem.py` | GP7 (SBUS), GP16 / GP11 (ESC telem) | 100 kbd inv 8E2 / 115200 | 3 of 8 state machines (`esc_telem._SM_L = 4`, `_SM_R = 5`). ⚠ GP7 = MCP2515 `~RESET`. GP16/GP11 are unconnected on V2 — no clash, but solder direct |
 | **USB CDC** | `serial_handler.py` | (USB) | 115200 | Pi 5 ↔ Boat Pico command + telemetry |
 
 > ### ⚠ No I²C pull-up resistors anywhere on the board
@@ -252,18 +261,20 @@ the Pi through **J3**, the 40-pin header. Verified against the netlist:
 | 3V3 | **1** | 2 | VDD **+** MS1 | Pi 3V3 powers the logic *and* holds MS1 high |
 | GND | 6, 9, 14, 20 | 5, 10, 13, 19 | GND | VMOT comes from **BT4** (XT60), not the electronics pack |
 
-> ### ⚠ Half step, not 1/16 — `steps_per_rev` is wrong
+> ### ✅ Half step, not 1/16 — `steps_per_rev` fixed 2026-07-28
 >
-> `stepper.py` states *"1/16 microstepping is wired in hardware (MS1/MS2/MS3 → 3V3),
-> giving 3200 steps/rev"* and defaults `steps_per_rev = 3200`. **The board doesn't do
-> that.** Only MS1 is high (via Pi 3V3 on J3 pad 2); `A2.11` (MS2) and `A2.12` (MS3) are
-> both hard-wired to **GND**. MS1 high with MS2/MS3 low is **half step** → **400 steps/rev**
-> on a 200-step motor.
+> The board does **half step**, not the 1/16 that `stepper.py` used to claim. Only MS1 is
+> high (via Pi 3V3 on J3 pad 2); `A2.11` (MS2) and `A2.12` (MS3) are both hard-wired to
+> **GND**. MS1 high with MS2/MS3 low is **half step** → **400 steps/rev** on a 200-step
+> motor, 0.9°/step.
 >
-> That's an **8× error on every move**: `_deg_per_step` computes 0.1125° when reality is
-> 0.9°, so a commanded 10° pan travels 80° and the soft limits get driven straight through
-> into the end stops. Fix by setting `steps_per_rev = 400` (half step is the intended
-> configuration). Pulling MS2/MS3 high for real 1/16 stepping would need trace cuts.
+> The old `steps_per_rev = 3200` was an **8× error on every move**: `_deg_per_step`
+> computed 0.1125° against a real 0.9°, so a commanded 10° pan travelled 80° and drove
+> the soft limits straight through into the end stops — and the pulse train ran 8× too
+> fast for the commanded rpm, so the motor was likely skipping steps rather than
+> tracking. Now `400` in `pi5/config.yaml`, `stepper.py`'s default, `stepper_test.py`
+> and `run_hardware.py`'s fallback. Pulling MS2/MS3 high for real 1/16 stepping would
+> need trace cuts — don't raise the value without doing that first.
 >
 > ### ⚠ J3's schematic pin numbers are not Pi header pin numbers
 >

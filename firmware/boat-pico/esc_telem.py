@@ -25,7 +25,7 @@ telem frame*, so a frame arriving between polls overflows and stalls the SM. Her
 we pack **4 bytes per FIFO word (`push_thresh=32`) → a 32-byte buffer**, which
 comfortably holds a whole frame between drains. (The same fix would harden sbus.py.)
 
-Pin assignment (free Pico header pins, hand-tapped on the bench like GP2/3/6/7):
+Pin assignment (free Pico header pins, hand-tapped on the bench like GP2/GP3):
     Left  ESC TX → GP16   (was the unused DHT11 pin)
     Right ESC TX → GP11
 Change TELEM_L_PIN / TELEM_R_PIN if you tap different pins.

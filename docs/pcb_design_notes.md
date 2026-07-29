@@ -32,10 +32,10 @@ A carrier/breakout board hosting the Boat Pico (RP2040), with:
 > **The Pi 5 is on this board.** It mates to J3 and drives the A4988 over GPIO — a divergence from
 > the "Pi 5 uses only USB — no GPIO" locked decision in `CLAUDE.md`.
 >
-> **Battery dividers still carry pre-M18 values** and do not match firmware: drive is **220k/13k**
-> (×17.92, firmware expects ×14.0) and electronics is **100k/30k** (×4.33, expects ×6.6 — and
-> over-range on an M18 pack). Fitting **56k/10k** on all three gives ×6.6 exactly. See
-> `docs/pin_map.md` for the full comparison.
+> **Battery dividers are 56k/10k (×6.6) on all three rails as populated**, matching firmware. The
+> *schematic* still carries pre-M18 values (drive 220k/13k, elec 100k/30k, winch 100k/18k), so a
+> netlist export will disagree with the board — the board is right. See "Voltage-Divider
+> Calculations" below and `docs/battery_architecture.md`.
 
 ---
 
@@ -98,14 +98,14 @@ M18's REDLINK BMS. See `docs/battery_architecture.md` for the external fusing pl
 **Footprint for all:** `Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal`
 **Symbol:** `Device:R`
 
-| Ref | Value | Function | Fit from kit |
+| Ref | Schematic value | Function | **Actually fitted** |
 |-----|-------|----------|--------------|
-| R2 | 220k | Drive divider R_top (from J4 tap) | **56K** |
-| R4 | 13k | Drive divider R_bot → GP26 | **10K** |
-| R5 | 100k | Electronics divider R_top (from BT1) | **56K** |
-| R6 | 30k | Electronics divider R_bot → GP27 | **10K** |
-| R8 | 100k | Winch divider R_top (from BT4/VMOT) | **56K** |
-| R10 | 18k | Winch divider R_bot → GP28 | **10K** |
+| R2 | 220k | Drive divider R_top (from J4 tap) | **56K** ✅ |
+| R4 | 13k | Drive divider R_bot → GP26 | **10K** ✅ |
+| R5 | 100k | Electronics divider R_top (from BT1) | **56K** ✅ |
+| R6 | 30k | Electronics divider R_bot → GP27 | **10K** ✅ |
+| R8 | 100k | Winch divider R_top (from BT4/VMOT) | **56K** ✅ |
+| R10 | 18k | Winch divider R_bot → GP28 | **10K** ✅ |
 | R3 | 1k | GP26 ADC series resistor | 1K (keep) |
 | R7 | 1k | GP27 ADC series resistor | 1K (keep) |
 | R9 | 1k | GP28 ADC series resistor | 1K (keep) |
@@ -123,37 +123,41 @@ M18's REDLINK BMS. See `docs/battery_architecture.md` for the external fusing pl
 > beside the MCP2515. R2's label has likewise drifted over J4. Reposition all three reference texts
 > before the next fab run.
 >
-> **13k, 30k and 18k are not in the on-hand resistor kit** — which is moot, since those are exactly
-> the three values being replaced. Also add: **120 Ω** ×1 (CAN termination across J2 CANH/CANL, if
+> **13k, 30k and 18k are not in the on-hand resistor kit** — corroborating that they were never
+> fitted, and that the schematic values are the stale ones. Also add: **120 Ω** ×1 (CAN termination across J2 CANH/CANL, if
 > this board is a bus end node), **1.5 kΩ** ×2 (GP8/GP9 I²C pull-ups at 400 kHz), **2.2 kΩ** ×2
 > (GP14/GP15, three devices), **4.7 kΩ** ×2 (GP12/GP13), and **10 kΩ** ×1 (A4988 `~ENABLE` pull-up
 > to the VDD/MS1 net, for a disabled-at-boot default).
 
 ### Voltage-Divider Calculations
 
-**As drawn on the fabricated V2 board, evaluated against an M18 pack (18 V nom / 21 V max):**
+**As populated — 56k/10k on all three rails** (confirmed by the builder, 2026-07-28), against an M18
+pack (15 V empty / 18 V nom / 21 V max):
 
-| Rail | R_top/R_bot | Ratio | ADC at 18 V | ADC at 21 V | Firmware expects | Result |
-|------|-------------|-------|-------------|-------------|------------------|--------|
-| Drive → GP26 | R2/R4 (220k/13k) | 17.92 | 1.00 V | 1.17 V | ×14.0 | reads **78 % of true** — 21 V shows as 16.4 V |
-| Electronics → GP27 | R5/R6 (100k/30k) | 4.33 | **4.15 V** ⚠ | **4.85 V** ⚠ | ×6.6 | **over-range** (3.3 V limit) and reads 1.52× high |
-| Winch → GP28 | R8/R10 (100k/18k) | 6.56 | 2.74 V | 3.20 V | ×6.6 | fine — 0.7 % off |
+| Domain | R_top/R_bot | Ratio | 15 V (empty) | 18 V (nom) | 21 V (full) | Firmware |
+|--------|-------------|-------|--------------|------------|-------------|----------|
+| Drive → GP26 | R2/R4 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V | `INV_P_RATIO` = 6.6 ✓ |
+| Electronics → GP27 | R5/R6 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V | `INV_E_RATIO` = 6.6 ✓ |
+| Winch → GP28 | R8/R10 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V | `INV_W_RATIO` = 6.6 ✓ |
 
-R5/R6 were sized for a 3S LiPo (12.6 V → 2.91 V), which is what BT1's silkscreen still says. With an
-M18 fitted, GP27 is over-range across the entire operating range. R7's 1 kΩ series resistor limits
-clamp current to ~1.2 mA so the pin should survive, but the reading clips.
+Every rail sits at 3.18 V full — 0.12 V under the 3.3 V ADC ceiling — and reconstructs at one shared
+ratio. Divider drain is 318 µA per rail at 21 V; the 56k dissipates 5.7 mW, trivial for a 1/4 W part.
+`INV_P_RATIO` was corrected **14.0 → 6.6** on 2026-07-28 (at ×14.0 a full 21 V drive pack reported
+16.4 V, tripping `P_CRIT`/return-to-home on a full battery).
 
-**Target — fit 56k/10k on all three (both values are in the on-hand kit):**
-
-| Domain | R_top/R_bot | Ratio | 15 V (empty) | 18 V (nom) | 21 V (full) |
-|--------|-------------|-------|--------------|------------|-------------|
-| Drive → GP26 | R2/R4 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V |
-| Electronics → GP27 | R5/R6 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V |
-| Winch → GP28 | R8/R10 (56k/10k) | 6.6 | 2.27 V | 2.73 V | 3.18 V |
-
-Divider drain is 318 µA per rail at 21 V; the 56k dissipates 5.7 mW, trivial for a 1/4 W part.
-Only one firmware change is needed: `INV_P_RATIO = 14.0` → **6.6** in
-`firmware/boat-pico/sensors.py`. `INV_E_RATIO` and `INV_W_RATIO` are already 6.6.
+> ⚠ **What the schematic says instead.** `Boat_PCB.kicad_sch` still carries the pre-M18 values, so a
+> netlist export computes ratios that match neither the board nor the firmware:
+>
+> | Rail | Schematic R_top/R_bot | Ratio | ADC at 18 V | ADC at 21 V | If it *were* fitted |
+> |------|-------------|-------|-------------|-------------|--------|
+> | Drive → GP26 | R2/R4 (220k/13k) | 17.92 | 1.00 V | 1.17 V | reads 37 % of true at ×6.6 |
+> | Electronics → GP27 | R5/R6 (100k/30k) | 4.33 | **4.15 V** ⚠ | **4.85 V** ⚠ | **over-range** (3.3 V limit) |
+> | Winch → GP28 | R8/R10 (100k/18k) | 6.56 | 2.74 V | 3.20 V | fine — 0.7 % off |
+>
+> R5/R6 were sized for a 3S LiPo (12.6 V → 2.91 V), which is what BT1's silkscreen still says — had
+> they actually been fitted, GP27 would be over-range across the whole M18 range (R7's 1 kΩ would hold
+> clamp current to ~1.2 mA, so the pin should survive, but the reading would clip). **Update these six
+> values in KiCad** so the schematic, board and firmware finally agree.
 
 > ⚠ **The ADC filters are incomplete.** R3/R7/R9 are 1 kΩ series resistors with **no capacitor to
 > ground** — V2 dropped the old C3/C4 and never replaced them, so they filter nothing. Fit **100 nF
