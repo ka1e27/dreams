@@ -9,6 +9,59 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-26 — Camera recording + Tesla-style sentry mode + Recordings dashboard section
+
+**Worked on:** `/goal` — record the camera to the Pi, auto-record critical moments like Tesla Sentry,
+and a dashboard spot to browse/play clips (make it look good).
+**New `pi5/cv/recorder.py` (`Recorder`):** rolling pre-roll ring (JPEG-encoded, memory-bounded) so an
+event clip includes the run-up; manual start/stop; `note_event(reason)` sentry trigger (debounced,
+seeded from pre-roll, extends while the event persists up to a hard cap); auto-stop via `tick`; writes
+browser-playable **VP8/WebM** (fourcc probe → mp4v fallback) + a JSON sidecar; retention cap; path-
+traversal-safe list/serve/delete. All OpenCV work is synchronous here; the server drives it via
+`asyncio.to_thread`. +6 unit tests.
+**Server (`app.py`):** an always-on background feed task subscribes to the camera (or synthesises a
+telemetry-HUD frame in sim, so the feature is demoable with no camera), buffers pre-roll while sentry
+is armed, evaluates sentry triggers (~3 Hz: CRITICAL vision threat / hull leak / pod leak) and ticks
+the recorder — all off the event loop. Endpoints: `GET /api/recordings` (status + clips), `POST
+/api/recordings/start|stop`, `POST /api/recordings/sentry`, `DELETE /api/recordings/{name}`, and
+`GET /api/recordings/{name}` (served with `?key=` like `/video`, for the `<video>` tag). Wired into
+`run_sim.py` (+ sim reactive-avoidance now raises a sentry event) and `run_hardware.py` (config-driven);
+`recording:` block added to `config.yaml`; clips gitignored.
+**Dashboard:** folded into the **CAMERA panel** (not a separate box, per follow-up) — a control bar with
+a SENTRY arm toggle, manual REC/STOP, a live `● REC` overlay on the feed, and a **RECORDINGS** button
+that opens an **ESC-settings-style modal** (`#mRec`): a player beside a severity-coloured clip list
+(critical/warning/manual, timestamp, duration, size) with **fullscreen / download / delete** footer
+actions. Serve endpoint returns inline (`accept-ranges: bytes` → seeking; download via `<a download>`).
+**Verified (on the Pi):** `pytest pi5/tests` **242 green** (+6), ruff clean, inline `<script>` passes
+`node --check`, dashboard Vite build clean. Drove the whole lifecycle over real HTTP: manual clip
+(29 frames / 2.9 s / valid 49 KB WebM) → served 200 `video/webm` → deleted; armed sentry, drove the
+boat into a dropped obstacle → **auto-clip fired with pre-roll** (`critical-threat:obstacle`), extended
+while avoiding (620 frames / 62 s / 1.2 MB), finalised, served. The RECORDINGS section + JS render in
+the served page.
+**Decisions / open questions:** H.264 needs a HW encoder that isn't present here, so clips are VP8/WebM
+(universal browser playback). Sim has no camera → the feed synthesises a HUD frame; on hardware it
+records the live left camera. Sentry triggers are CRITICAL-threat / hull-leak / pod-leak (operator
+estop left out). Not yet exercised with a real camera on the Pi.
+**Next steps:** on-camera hardware pass; optional clip thumbnails; maybe a download button beside inline play.
+**Follow-up (recording duration):** a clip was getting cut off at the ~90 s hard cap while a threat was
+still in frame. Reworked the stop logic so a sentry clip now records **until the threat clears** — it
+runs on while `note_event` keeps firing and stops only `retrigger_extend_s` (8 s) after the last
+sighting; `max_clip_s` (now 300 s) is a per-**segment** cap that **rolls over** into a new file instead
+of stopping mid-event, so a persistent threat is never cut off (files stay bounded + prunable). +1 test
+(`test_persistent_threat_records_until_it_clears`); verified on the sim (recorded continuously through a
+sustained avoidance, stopped ~8 s after the threat went away → one 16.8 s clip).
+**Follow-up (retention):** added age-based cleanup — clips older than `max_age_days` (default **14**) are
+deleted, alongside the existing `max_clips` count cap. Pruned on every save, at `Recorder` construction,
+and hourly by the server feed (`prune_old()`), so stale clips go even with no new recordings. Age comes
+from the clip's metadata `started` (falls back to file mtime); `0` keeps forever. Config
+`recording.max_age_days`; +2 tests.
+**Follow-up (favorites):** a clip can be **favorited** (★) to pin it — favorites are exempt from both the
+age sweep and the count cap (but can still be deleted explicitly). `favorite` bool in the clip metadata;
+`Recorder.set_favorite()` + `POST /api/recordings/{name}/favorite`; the recordings modal footer got a
+FAVORITE toggle and rows show a ★. +2 tests; verified the endpoint + guard on the sim.
+
+---
+
 ## 2026-07-26 — Recursive improvement pass (5 rounds): CV/server perf, dashboard a11y, dead-code + tests
 
 **Worked on:** `/goal` — recursively hunt codebase + efficiency improvements, research-driven, ≥5

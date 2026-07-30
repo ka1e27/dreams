@@ -31,6 +31,183 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
+## 2026-07-29 — GPS bench test: the module can't reach the Pico, and the board gives it no path
+
+**Worked on:** user plugged in the GPS, it wasn't working, asked me to test it. Diagnosed on the live
+bench Pico (no code changes to firmware or the nav stack).
+
+**Result — the GPS is not connected to anything that can read it.** Three independent checks:
+1. **Nothing is transmitting.** Scanned 18 Pico GPIOs (all but the ESC/winch/NeoPixel outputs and the
+   dead GP0/GP1): **zero edges** over 1.3 s each, and **GP4/GP5 both read floating** (internal pull-up
+   → 1, pull-down → 0). No NMEA anywhere on the Pico.
+2. **No path exists on the board.** Confirmed by solving the schematic's net graph directly
+   (`Boat_PCB.kicad_sch`; the solver self-validates — all eight Pico GND pads and VSYS/VBUS resolve
+   correctly). **J7, the "GPS + Compass" connector, carries no UART:** 1=GP14, 2=GP15, 3=GP9, 4=GP8,
+   5=**VSYS 5 V**, 6=GND. GP4 goes only to U1.15 (MCP2515 SO) and GP5 to the GND net. This confirms the
+   2026-07-28 audit's claim from the board file rather than the netlist export.
+3. **Not on the Pi either.** No USB serial device but the Pico (`lsusb`, `/dev/serial/by-id`), and Pi
+   GPIO14/15 measure floating with `pinctrl` and are muxed to function *none* — so nothing is wired to
+   the Pi's header UART, and `/dev/serial0` (→ ttyAMA10) isn't connected to those pins anyway.
+
+**Two live-board facts that contradict the docs — measurement wins, KiCad is stale (again):**
+- **GP5 is NOT tied to GND on the built board** (an internal ~55 kΩ pull-up takes it to 1, so there is
+  no low-resistance path). The schematic *does* tie it — `docs/pin_map.md` and `main.py`'s docstring
+  state this as as-built fact. A jumper into GP5 therefore works, which is what makes a bench test
+  possible at all.
+- **GP9 (= J7.3) reads hard low against the internal pull-up** — a real short to GND, and the schematic
+  shows no such tie. If a module is sitting in J7, its pin 3 is a ground, i.e. **its pinout doesn't
+  match J7's order**. That also explains why I²C0 scans empty. J7.5 is 5 V, so a mismatched plug can put
+  5 V on a module data pin or try to power the module through a Pico GPIO — flagged to the user; leave
+  J7 unplugged until the module's pinout is checked.
+- Also measured: U1 (MCP2515) is **not driving GP4**, so the documented UART-TX-vs-SO contention isn't
+  live on this board. Electronics M18 present (GP27 → 17.7 V); drive + winch packs disconnected
+  (GP26/GP28 ≈ 0.2 V), which is why a firmware restart was safe here.
+
+**Changed:**
+- `pi5/scripts/gps_probe.py` (NEW) — four-mode bench tool, following `am32_config.py`'s
+  self-documenting-CLI pattern. `boat` (read-only: decodes the firmware's TEL health bit + GPS
+  SENSOR_FAULT alerts, and detects "firmware isn't running"), `pins` (the GPIO scan above),
+  `uart` (opens UART1 on GP5 and parses what arrives), `host` (sniffs a USB-TTL adapter, auto-baud).
+  Reuses `deploy_pico._request_repl` so the REPL modes drop the firmware via `$REFLASH` — which estops
+  the motors first — and restarts it after. Reports the distinction that matters on a bench: **no data
+  at all** (wiring/power) vs **data but no fix** (antenna/sky view). The docstring carries the measured
+  J7 pinout and the 3-jumper bypass so nobody re-derives this.
+
+**Verified (on the Pi):** all four modes exercised against the live Pico; `pins` reproduced the manual
+scan including the GP9 short; `boat` reported `health=001110`, GPS bit 0, 9 `SENSOR_FAULT,gps` alerts in
+8 s. `pytest pi5/tests` **293 green**, ruff clean.
+
+**Decisions / open questions:** the Pico was found **halted at the REPL** — the firmware wasn't running,
+so nothing was reading the GPS regardless of wiring. I left it **running** (drive/winch rails
+disconnected, so ESC PWM at neutral can't move anything). Awaiting the user on which bench path to take
+(jumper GPS TX → GP5, or a USB-TTL adapter) and on what module it actually is.
+**Separate leftover bug, not fixed:** `firmware/boat-pico/main.py:589` still prints
+`Hull: GP17(L) GP18(R)` in the boot banner, but `sensors.py` moved to GP19/GP20 on 2026-07-28 — the
+banner is now misleading. Also `IMU: I2C0 GP8/GP9 addr=0x4A FAIL` every boot: the board wires the IMU
+connector **J5.3/J5.4 to GP15/GP14** (the SHT41 #B SoftI2C bus), not to I²C0 GP8/GP9 where
+`compass.py` looks — a firmware-vs-board mismatch of the same family as the GPS one, worth its own pass.
+
+**Re-test after the user re-seated the module in J7** (they asked specifically about GP8 / GP9 — J7.4
+and J7.3). Still no GPS, and now measured properly rather than inferred:
+- **GP8 changed from floating to driven high**, but it is *not* transmitting: 10 s of PIO soft-UART RX at
+  9600 captured **0 bytes**. It's a pull-up, not a TX. (GP8 needed the soft UART — hardware UART1 RX can
+  only be GP5/GP9/GP21/GP25, so GP8 is otherwise unlistenable.)
+- **GP9 is still held at ground:** PIO captured **5356 bytes of pure 0x00** — one endless start bit,
+  which is the signature of a grounded pin rather than data. Hardware UART1 on GP9 gave 0 bytes at
+  9600/38400/115200.
+- Still **zero edges on all 18 scanned pins**, which rules out *any* baud (edge counting is
+  baud-independent), and both I²C buses re-scanned: nothing on GP8/GP9 (SCL held low, so it can't work)
+  and only the SHT41 `0x44` on GP14/GP15. No compass, no u-blox DDC at `0x42` → the module isn't
+  answering on I²C either, so it is not alive through J7.
+- Read together: one J7 pin held to GND and another pulled high means **the module's connector isn't
+  landing where J7 expects**. Since J7.5 is 5 V, a reversed/offset plug puts 5 V on one of the module's
+  signal pins — or on its GND pin. User told to unplug it pending the module's pinout.
+
+**Changed (second pass):**
+- `pi5/scripts/gps_probe.py` — added a **`soft` mode**: PIO 8N1 soft-UART RX on *any* pin, reusing the
+  same PIO program as `esc_telem.py`/`sbus.py` at the GPS baud. Needed for GP8, and it's also the shape a
+  permanent fix would take given no connector routes a hardware UART. Recognises the all-zeros case and
+  names it (grounded pin, not a transmitter) instead of reporting it as garbage data. Also a `--pins`
+  filter on the scan for fast re-checks, refusing pins outside the safe list. ruff clean, 293 still green.
+
+**CORRECTION — J7 *is* the GPS UART; the firmware is on the wrong pins.** The user pointed out that
+GP8/GP9 are UART1, and they're right: the RP2040 muxes UART1 TX to GP4/**GP8**/GP20/GP24 and RX to
+GP5/**GP9**/GP21/GP25. So J7.4/J7.3 are a legitimate UART1 TX/RX pair and **the connector was laid out as
+the GPS serial link** — my earlier "no board connector carries a UART" was wrong, and it came from
+`docs/pin_map.md` listing GP8/GP9 as I²C0 only when they are dual-function. The board-side fix is
+`gps.init` → `UART(1, tx=Pin(8), rx=Pin(9))`, no rewiring. GP4/GP5, which the firmware uses today, reach
+no connector at all.
+
+**Why it still doesn't work, and why the firmware change is NOT yet applied:** the user reports the
+module's LED blinking constantly, i.e. it is powered and (on u-blox parts, TIMEPULSE at 1 Hz) very likely
+holding a fix and transmitting. But **GP9 — the GPS TX line — is shorted to GND**, so nothing arrives:
+hardware UART1 on GP8/GP9 at 9600 captured 0 bytes (the UART drops the endless framing errors), while a
+PIO capture on the same pin returned 5356 bytes of pure 0x00, the signature of a held-low line. The
+schematic has no such tie, so it is a build fault — Pico pads **12 (GP9) and 13 (GND) are adjacent**, so a
+solder bridge is the first thing to check. Separately, GP8 is currently held high by something
+unidentified; pointing the firmware's UART **TX** at GP8 before knowing what that is could drive a GPIO
+into a supply rail, so the one-line change waits on the module's pinout.
+
+**FAULT LOCALISED — a hard short across three adjacent Pico pads: 12 (GP9) · 13 (GND) · 14 (GP10).**
+User confirmed continuity GP9→GND with a multimeter and localised it to the Pico, not the PCB. Probing
+every pad that neighbours a GND pad (7, 9, 12, 14, 17, 19, 22, 24, 27, 29) found **GP9 and GP10 both
+shorted to GND and every other one clean** — so it's one localised blob spanning pads 12-13-14, not a
+systematic soldering problem. Software bound on the short: under ~18 kΩ, since the internal ~55 kΩ
+pull-up can't lift either pin above logic 0.
+
+**One blob explains three separate symptoms:**
+- **GPS dead** — GP9 is J7.3 and UART1 RX; the module's TX drives into the short.
+- **Status NeoPixel dead** — GP10 is `status_led.PIN` (J12). Free visual confirmation: that LED can never
+  have lit. Worse, `status_led.py` drives GP10 as an *output*, so every LED update since the board was
+  built has been sourcing current into a dead short — the pin may itself be damaged by now.
+- **`IMU: I2C0 GP8/GP9 addr=0x4A FAIL` on every boot** — GP9 is also SCL0, and a clock line held low
+  kills the bus.
+
+**It is a HARD short, and not the LED harness.** User reports J12 unplugged and no visible solder
+bridge anywhere — yet GP10 (whose only board net is J12.2) is still shorted, so the fault is at the Pico
+or in its mount, not in a harness. Quantified it by forcing the pad's DRIVE field to 2 mA
+(`PADS_BANK0 + 0x04 + 4n`, bits 5:4) and reading the **real pad level** from `SIO.GPIO_IN` (0xd0000004)
+rather than the output latch: **GP10 driven high still reads 0** — the driver loses. Control pin GP5 reads
+1 under the identical test, so the method is sound. Tested GP10 rather than GP9 because `status_led.py`
+has been driving GP10 into this fault continuously anyway. A hard short rules out flux/contamination
+(that would be kΩ and the 2 mA driver would win); this is metal or damaged silicon.
+
+**Firmware left STOPPED deliberately.** It drives GP10 into the dead short on every status-LED update, so
+running it is active stress on a suspect pin. Restart with
+`.venv/bin/python -m mpremote connect /dev/ttyACM0 reset` when needed.
+
+**Hypothesis worth testing: this is the schematic's GP5-to-GND tie, executed on the wrong pads.** The user
+asked whether GP5 being grounded could explain it. It can't cause it (independent pins), and **GP5 is
+measurably free on this board** — it read 1 in the same drive test GP10 failed, which *voids the
+2026-07-28 audit's loudest hardware worry* ("GP5 tied to GND, so the GPS can never work"). But the
+inversion is suspicious: the design ties exactly one Pico GPIO to its adjacent GND pad (pad 7 → pad 8),
+and the board instead ties two GPIOs to *their* adjacent GND pad (pads 12/14 → pad 13) while the designed
+tie is absent. Same motif, wrong location. This board has form for exactly that class of error — the
+2026-07-28 audit found J3's footprint has its odd/even rows transposed. If the hypothesis holds, the
+copper is on the **carrier board**, not the Pico, and the fix is cutting one connection.
+
+**Repo gap — the board's routing has no source of truth here.** `Boat_PCB.kicad_pcb` contains **zero
+copper**: no nets, no tracks, no vias, no zones, only placed footprints. No gerbers in the repo either, and
+`report.txt` is a stale KiCad update log (still lists `F1`, and shows GP5/GP8/GP9/GP10 all *unconnected*).
+So every "the board does X" claim in the docs — including this session's — actually derives from the
+**schematic**, and the physical board demonstrably diverges from it. Flagged as a V3 blocker: nobody can
+review this board's wiring from the repo.
+
+**Option analysed, no code written: move the GPS to the Pi 5.** Traced the position path — the whole nav
+stack reads `PicoSerial.telemetry` (`pi5/comms/pico_serial.py:22`), written *only* by `_handle_tel`, and
+`navigator.py:399-437` consumes `tel.lat`/`tel.lon`. So a Pi-side NMEA reader writing into that one object
+needs **no other changes**, and would deliver position at the module's native 1-10 Hz rather than relayed
+at 1 Hz through TEL. Heading must stay on `tel.heading` (Pico compass). Three gotchas: `SENSOR_FAULT,gps`
+would spam forever (`main.py:452`) and reported state would sit at `WARN` (`main.py:481`) — checked, and
+**neither cuts the motors**; the GPS health bit stays 0; and **the Pod Pico shares the GPS UART**
+(`main.py:555` `pod_uart.init(gps._uart)`, demuxed by sentence prefix in `task_uart1_reader`), so
+`gps.init()` cannot simply be dropped. Wiring: a USB-TTL dongle → `/dev/ttyUSB0` (respects the "Pi 5 =
+USB only" locked decision; `gps_probe host` already tests it), or the Pi's GPIO14/15 — measured floating,
+function `none` — which needs `dtoverlay=uart0` plus the serial console freed and would then collide with
+`am32_config.py`, which uses the same two pins. **Main attraction:** it routes around the dead GP9
+entirely, so it doesn't matter whether the short is the Pico or the board. Weighed against the one-wire
+GP5 jumper, which works today with zero code changes. Awaiting the user's choice.
+
+**Next steps:** (1) Look at the Pico's **underside / castellations** and its mount — a top-side-invisible
+bridge or wicked solder under the module fits a hard short with nothing visible. If it's socketed, pull it
+and measure GP9→GND and GP10→GND on the Pico **alone**; that's the only way to separate Pico from carrier
+board conclusively. Still shorted standalone with nothing visible → internal damage, replace the Pico.
+(2) **Zero-rework workaround, which does not need GP9 at all:** move the module's TX wire from J7.3 to
+Pico **GP5 (pin 7)**, leaving VCC/GND in J7.5/J7.6. GP5 measures floating and passed the drive test, and
+`gps.init` *already* listens on GP5 — so the GPS works with **no firmware change and no rework**.
+(3) Consequences of writing GP9/GP10 off: the status NeoPixel needs a jumper from J12.2 to a free pin
+(GP6 measures floating — the MCP2515 isn't driving it) plus a one-line `status_led.PIN` change; and I²C0
+is permanently dead, which makes moving `compass.py` to SoftI2C **GP14/GP15** mandatory rather than
+merely correct — that is where the board wires J7's compass pins anyway.
+(4) Alternatively, if the short is cleared, apply `UART(1, tx=Pin(8), rx=Pin(9))` in
+`gps.init`, or move just the GPS TX wire from J7.3 to Pico GP5 (pin 7), which needs **no** firmware
+change since GP5 is what `gps.init` already listens on and it measures floating. (4) `compass.py` is on
+I²C0 GP8/GP9 but the board puts J7's compass pins on **GP14/GP15** (SoftI2C #B, shared with J5 + both
+SHT41s) — the firmware has J7's UART and I²C swapped relative to the board; worth its own pass.
+(5) Fix `docs/pin_map.md`: GP8/GP9 are **I²C0 *or* UART1**, and J7 is the GPS UART + compass connector.
+
+---
+
 ## 2026-07-28 — Applied the pin-map audit to code: winch → GP21, stepper 8× fix, divider ratio
 
 **Worked on:** pulled `e27ee7f` (the Boat_PCB V2 netlist audit below) and applied the three items it
@@ -247,57 +424,6 @@ touched this session.
 **Next steps:** user swaps to the 27 W PSU + re-runs record/replay (optionally under
 `~/pi_power_monitor.py` to confirm `EXT5V` stays ~5.1 V flat); then decide on the MJPG recorder change
 for the boat's UBEC budget.
-
-## 2026-07-26 — Camera recording + Tesla-style sentry mode + Recordings dashboard section
-
-**Worked on:** `/goal` — record the camera to the Pi, auto-record critical moments like Tesla Sentry,
-and a dashboard spot to browse/play clips (make it look good).
-**New `pi5/cv/recorder.py` (`Recorder`):** rolling pre-roll ring (JPEG-encoded, memory-bounded) so an
-event clip includes the run-up; manual start/stop; `note_event(reason)` sentry trigger (debounced,
-seeded from pre-roll, extends while the event persists up to a hard cap); auto-stop via `tick`; writes
-browser-playable **VP8/WebM** (fourcc probe → mp4v fallback) + a JSON sidecar; retention cap; path-
-traversal-safe list/serve/delete. All OpenCV work is synchronous here; the server drives it via
-`asyncio.to_thread`. +6 unit tests.
-**Server (`app.py`):** an always-on background feed task subscribes to the camera (or synthesises a
-telemetry-HUD frame in sim, so the feature is demoable with no camera), buffers pre-roll while sentry
-is armed, evaluates sentry triggers (~3 Hz: CRITICAL vision threat / hull leak / pod leak) and ticks
-the recorder — all off the event loop. Endpoints: `GET /api/recordings` (status + clips), `POST
-/api/recordings/start|stop`, `POST /api/recordings/sentry`, `DELETE /api/recordings/{name}`, and
-`GET /api/recordings/{name}` (served with `?key=` like `/video`, for the `<video>` tag). Wired into
-`run_sim.py` (+ sim reactive-avoidance now raises a sentry event) and `run_hardware.py` (config-driven);
-`recording:` block added to `config.yaml`; clips gitignored.
-**Dashboard:** folded into the **CAMERA panel** (not a separate box, per follow-up) — a control bar with
-a SENTRY arm toggle, manual REC/STOP, a live `● REC` overlay on the feed, and a **RECORDINGS** button
-that opens an **ESC-settings-style modal** (`#mRec`): a player beside a severity-coloured clip list
-(critical/warning/manual, timestamp, duration, size) with **fullscreen / download / delete** footer
-actions. Serve endpoint returns inline (`accept-ranges: bytes` → seeking; download via `<a download>`).
-**Verified (on the Pi):** `pytest pi5/tests` **242 green** (+6), ruff clean, inline `<script>` passes
-`node --check`, dashboard Vite build clean. Drove the whole lifecycle over real HTTP: manual clip
-(29 frames / 2.9 s / valid 49 KB WebM) → served 200 `video/webm` → deleted; armed sentry, drove the
-boat into a dropped obstacle → **auto-clip fired with pre-roll** (`critical-threat:obstacle`), extended
-while avoiding (620 frames / 62 s / 1.2 MB), finalised, served. The RECORDINGS section + JS render in
-the served page.
-**Decisions / open questions:** H.264 needs a HW encoder that isn't present here, so clips are VP8/WebM
-(universal browser playback). Sim has no camera → the feed synthesises a HUD frame; on hardware it
-records the live left camera. Sentry triggers are CRITICAL-threat / hull-leak / pod-leak (operator
-estop left out). Not yet exercised with a real camera on the Pi.
-**Next steps:** on-camera hardware pass; optional clip thumbnails; maybe a download button beside inline play.
-**Follow-up (recording duration):** a clip was getting cut off at the ~90 s hard cap while a threat was
-still in frame. Reworked the stop logic so a sentry clip now records **until the threat clears** — it
-runs on while `note_event` keeps firing and stops only `retrigger_extend_s` (8 s) after the last
-sighting; `max_clip_s` (now 300 s) is a per-**segment** cap that **rolls over** into a new file instead
-of stopping mid-event, so a persistent threat is never cut off (files stay bounded + prunable). +1 test
-(`test_persistent_threat_records_until_it_clears`); verified on the sim (recorded continuously through a
-sustained avoidance, stopped ~8 s after the threat went away → one 16.8 s clip).
-**Follow-up (retention):** added age-based cleanup — clips older than `max_age_days` (default **14**) are
-deleted, alongside the existing `max_clips` count cap. Pruned on every save, at `Recorder` construction,
-and hourly by the server feed (`prune_old()`), so stale clips go even with no new recordings. Age comes
-from the clip's metadata `started` (falls back to file mtime); `0` keeps forever. Config
-`recording.max_age_days`; +2 tests.
-**Follow-up (favorites):** a clip can be **favorited** (★) to pin it — favorites are exempt from both the
-age sweep and the count cap (but can still be deleted explicitly). `favorite` bool in the clip metadata;
-`Recorder.set_favorite()` + `POST /api/recordings/{name}/favorite`; the recordings modal footer got a
-FAVORITE toggle and rows show a ★. +2 tests; verified the endpoint + guard on the sim.
 
 <!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
      align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
