@@ -19,6 +19,17 @@ class TelemetryOut(BaseModel):
     # Per-motor current (A) from AM32 KISS telemetry; 0.0 when not reported.
     curr_left: float = 0.0
     curr_right: float = 0.0
+    # GPS quality — populated when a Pi-side GPS owns position, else 0/"pico".
+    fix_quality: int = 0
+    sats: int = 0
+    hdop: float = 0.0
+    # "pico" | "pi" | "pi-stale" | "pi-nofix" | "pi-nolink" | "sim"
+    gps_source: str = "pico"
+    # Satellite view from the Pi GPS — how many are in view, how many are actually
+    # being heard, and the best SNR in dB-Hz. These answer "why is there no fix".
+    gps_sats_visible: int = 0
+    gps_sats_tracked: int = 0
+    gps_best_snr: int = 0
 
 
 class EnvironmentOut(BaseModel):
@@ -89,6 +100,14 @@ class NavStateOut(BaseModel):
     current_set_deg: float = 0.0
     current_drift_ms: float = 0.0
     station_keeping: bool = False
+    # Manual (WASD) override. manual_stale = dead-man tripped, motors held at 0.
+    manual: bool = False
+    manual_speed: int = 40
+    manual_stale: bool = False
+    # Boat Pico's latched ESTOP (best-effort — see PicoSerial.estopped). While
+    # true the Pico NAKs every SET_THR, so throttle_left/right above are what the
+    # Pi asked for, not what the motors are doing.
+    pico_estopped: bool = False
 
 
 class GotoIn(BaseModel):

@@ -143,8 +143,11 @@ async def waypoint_planner():
     """Serve the waypoint planner — create, edit, save and upload paths."""
     return FileResponse(_TEMPLATES_DIR / "waypoint_planner.html")
 
-# Rate limiting — 60 req/min default, 10/min for sensitive endpoints
-app.add_middleware(RateLimitMiddleware, default_rpm=60, burst_rpm=120)
+# Rate limiting — per (IP, path class): 300 req/min default, 10/min for sensitive
+# endpoints, 900/min for the 10 Hz manual-drive tick. 60/min was below the
+# dashboard's own idle polling (~70/min: map objects 2 s, obstacles 3 s,
+# recordings 3 s), so the panel 429'd itself. See rate_limit.py.
+app.add_middleware(RateLimitMiddleware, default_rpm=300, burst_rpm=120)
 
 # WebSocket connection managers
 _tel_clients: list[WebSocket] = []
@@ -160,6 +163,11 @@ def _tel_out() -> TelemetryOut:
         speed_knots=t.speed_knots, batt_v=t.batt_v, batt_pct=t.batt_pct,
         hull=t.hull, mt_left=t.mt_left, mt_right=t.mt_right, health=t.health,
         curr_left=t.curr_left, curr_right=t.curr_right,
+        fix_quality=t.fix_quality, sats=t.sats, hdop=t.hdop,
+        gps_source=t.gps_source,
+        gps_sats_visible=t.gps_sats_visible,
+        gps_sats_tracked=t.gps_sats_tracked,
+        gps_best_snr=t.gps_best_snr,
     )
 
 
@@ -184,6 +192,8 @@ def _nav_out() -> NavStateOut:
         avoiding=n.avoiding,
         current_set_deg=n.current_set_deg, current_drift_ms=n.current_drift_ms,
         station_keeping=n.station_keeping,
+        manual=n.manual, manual_speed=n.manual_speed, manual_stale=n.manual_stale,
+        pico_estopped=bool(getattr(_pico, "estopped", False)),
     )
 
 
@@ -334,6 +344,9 @@ async def estop(_: str = Depends(auth.require_api_key)):
     """Emergency stop — kill all motors."""
     if _mission.state.running:
         _mission.abort("ESTOP")
+    # Drop manual override too, or the next keypress would re-drive the motors
+    # straight through the ESTOP the operator just hit.
+    _navigator.enable_manual(False)
     _navigator.stop_nav()
     await _pico.emergency_stop()
     return {"status": "emergency_stop"}
@@ -628,6 +641,99 @@ async def set_motor_trim(payload: dict, _: str = Depends(auth.require_api_key)):
                 raise HTTPException(status_code=400, detail=f"{side} must be 0.5–1.5")
             setattr(cfg, attr, v)
     return {"left": cfg.motor_gain_left, "right": cfg.motor_gain_right}
+
+
+# ---- Manual (WASD) override ------------------------------------------------
+# Direct operator drive from the dashboard. The nav loop treats manual as the
+# highest-priority source and applies a dead-man timeout, so these endpoints are
+# deliberately thin: they only feed the navigator, they never touch the Pico
+# directly. That keeps one owner of the throttle and one place for the timeout.
+
+
+def _manual_state() -> dict:
+    n = _navigator
+    return {
+        "enabled": n.state.manual,
+        "speed": n.manual_speed,
+        "stale": n.state.manual_stale,
+        "throttle_left": n.state.throttle_left,
+        "throttle_right": n.state.throttle_right,
+        "timeout_s": n.MANUAL_TIMEOUT_S,
+        # A latched Pico ESTOP NAKs every SET_THR, so the panel can look armed
+        # and responsive while the motors are dead. Surface it here so the
+        # dashboard can say so instead of leaving it in the server log.
+        "pico_estopped": bool(getattr(_pico, "estopped", False)),
+    }
+
+
+@app.get("/api/manual")
+async def get_manual(_: str = Depends(auth.require_api_key)):
+    """Current manual-override state."""
+    return _manual_state()
+
+
+@app.post("/api/manual")
+async def set_manual(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Arm or disarm manual override.
+
+    Arming cancels any active goto/stay so the two cannot fight over the
+    throttle, and starts stopped — the boat will not move until a key is pressed.
+    Disarming zeroes the motors on the next nav tick.
+    """
+    from fastapi import HTTPException
+    val = payload.get("enabled")
+    if not isinstance(val, bool):
+        raise HTTPException(status_code=400, detail="enabled must be a boolean")
+    if val and _mission is not None and _mission.state.running:
+        # Refuse rather than silently abort someone's survey — /api/mission/pause
+        # or /abort is an explicit decision the operator should make.
+        raise HTTPException(
+            status_code=409,
+            detail="Pause or abort the mission before taking manual control")
+    _navigator.enable_manual(val)
+    logger.warning("Manual override %s via dashboard", "ARMED" if val else "disarmed")
+    return _manual_state()
+
+
+@app.post("/api/manual/drive")
+async def manual_drive(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Feed one operator input sample: surge (-1..1 ahead) + yaw (-1..1 starboard).
+
+    The dashboard repeats this at ~10 Hz while keys are held. Mixing to
+    left/right happens in the navigator so the same logic is testable in Python
+    and cannot drift from the trim/clamp the autonomous path uses.
+    """
+    from fastapi import HTTPException
+    if not _navigator.state.manual:
+        raise HTTPException(status_code=409, detail="Manual override is not armed")
+    try:
+        surge = float(payload.get("surge", 0.0))
+        yaw = float(payload.get("yaw", 0.0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="surge/yaw must be numbers")
+    if surge != surge or yaw != yaw:          # NaN would sail straight past clamps
+        raise HTTPException(status_code=400, detail="surge/yaw must be finite")
+    _navigator.manual_input(surge, yaw)
+    left, right = _navigator.manual_mix()
+    # `pico_estopped` is why the panel can read ARMED with live numbers and the
+    # boat still not move: the nav loop is sending SET_THR and the Pico is NAK'ing
+    # every one until it gets a RESUME.
+    return {"ok": True, "throttle_left": left, "throttle_right": right,
+            "pico_estopped": bool(getattr(_pico, "estopped", False))}
+
+
+@app.post("/api/manual/speed")
+async def manual_speed(payload: dict, _: str = Depends(auth.require_api_key)):
+    """Set the manual speed cap (0–100 %). Scales every manual command."""
+    from fastapi import HTTPException
+    val = payload.get("speed")
+    try:
+        pct = int(val)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="speed must be an integer 0–100")
+    if not (0 <= pct <= 100):
+        raise HTTPException(status_code=400, detail="speed must be 0–100")
+    return {"speed": _navigator.set_manual_speed(pct)}
 
 
 @app.post("/api/esc/passthrough")
@@ -1280,6 +1386,8 @@ async def _gather_health() -> dict:
 
     # Radar-bar stepper (Pi 5 GPIO; tracked by RadarTracker). None off-Pi/sim.
     stepper_angle = stepper_state = stepper_locked = stepper_target = None
+    stepper_no_lock = stepper_auto_rescan = stepper_warning = None
+    stepper_centered = stepper_offset = stepper_rate = stepper_lead = None
     _st = _radar or _stepper
     if _st is not None:
         try:
@@ -1288,6 +1396,13 @@ async def _gather_health() -> dict:
             stepper_state = ss.get("state")
             stepper_locked = ss.get("target_locked", False)
             stepper_target = ss.get("target")   # {label, conf} of the locked target
+            stepper_no_lock = ss.get("no_lock_reason")     # why it isn't locked
+            stepper_auto_rescan = ss.get("auto_rescan")    # False = TRACK-only pin
+            stepper_warning = ss.get("track_warning")      # locked but not converging
+            stepper_centered = ss.get("centered")
+            stepper_offset = ss.get("offset_deg")          # target off frame centre
+            stepper_rate = ss.get("target_rate_dps")       # target angular rate
+            stepper_lead = ss.get("lead_deg")              # feedforward being applied
         except Exception as e:  # noqa: BLE001 — never let a status read break health
             logger.debug("stepper status unavailable: %s", e)
 
@@ -1346,6 +1461,13 @@ async def _gather_health() -> dict:
         "stepper_state": stepper_state,
         "stepper_target_locked": stepper_locked,
         "stepper_target": stepper_target,
+        "stepper_no_lock_reason": stepper_no_lock,
+        "stepper_auto_rescan": stepper_auto_rescan,
+        "stepper_track_warning": stepper_warning,
+        "stepper_centered": stepper_centered,
+        "stepper_offset_deg": stepper_offset,
+        "stepper_target_rate_dps": stepper_rate,
+        "stepper_lead_deg": stepper_lead,
         "track": track,
         "vision": vision,
         "boat": boat,
@@ -1545,6 +1667,14 @@ def _camera_state() -> dict:
     else:
         state.update({"detection_enabled": False, "model_loaded": False,
                       "detect_fps": None, "detections": None})
+    # The radar bar's own lock threshold lives on the tracker, not the overlay,
+    # but the UI presents it alongside the TRACK class picker (one "what do we
+    # follow" group), so serve it from the same endpoint.
+    if _radar is not None:
+        try:
+            state["track_conf"] = _radar.status().get("track_conf")
+        except Exception:  # noqa: BLE001 — a status read must not break the panel
+            pass
     return state
 
 
@@ -1560,7 +1690,9 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
 
     Accepts any subset of: jpeg_quality (20-95), stream_fps (1-60),
     detection_enabled (bool), detect_max_fps (0.5-30), conf (0.05-0.95),
-    imgsz (160-640), track_class (class label to lock onto, "" = auto).
+    imgsz (160-640), track_class (class label to lock onto, "" = auto),
+    track_conf (0-1, min confidence for the radar bar to lock a target),
+    buoy_enabled (bool — the classical colour/shape buoy screen).
     Capture resolution / camera FPS are set in config.yaml (restart);
     which device is left/right is set live via POST /api/camera/devices.
     """
@@ -1591,6 +1723,16 @@ async def set_camera(payload: dict, _: str = Depends(auth.require_api_key)):
             _radar.set_track_class(payload["track_class"])
         except Exception:  # noqa: BLE001 — never let the UI control 500
             pass
+    # How confident a detection must be before the bar swings at it. Separate
+    # from `conf` on purpose: the overlay draws and maps weak contacts, the bar
+    # should only chase ones worth the motion.
+    if "track_conf" in payload and _radar is not None:
+        try:
+            _radar.set_min_track_conf(float(payload["track_conf"]))
+        except (TypeError, ValueError):
+            pass
+        except Exception:  # noqa: BLE001 — never let the UI control 500
+            pass
     return _camera_state()
 
 
@@ -1611,7 +1753,11 @@ def _sentry_reasons() -> list[str]:
         except Exception:  # noqa: BLE001 — never let a status read break the feed
             pass
     tel = getattr(_pico, "telemetry", None)
-    if tel is not None and getattr(tel, "hull", "DRY") not in ("DRY", None, ""):
+    # "--" = the Pico has no hull leak switches at all (GP19/GP20 became the drive
+    # ESC outputs on 2026-07-30). Absence of a sensor is not a leak — treat it like
+    # DRY here, but note it is NOT a claim the hull is dry; the pod leak sensor
+    # below is the only real leak alarm now.
+    if tel is not None and getattr(tel, "hull", "DRY") not in ("DRY", "--", None, ""):
         reasons.append("hull-leak")
     if _pod is not None:
         latest = getattr(_pod, "latest", None)
@@ -1870,7 +2016,8 @@ async def set_camera_devices(payload: dict, _: str = Depends(auth.require_api_ke
 # stepper lives on the Pi 5 40-pin header — the one place this project uses Pi 5
 # GPIO directly (everything else is USB). Absent off-Pi / in sim → available:false.
 
-_STEPPER_COMMANDS = ("SCAN", "STOP", "GOTO", "JOG", "CENTER", "SLEEP", "WAKE", "TRACK", "HOLD")
+_STEPPER_COMMANDS = ("SCAN", "STOP", "GOTO", "JOG", "CENTER", "SLEEP", "WAKE", "TRACK", "HOLD",
+                     "TRACK_ONLY")
 
 
 def _stepper_iface():
@@ -1895,9 +2042,14 @@ async def stepper_status(_: str = Depends(auth.require_api_key)):
 async def stepper_command(payload: dict, _: str = Depends(auth.require_api_key)):
     """Drive the radar bar. Body: {"command": <cmd>, "value": <degrees>}.
 
-    Commands: SCAN | STOP | GOTO | JOG | CENTER | SLEEP | WAKE | TRACK | HOLD.
-    GOTO takes an absolute angle; JOG a signed relative pan (+ = right/CW,
-    - = left/CCW). Both are clamped to the bar's travel limits.
+    Commands: SCAN | STOP | GOTO | JOG | CENTER | SLEEP | WAKE | TRACK | HOLD |
+    TRACK_ONLY. GOTO takes an absolute angle; JOG a signed relative pan
+    (+ = right/CW, - = left/CCW). Both are clamped to the bar's travel limits.
+
+    TRACK_ONLY pins the bar to TRACK: it holds through a dropout instead of
+    falling back to a sweep, and the vision pipeline's automatic SCAN requests
+    are ignored. `{"command": "TRACK_ONLY", "value": false}` releases the pin,
+    as does an operator SCAN.
     """
     cmd = str(payload.get("command", "")).upper()
     if cmd not in _STEPPER_COMMANDS:
@@ -1919,6 +2071,10 @@ async def stepper_command(payload: dict, _: str = Depends(auth.require_api_key))
                 from fastapi import HTTPException
                 raise HTTPException(status_code=400, detail="JOG needs 'value' (signed degrees)")
             _radar.jog(float(val))
+        elif cmd == "TRACK_ONLY":
+            # value omitted → engage the pin (the button's normal use)
+            val = payload.get("value")
+            _radar.set_auto_rescan(not (True if val is None else bool(val)))
         elif cmd == "CENTER":
             _radar.center()
         elif cmd == "WAKE":

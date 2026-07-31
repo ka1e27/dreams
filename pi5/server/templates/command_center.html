@@ -432,6 +432,47 @@
   .spd-ctl{display:flex;align-items:center;gap:8px;margin-top:5px}
   .spd-ctl input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
   .spd-val{font-family:var(--mono);font-size:12px;color:var(--cyan);min-width:5ch;text-align:right}
+  /* ---- MANUAL OVERRIDE (WASD) ----
+     Armed state is deliberately loud: this is the one control that drives the
+     motors straight from a keypress, so it should never be ambiguous whether
+     it is live. */
+  #manualPanel{border-top:1px solid var(--hairline);margin-top:8px;padding-top:6px}
+  .man-arm-row{display:flex;align-items:center;gap:8px}
+  .man-arm{flex:1;font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+    padding:.45rem .6rem;border-radius:var(--r-sm);cursor:pointer;
+    background:var(--panel-2);color:var(--ink);border:1px solid var(--accent-dim);
+    transition:background .12s,border-color .12s,color .12s}
+  .man-arm:hover{background:var(--panel-3)}
+  .man-arm:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .man-arm.armed{background:rgba(255,59,59,.14);border-color:var(--crit);color:#ffd9d9}
+  .man-state{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted)}
+  .man-state.armed{color:var(--crit)}
+  .man-state.stale{color:var(--warn)}
+  .man-estop{display:none;margin-top:6px;padding:6px 8px;font-size:10px;line-height:1.5;
+    color:var(--warn);border:1px solid var(--warn);border-radius:4px;
+    background:rgba(255,176,46,.09)}
+  .man-estop.show{display:block}
+  .man-body{margin-top:8px;opacity:.4;pointer-events:none;transition:opacity .15s}
+  .man-body.on{opacity:1;pointer-events:auto}
+  .man-grid{display:grid;grid-template-columns:repeat(3,34px);grid-auto-rows:30px;
+    gap:4px;justify-content:center;margin:6px 0 2px}
+  .man-key{display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;font-weight:600;color:var(--muted);
+    background:var(--panel-2);border:1px solid var(--hairline);border-radius:var(--r-sm)}
+  .man-key.down{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-2)}
+  .man-out{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+  .man-out-cell{display:flex;justify-content:space-between;align-items:baseline;
+    background:var(--panel-2);border:1px solid var(--hairline);
+    border-radius:var(--r-sm);padding:.25rem .5rem}
+  .man-out-cell b{font-family:var(--mono);font-size:13px;color:var(--cyan)}
+  .man-stop{width:100%;margin-top:8px;font-family:var(--mono);font-size:11px;
+    letter-spacing:.1em;padding:.4rem;border-radius:var(--r-sm);cursor:pointer;
+    background:rgba(255,59,59,.1);color:#ffc9c9;border:1px solid var(--crit)}
+  .man-stop:hover{background:rgba(255,59,59,.2)}
+  .man-stop:focus-visible{outline:2px solid var(--crit);outline-offset:2px}
+  .man-hint{color:var(--muted);font-size:9px}
+  .man-help{margin-top:6px;font-size:10px;line-height:1.5;color:var(--muted)}
+  .man-help b{color:var(--ink);font-family:var(--mono)}
   /* ---- ESC / PROPULSION GAUGES (inside Boat Health) ---- */
   .esc-block{border-top:1px solid var(--hairline);margin-top:2px;
     background:linear-gradient(180deg,rgba(129,140,248,.035),transparent 60px)}
@@ -958,13 +999,21 @@
           <span class="cs"><span class="lbl">TRACK</span><select id="trackClass" class="imgsel"
             title="Which detected class the lock reticle + radar bar follow. AUTO = highest-confidence highlighted target.">
             <option value="">AUTO</option></select></span>
+          <span class="cs"><span class="lbl">TRK CONF</span><input type="range" id="trkConf" min="0" max="0.95" step="0.05" value="0"
+            title="Minimum confidence before the radar bar LOCKS onto a target. Separate from CONF: the overlay still draws and maps weaker contacts, this just stops the bar swinging at them. 0 = lock onto anything detected."
+            aria-label="Minimum confidence for the radar bar to lock a target"><span class="csv" id="trkConfV">OFF</span></span>
           <span class="cs"><span class="lbl">DET FPS</span><input type="range" id="detFps" min="1" max="15" step="1" value="8" aria-label="Detection frames per second"><span class="csv" id="detFpsV">8</span></span>
           <span class="cs"><span class="lbl">IMG</span><select id="imgsz" class="imgsel"
             title="YOLO inference size — smaller = faster detection (the real FPS lever); larger = better at distance">
             <option value="256">256</option><option value="320" selected>320</option>
             <option value="416">416</option><option value="512">512</option>
             <option value="640">640</option></select></span>
-          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40" aria-label="Detection confidence threshold"><span class="csv" id="confV">0.40</span></span>
+          <span class="cs"><span class="lbl">CONF</span><input type="range" id="conf" min="0.1" max="0.9" step="0.05" value="0.40"
+            title="Detection confidence threshold. Per-class floors (person, swimmer, …) shift with it, keeping their relative sensitivity."
+            aria-label="Detection confidence threshold"><span class="csv" id="confV">0.40</span></span>
+          <span class="cs"><span class="lbl">BUOY</span>
+            <button class="srcbtn active" id="buoyBtn" onclick="toggleBuoy()"
+              title="Classical colour/shape buoy screen. It hunts saturated orange/red blobs against desaturated water — off the water (indoors, on a bank) it false-positives freely, so switch it off on the bench.">ON</button></span>
           <span class="cs"><span class="lbl">QUALITY</span><input type="range" id="jq" min="30" max="95" step="5" value="60" aria-label="Camera stream JPEG quality"><span class="csv" id="jqV">60</span></span>
           <span class="cs"><span class="lbl">STREAM FPS</span><input type="range" id="sfps" min="1" max="30" step="1" value="15" aria-label="Camera stream frames per second"><span class="csv" id="sfpsV">15</span></span>
         </div>
@@ -1001,6 +1050,8 @@
           <div class="sec-ttl">POSITION</div>
           <div class="d-row"><span class="d-lbl">Lat</span><span class="d-val accent" id="t-lat">—</span></div>
           <div class="d-row"><span class="d-lbl">Lon</span><span class="d-val accent" id="t-lon">—</span></div>
+          <div class="d-row"><span class="d-lbl">GPS Fix</span><span class="d-val" id="t-gps" title="GPS fix quality, satellites used, and which receiver the position came from">—</span></div>
+          <div class="d-row"><span class="d-lbl">Accuracy</span><span class="d-val" id="t-gpsAcc" title="Horizontal dilution of precision — lower is better. Under 2 is good, over 5 means don't trust the position">—</span></div>
           <div class="d-row"><span class="d-lbl">Speed</span><span class="d-val" id="t-speed">—<span class="d-unit">kn</span></span></div>
           <div class="d-row"><span class="d-lbl">Battery</span><span class="d-val" id="t-batt">—<span class="d-unit">V</span></span></div>
           <div class="batt-bar-wrap"><div class="batt-bar-fill" id="t-battBar" style="width:0%"></div></div>
@@ -1081,6 +1132,49 @@
           <div class="spd-ctl"><input type="range" id="winchDSlider" min="10" max="100" step="5" value="50" aria-label="Winch down speed"></div>
           <div class="d-row" style="margin-top:6px"><span class="d-lbl">Winch Up</span><span class="spd-val"><span id="winchUVal">50</span></span></div>
           <div class="spd-ctl"><input type="range" id="winchUSlider" min="10" max="100" step="5" value="50" aria-label="Winch up speed"></div>
+        </div>
+
+        <!-- MANUAL OVERRIDE (WASD) -->
+        <div class="tele-sub" id="manualPanel">
+          <div class="sec-ttl">MANUAL OVERRIDE</div>
+          <div class="man-arm-row">
+            <button id="manArm" class="man-arm" type="button" aria-pressed="false">ARM MANUAL</button>
+            <span id="manState" class="man-state">DISARMED</span>
+          </div>
+          <div id="manEstop" class="man-estop" role="status">
+            Boat Pico is latched in <b>ESTOP</b> — it is refusing every throttle
+            command. Press <b>CLEAR E-STOP</b> in Commands before the motors will run.
+          </div>
+
+          <div id="manBody" class="man-body" aria-hidden="true">
+            <div class="man-grid" aria-hidden="true">
+              <div></div><div class="man-key" id="k-w">W</div><div></div>
+              <div class="man-key" id="k-a">A</div>
+              <div class="man-key" id="k-s">S</div>
+              <div class="man-key" id="k-d">D</div>
+            </div>
+
+            <div class="d-row" style="margin-top:8px">
+              <span class="d-lbl">Speed Limit</span>
+              <span class="spd-val"><span id="manSpdVal">40</span>%</span>
+            </div>
+            <div class="spd-ctl">
+              <input type="range" id="manSpd" min="0" max="100" step="5" value="40"
+                     aria-label="Manual override speed limit percent">
+            </div>
+
+            <div class="man-out">
+              <div class="man-out-cell"><span class="d-lbl">L</span><b id="manL">0</b></div>
+              <div class="man-out-cell"><span class="d-lbl">R</span><b id="manR">0</b></div>
+            </div>
+
+            <button id="manStop" class="man-stop" type="button">■ ALL STOP &nbsp;<span class="man-hint">Space</span></button>
+            <div class="man-help">
+              <b>W</b>/<b>S</b> ahead &amp; astern · <b>A</b>/<b>D</b> turn · arrows work too.<br>
+              Release keys to coast to neutral. Motors cut automatically if this
+              tab loses focus or the link drops.
+            </div>
+          </div>
         </div>
 
       </div>
@@ -1249,7 +1343,7 @@
               <text x="100" y="13" class="rose-card">0</text>
               <text x="187" y="101" class="rose-card">90</text>
               <text x="100" y="190" class="rose-card">180</text>
-              <text x="13" y="101" class="rose-card">270</text>
+              <text x="13" y="101" class="rose-card">-90</text>
             </svg>
           </div>
           <div class="radar-info">
@@ -1265,6 +1359,8 @@
                 <span class="cmd-glabel">SWEEP</span>
                 <button class="cbtn" onclick="stepperCmd('SCAN','Scanning')">SCAN</button>
                 <button class="cbtn" onclick="stepperCmd('TRACK','Tracking targets')">TRACK</button>
+                <button class="cbtn" id="rdrTrackOnly" onclick="toggleTrackOnly()"
+                  title="Stop sweeping — stay in TRACK. The bar holds position through a detection dropout instead of falling back to a sweep, and the vision pipeline can't send it back to SCAN. Press SCAN to release.">TRACK ONLY</button>
                 <button class="cbtn warn" onclick="stepperCmd('STOP','Holding position')">STOP</button>
                 <button class="cbtn" onclick="stepperCmd('CENTER','Centering')">CENTER</button>
               </div>
@@ -1289,7 +1385,8 @@
               <span class="cmd-div"></span>
               <div class="cmd-group">
                 <span class="cmd-glabel">LOCK TO</span>
-                <input id="rdrDeg" class="cmd-in" type="number" step="any" min="0" max="360" placeholder="0–360°">
+                <input id="rdrDeg" class="cmd-in" type="number" step="any" min="-180" max="180" placeholder="0 = ahead"
+                  title="Absolute bar angle. 0 = dead ahead, + = starboard, - = port. Range is read live from the bar's configured travel limits.">
                 <button class="cbtn" onclick="stepperGoto()">GO</button>
               </div>
             </div>
@@ -1586,6 +1683,78 @@ map.on('contextmenu', (e) => {
   toast('Coords loaded into NAV · click GO TO to navigate', true);
 });
 
+// ---- GPS fix status ------------------------------------------------------
+// NMEA GGA fix-quality codes. On this boat position comes from the *Pi's*
+// header UART (pi5/comms/gps_nmea.py) because the Pico's GP9 — its UART1 RX —
+// is shorted to GND, so `gps_source` is the field that says whether the
+// position you're looking at is real.
+const FIX_LABELS = { 0:'NO FIX', 1:'GPS', 2:'DGPS', 3:'PPS',
+                     4:'RTK FIX', 5:'RTK FLOAT', 6:'DEAD RECK.' };
+// Where the position came from → operator-facing label + whether to trust it.
+const GPS_SOURCES = {
+  'pi':        { tag:'pi',   ok:true,  hint:'Pi header UART (/dev/ttyAMA0)' },
+  'pi-stale':  { tag:'pi',   ok:false, hint:'the Pi GPS has gone quiet — the position shown is the LAST KNOWN one, not current' },
+  'pi-nofix':  { tag:'pi',   ok:false, hint:'the Pi GPS is streaming NMEA but has not locked yet — a sky-view problem, not a wiring one. A 3D fix needs 4 satellites; the count beside this field is how many it can hear' },
+  'pi-nolink': { tag:'pi?',  ok:false, hint:'no NMEA from the Pi GPS at all — module unpowered, TX wire off GPIO15 (header pin 10), or the uart0 overlay missing (sudo dtoverlay uart0)' },
+  'pico':      { tag:'pico', ok:false, hint:'no Pi GPS: falling back to the Boat Pico, which has no working receiver' },
+  'sim':       { tag:'sim',  ok:true,  hint:'simulated position' },
+};
+
+function renderGps(t){
+  const q = t.fix_quality | 0;
+  const src = GPS_SOURCES[t.gps_source] || { tag:t.gps_source||'?', ok:false, hint:'unknown source' };
+  const stale = t.gps_source === 'pi-stale';
+  const el = $('t-gps');
+
+  const nofix = t.gps_source === 'pi-nofix', nolink = t.gps_source === 'pi-nolink';
+  const vis = t.gps_sats_visible | 0, trk = t.gps_sats_tracked | 0, snr = t.gps_best_snr | 0;
+
+  // A stale fix reports quality 0, but "NO FIX" would be misleading while a
+  // (old) position is still on the map — so name it for what it is. "NO SIGNAL"
+  // likewise: with no NMEA at all we can't even claim the receiver said no fix.
+  let txt = stale ? 'STALE FIX' : nolink ? 'NO SIGNAL' : (FIX_LABELS[q] || ('Q' + q));
+  if (t.sats > 0 && (q > 0 || stale)) {
+    txt += ' · ' + t.sats + ' sat' + (t.sats === 1 ? '' : 's');
+  } else if (nofix) {
+    // The acquisition story in two numbers: how many satellites the receiver can
+    // hear out of how many it believes are up there, plus the best signal. A
+    // strong SNR with too few satellites means move the antenna, not fix a wire.
+    txt += ' · ' + trk + '/' + vis + ' sats';
+    if (snr > 0) txt += ' · ' + snr + 'dB';
+  }
+  el.innerHTML = txt + '<span class="d-unit">' + src.tag + '</span>';
+  // Green only when we have a fix AND it's fresh; amber for a stale fix (the
+  // position is still shown, so the operator must be told it's aging) and for a
+  // receiver that is demonstrably hearing satellites but hasn't locked — the RF
+  // chain is proven there, so nothing needs fixing but waiting. Red for no fix
+  // with nothing being heard, or a source that can't produce one at all.
+  el.style.color = (q > 0 && !stale && src.ok) ? 'var(--ok)'
+                 : (stale || q > 0) ? 'var(--warn)'
+                 : (nofix && trk > 0) ? 'var(--warn)' : 'var(--crit)';
+  el.title = txt.split(' · ')[0] + ' — ' + src.hint;
+  if (nofix) {
+    el.title += '\n\nHearing ' + trk + ' of ' + vis + ' satellite'
+      + (vis === 1 ? '' : 's') + ' in view'
+      + (snr > 0 ? ', best SNR ' + snr + ' dB-Hz' : '')
+      + '.\n' + (trk >= 4
+        ? 'Enough satellites — a fix should appear shortly.'
+        : 'A 3D fix needs 4. ' + (snr >= 30
+            ? 'Signal strength is good, so the antenna works — it needs more open sky.'
+            : 'Signal is weak: get the antenna clear of roofs and walls.'))
+      + '\nA cold start also needs ~30 s of uninterrupted signal to download the almanac.';
+  }
+
+  const acc = $('t-gpsAcc'), h = +t.hdop || 0;
+  if (!h){ acc.textContent = '—'; acc.style.color = ''; acc.title = 'No HDOP reported'; }
+  else {
+    acc.innerHTML = h.toFixed(2) + '<span class="d-unit">HDOP</span>';
+    acc.style.color = h <= 2 ? 'var(--ok)' : h <= 5 ? 'var(--warn)' : 'var(--crit)';
+    acc.title = 'HDOP ' + h.toFixed(2) + (h <= 2 ? ' — good' : h <= 5
+      ? ' — moderate, position may wander tens of metres'
+      : ' — poor, do not trust this position');
+  }
+}
+
 let lastTelemetry = 0, lastMissionRunning = false;
 function renderTelemetry(d){
   lastTelemetry = Date.now();
@@ -1593,13 +1762,17 @@ function renderTelemetry(d){
 
   $('t-lat').textContent = t.lat.toFixed(6);
   $('t-lon').textContent = t.lon.toFixed(6);
+  renderGps(t);
   $('t-speed').innerHTML = t.speed_knots.toFixed(2) + '<span class="d-unit">kn</span>';
   $('t-batt').innerHTML = t.batt_v.toFixed(1) + '<span class="d-unit">V</span>';
   const bp = t.batt_pct; const bar = $('t-battBar');
   bar.style.width = bp + '%';
   bar.className = 'batt-bar-fill' + (bp < 20 ? ' low' : bp < 50 ? ' mid' : '');
+  // '--' = no hull leak switches fitted (GP19/GP20 are the drive ESCs since
+  // 2026-07-30). Show it muted: it is neither "dry" (we cannot know) nor a leak.
   $('t-hull').textContent = t.hull;
-  $('t-hull').style.color = t.hull === 'DRY' ? 'var(--ok)' : 'var(--crit)';
+  $('t-hull').style.color = t.hull === 'DRY' ? 'var(--ok)'
+    : (t.hull === '--' || !t.hull) ? 'var(--muted)' : 'var(--crit)';
 
   const pos = [t.lat, t.lon];
   boatMarker.setLatLng(pos);
@@ -1617,6 +1790,23 @@ function renderTelemetry(d){
   $('t-thrR').style.height = Math.min(Math.abs(n.throttle_right), 100) + '%';
   $('t-thrLV').textContent = n.throttle_left;
   $('t-thrRV').textContent = n.throttle_right;
+
+  // Manual override — the server is authoritative. If it says the override is
+  // off (an ESTOP, a mission start, another operator) the panel must follow, or
+  // the keyboard would look live while doing nothing.
+  if (n.pico_estopped !== undefined) manSetEstopNote(!!n.pico_estopped);
+  if (n.manual !== undefined){
+    if (n.manual !== manArmed) manSetArmed(n.manual, true);
+    if (manArmed){
+      $('manL').textContent = n.throttle_left;
+      $('manR').textContent = n.throttle_right;
+      $('manState').textContent = n.manual_stale ? 'ARMED — NO INPUT (motors held)' : 'ARMED — WASD LIVE';
+      $('manState').classList.toggle('stale', !!n.manual_stale);
+    }
+    if (n.manual_speed !== undefined && document.activeElement !== $('manSpd')){
+      $('manSpd').value = n.manual_speed; $('manSpdVal').textContent = n.manual_speed;
+    }
+  }
 
   $('t-airTemp').innerHTML = e.air_temp + '<span class="d-unit">&deg;C</span>';
   $('t-airHum').innerHTML = e.air_humidity + '<span class="d-unit">%</span>';
@@ -1780,6 +1970,150 @@ function sendWinch(){
 winchDSl.addEventListener('input', () => { winchDV.textContent = winchDSl.value; sendWinch(); });
 winchUSl.addEventListener('input', () => { winchUV.textContent = winchUSl.value; sendWinch(); });
 
+// ---- manual override (WASD) ----------------------------------------------
+// Game-style direct drive. Three rules make this safe enough to hand a keyboard:
+//   1. It must be ARMED explicitly. Keys do nothing otherwise.
+//   2. The browser repeats the current key state at 10 Hz; the server zeroes the
+//      motors if nothing arrives for MANUAL_TIMEOUT_S. So a closed tab, a frozen
+//      renderer or dropped WiFi stops the boat without anyone doing anything.
+//   3. Anything that means "the operator is no longer driving" — blur, tab hide,
+//      Escape, a modal opening — releases every key immediately.
+const MAN_HZ = 10;
+const manKeys = { w:false, a:false, s:false, d:false };
+let manArmed = false, manTimer = null, manLastSent = '';
+
+const MAN_CODES = {
+  KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d',
+  ArrowUp:'w', ArrowLeft:'a', ArrowDown:'s', ArrowRight:'d',
+};
+
+function manTyping(){
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+function manModalOpen(){ return !!document.querySelector('.modal-bg.show'); }
+
+function manVector(){
+  const surge = (manKeys.w ? 1 : 0) - (manKeys.s ? 1 : 0);
+  const yaw   = (manKeys.d ? 1 : 0) - (manKeys.a ? 1 : 0);
+  return { surge, yaw };
+}
+
+function manPaintKeys(){
+  for (const k of ['w','a','s','d']) $('k-' + k).classList.toggle('down', manKeys[k]);
+}
+
+// Show/hide the "Pico is latched in ESTOP" note. Fed from both the telemetry
+// stream and the drive response, so it appears whether or not manual is armed.
+function manSetEstopNote(on){
+  $('manEstop').classList.toggle('show', !!on);
+}
+
+// Always send while armed — including all-zero frames. The zeros are what stop
+// the boat on key release, and the repeat is what feeds the dead-man timer.
+async function manTick(){
+  if (!manArmed) return;
+  const v = manVector();
+  try{
+    const d = await postApi('manual/drive', v);
+    $('manL').textContent = d.throttle_left;
+    $('manR').textContent = d.throttle_right;
+    manLastSent = '';
+    // The mix above is what the Pi *wants*. A latched Pico ESTOP refuses every
+    // one of them, so say so rather than showing live numbers on dead motors.
+    manSetEstopNote(!!d.pico_estopped);
+  }catch(e){
+    // 409 = the server does not think manual is armed (it restarted, a mission
+    // started, another operator took over). The server is authoritative, so stand
+    // down instead of pounding the endpoint at MAN_HZ forever: a tab left armed
+    // across a server restart sent ~900 futile requests a minute and then ate its
+    // own rate-limit budget. Re-arm is one click once the operator sees the toast.
+    if (e.status === 409){
+      manSetArmed(false, true);
+      toast('✗ Manual disarmed by the boat: ' + e.message, false);
+      return;
+    }
+    // Don't spam a toast every 100 ms — report a change of state only.
+    if (manLastSent !== e.message){ manLastSent = e.message; toast('✗ Manual: ' + e.message, false); }
+  }
+}
+
+function manReleaseAll(){
+  let changed = false;
+  for (const k of ['w','a','s','d']){ if (manKeys[k]){ manKeys[k] = false; changed = true; } }
+  manPaintKeys();
+  if (changed && manArmed) manTick();      // push the stop immediately
+}
+
+function manSetArmed(on, quiet){
+  manArmed = !!on;
+  manReleaseAll();
+  $('manArm').classList.toggle('armed', manArmed);
+  $('manArm').setAttribute('aria-pressed', manArmed ? 'true' : 'false');
+  $('manArm').textContent = manArmed ? 'DISARM' : 'ARM MANUAL';
+  $('manState').textContent = manArmed ? 'ARMED — WASD LIVE' : 'DISARMED';
+  $('manState').classList.toggle('armed', manArmed);
+  $('manBody').classList.toggle('on', manArmed);
+  $('manBody').setAttribute('aria-hidden', manArmed ? 'false' : 'true');
+  clearInterval(manTimer); manTimer = null;
+  if (manArmed){
+    manTimer = setInterval(manTick, 1000 / MAN_HZ);
+  } else {
+    $('manL').textContent = '0'; $('manR').textContent = '0';
+  }
+  if (!quiet) toast(manArmed ? '⚠ MANUAL ARMED — WASD drives the motors' : '✓ Manual disarmed', manArmed ? false : true);
+}
+
+async function manToggle(){
+  const next = !manArmed;
+  try{
+    await postApi('manual', { enabled: next });
+    manSetArmed(next);
+  }catch(e){ toast('✗ ' + e.message, false); }
+}
+
+$('manArm').addEventListener('click', manToggle);
+$('manStop').addEventListener('click', () => { manReleaseAll(); manTick(); });
+
+document.addEventListener('keydown', e => {
+  if (!manArmed || manTyping() || manModalOpen()) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.code === 'Space'){ e.preventDefault(); manReleaseAll(); manTick(); return; }
+  const k = MAN_CODES[e.code];
+  if (!k) return;
+  e.preventDefault();                       // stop WASD/arrows scrolling the page
+  if (!manKeys[k]){ manKeys[k] = true; manPaintKeys(); manTick(); }
+});
+document.addEventListener('keyup', e => {
+  const k = MAN_CODES[e.code];
+  if (!k) return;
+  if (manKeys[k]){ manKeys[k] = false; manPaintKeys(); if (manArmed) manTick(); }
+});
+
+// "Operator is no longer driving" — drop everything. keyup never fires for a key
+// still held when the window loses focus, so without this the boat would keep
+// the last command until the dead-man timer caught it.
+window.addEventListener('blur', manReleaseAll);
+document.addEventListener('visibilitychange', () => { if (document.hidden) manReleaseAll(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') manReleaseAll(); });
+
+// Speed bar. Sent immediately (not debounced like the cruise sliders) — while
+// driving, a speed change the operator can't feel for 200 ms feels broken.
+$('manSpd').addEventListener('input', () => {
+  const v = $('manSpd').value;
+  $('manSpdVal').textContent = v;
+  postApi('manual/speed', { speed: parseInt(v) }).catch(() => {});
+});
+
+// Adopt whatever the server already thinks — survives a dashboard reload with
+// the override still armed, rather than showing a disarmed panel on a live boat.
+fetch('/api/manual', { headers: apiHeaders() }).then(r => r.json()).then(d => {
+  $('manSpd').value = d.speed; $('manSpdVal').textContent = d.speed;
+  if (d.enabled) manSetArmed(true, true);
+}).catch(() => {});
+
 // ---- system health --------------------------------------------------------
 let lastHealth = 0;
 function buildCores(n){
@@ -1926,11 +2260,55 @@ function renderHealth(h){
     _b.textContent = tgt.label;
     rt.appendChild(_b);
     rt.appendChild(document.createTextNode(' · ' + _pct + '%'));
+    // Where the target sits relative to frame centre, and whether the bar has
+    // settled. The offset is the loop's actual error term — seeing it shrink is
+    // how you tell tracking is converging rather than merely moving.
+    if (h.stepper_centered){
+      rt.appendChild(document.createTextNode(' · '));
+      const _c = document.createElement('span');
+      _c.style.color = 'var(--ok)';
+      _c.textContent = 'CENTRED';
+      rt.appendChild(_c);
+    } else if (h.stepper_offset_deg != null){
+      const off = h.stepper_offset_deg;
+      rt.appendChild(document.createTextNode(
+        ' · ' + Math.abs(off).toFixed(1) + '° ' + (off < 0 ? 'port' : 'stbd')));
+    }
+    // Target's angular rate + the lead the bar is applying for it. Only shown
+    // once it's actually moving, so a stationary target doesn't carry noise.
+    const rate = h.stepper_target_rate_dps;
+    if (rate != null && Math.abs(rate) >= 1.0){
+      const _r = document.createElement('span');
+      _r.style.color = 'var(--muted)';
+      _r.textContent = ' · ' + Math.abs(rate).toFixed(0) + '°/s'
+                     + (h.stepper_lead_deg ? ' (lead ' + h.stepper_lead_deg.toFixed(1) + '°)' : '');
+      rt.appendChild(_r);
+    }
+    // Locked but the offset isn't shrinking → almost certainly a direction fault.
+    if (h.stepper_track_warning){
+      const _w = document.createElement('div');
+      _w.style.color = 'var(--warn)';
+      _w.style.fontSize = '10px';
+      _w.textContent = '⚠ ' + h.stepper_track_warning;
+      rt.appendChild(_w);
+    }
+  } else if (h.stepper_no_lock_reason){
+    // WHY it isn't locked, in the operator's terms. "it saw me and didn't track
+    // me" has three very different causes (below TRK CONF / wrong class / no
+    // detections) and they're indistinguishable from outside the process.
+    // Server-supplied class labels can echo model output → textContent only.
+    rt.textContent = '';
+    const _w = document.createElement('span');
+    _w.className = 'muted';
+    _w.textContent = (rs === 'SCANNING' ? 'scanning — ' : 'no lock — ')
+                   + h.stepper_no_lock_reason;
+    rt.appendChild(_w);
   } else if (rs === 'SCANNING'){
     rt.innerHTML = '<span class="muted">scanning for targets…</span>';
   } else {
     rt.innerHTML = '<span class="muted">no target</span>';
   }
+  if (h.stepper_auto_rescan != null) renderTrackOnly(!h.stepper_auto_rescan);
   // boat / pico health panel
   renderBoat(h.boat);
   // pod link light
@@ -1939,7 +2317,9 @@ function renderHealth(h){
   else if (h.pod_ok) setDot('dot-pod', true);                                  // healthy
   else setDot('dot-pod', false);                                               // not responding
   // warning banner (prioritised — leaks are most urgent)
-  const hullLeak = h.boat && h.boat.hull && h.boat.hull !== 'DRY';
+  // '--' means the sensor is absent, not that the hull is flooded — don't alarm on it.
+  const hullLeak = h.boat && h.boat.hull
+    && h.boat.hull !== 'DRY' && h.boat.hull !== '--';
   // CRITICAL vision threat: banner while it's within 50 m (or distance unknown).
   const pt = h.vision && h.vision.primary_threat;
   const critThreat = pt && pt.threat_level === 'CRITICAL'
@@ -2253,7 +2633,9 @@ async function postApi(path, body){
   });
   if (!r.ok){
     const j = await r.json().catch(()=>({}));
-    throw new Error(j.detail || ('HTTP ' + r.status));
+    const err = new Error(j.detail || ('HTTP ' + r.status));
+    err.status = r.status;      // callers that must react to *which* failure
+    throw err;
   }
   return r.json().catch(()=>({}));
 }
@@ -2908,13 +3290,18 @@ document.addEventListener('keydown', e => {
 });
 
 // ---- camera / detection controls (POST to /api/camera) --------------------
-let camT;
+let camT, camPending = {};
 function postCamera(body){
+  // MERGE rather than replace: one shared debounce timer serves every control
+  // here, so overwriting the body would silently drop the first setting whenever
+  // two are touched inside the 150 ms window (drag CONF, then TRK CONF).
+  Object.assign(camPending, body);
   clearTimeout(camT);
   camT = setTimeout(() => {
+    const payload = camPending; camPending = {};
     fetch('/api/camera', { method:'POST',
       headers: apiHeaders({'Content-Type':'application/json'}),
-      body: JSON.stringify(body) }).catch(()=>{});
+      body: JSON.stringify(payload) }).catch(()=>{});
   }, 150);
 }
 // TRACK picker: a live list of what the cameras see right now plus anything
@@ -2953,6 +3340,9 @@ async function loadCameraControls(){
     rebuildTrackList();
     if (c.detect_max_fps != null){ $('detFps').value = c.detect_max_fps; $('detFpsV').textContent = c.detect_max_fps; }
     if (c.conf != null){ $('conf').value = c.conf; $('confV').textContent = Number(c.conf).toFixed(2); }
+    showConfFloors(c.conf_floors, c.conf_absolute);
+    if (c.track_conf != null){ $('trkConf').value = c.track_conf; renderTrkConf(c.track_conf); }
+    renderBuoy(c.buoy_enabled, c.buoy_available);
     if (c.jpeg_quality != null){ $('jq').value = c.jpeg_quality; $('jqV').textContent = c.jpeg_quality; }
     if (c.stream_fps != null){ $('sfps').value = c.stream_fps; $('sfpsV').textContent = c.stream_fps; }
     if (c.imgsz != null){ $('imgsz').value = String(c.imgsz); }
@@ -2975,7 +3365,58 @@ $('trackClass').addEventListener('change', () => {
 });
 $('detFps').addEventListener('input', () => { $('detFpsV').textContent = $('detFps').value; postCamera({ detect_max_fps: parseFloat($('detFps').value) }); });
 $('imgsz').addEventListener('change', () => postCamera({ imgsz: parseInt($('imgsz').value) }));
-$('conf').addEventListener('input', () => { $('confV').textContent = Number($('conf').value).toFixed(2); postCamera({ conf: parseFloat($('conf').value) }); });
+// CONF's per-class floors are RELATIVE to it, so the same drag moves person /
+// swimmer / … too. Surfacing the resolved floors in the tooltip is what makes
+// that visible — otherwise the slider looks inert on exactly the classes the
+// boat cares about most (which is how it read before 2026-07-29).
+function showConfFloors(floors, absolute){
+  const el = $('conf');
+  if (!floors || !Object.keys(floors).length) return;
+  const abs = new Set(absolute || []);
+  const parts = Object.keys(floors).map(k => `${k} ${Number(floors[k]).toFixed(2)}${abs.has(k) ? '*' : ''}`);
+  el.title = 'Detection confidence threshold. Per-class floors move with it: '
+           + parts.join(' · ') + (abs.size ? '   (* fixed — score is a quality proxy, not a probability)' : '');
+}
+$('conf').addEventListener('input', () => {
+  $('confV').textContent = Number($('conf').value).toFixed(2);
+  postCamera({ conf: parseFloat($('conf').value) });
+  // Re-read so the tooltip shows the floors the server actually resolved.
+  setTimeout(() => fetch('/api/camera', { headers: apiHeaders() })
+    .then(r => r.json()).then(c => showConfFloors(c.conf_floors, c.conf_absolute)).catch(()=>{}), 400);
+});
+// Minimum confidence for the radar bar to LOCK. 0 reads OFF, not "0.00" —
+// "no threshold" and "a threshold of zero" look identical as a number but mean
+// different things to an operator scanning the bar.
+function renderTrkConf(v){
+  $('trkConfV').textContent = Number(v) > 0 ? Number(v).toFixed(2) : 'OFF';
+}
+$('trkConf').addEventListener('input', () => {
+  const v = parseFloat($('trkConf').value);
+  renderTrkConf(v);
+  postCamera({ track_conf: v });
+});
+// Classical buoy screen. Disabled outright when the loaded model emits 'buoy'
+// itself — the screen isn't running then, so a toggle would be a lie.
+let buoyOn = true;
+function renderBuoy(enabled, available){
+  const b = $('buoyBtn');
+  if (available === false){
+    buoyOn = false; b.disabled = true; b.classList.remove('active');
+    b.textContent = 'N/A';
+    b.title = 'the loaded model emits "buoy" itself — the classical screen is not running';
+    return;
+  }
+  if (enabled != null) buoyOn = !!enabled;
+  b.disabled = false;
+  b.textContent = buoyOn ? 'ON' : 'OFF';
+  b.classList.toggle('active', buoyOn);
+}
+function toggleBuoy(){
+  buoyOn = !buoyOn;
+  renderBuoy(buoyOn, true);
+  postCamera({ buoy_enabled: buoyOn });
+  toast(buoyOn ? '◈ Buoy screen ON' : '◈ Buoy screen OFF', true);
+}
 $('jq').addEventListener('input', () => { $('jqV').textContent = $('jq').value; postCamera({ jpeg_quality: parseInt($('jq').value) }); });
 $('sfps').addEventListener('input', () => { $('sfpsV').textContent = $('sfps').value; postCamera({ stream_fps: parseFloat($('sfps').value) }); });
 loadCameraControls();
@@ -3042,9 +3483,26 @@ function stepperCmd(cmd, msg){
   postStepper(cmd).then(()=> toast('✓ ' + (msg || cmd), true))
                   .catch(e=> toast('✗ ' + e.message, false));
 }
+// TRACK ONLY: pin the bar to TRACK so a detection dropout holds position
+// instead of dropping back to a sweep. Reflected from /ws/health, so the button
+// also shows the pin being released by an operator SCAN.
+let trackOnly = false;
+function renderTrackOnly(on){
+  trackOnly = !!on;
+  const b = $('rdrTrackOnly');
+  b.classList.toggle('active', trackOnly);
+  b.textContent = trackOnly ? '◉ TRACK ONLY' : 'TRACK ONLY';
+}
+function toggleTrackOnly(){
+  const want = !trackOnly;
+  renderTrackOnly(want);
+  postStepper('TRACK_ONLY', want)
+    .then(()=> toast(want ? '◉ Track only — sweeping off' : '✓ Auto-scan re-enabled', true))
+    .catch(e=> { renderTrackOnly(!want); toast('✗ ' + e.message, false); });
+}
 function stepperGoto(){
-  const d = parseFloat($('rdrDeg').value);
-  if (isNaN(d)){ toast('enter an angle in degrees (0–360)', false); return; }
+  const el = $('rdrDeg'), d = parseFloat(el.value);
+  if (isNaN(d)){ toast('enter an angle in degrees (' + el.min + ' to ' + el.max + ', 0 = ahead)', false); return; }
   postStepper('GOTO', d).then(()=> toast('✓ Locking to ' + d + '°', true))
                         .catch(e=> toast('✗ ' + e.message, false));
 }
@@ -3065,6 +3523,15 @@ function roseXY(deg, r){ const a = deg * Math.PI / 180; return [100 + r*Math.sin
   }
   $('rose-ticks').innerHTML = s;
   fetch('/stepper/status', { headers: apiHeaders() }).then(r=>r.json()).then(j=>{
+    // Bind the GOTO input to the bar's REAL travel limits rather than a
+    // hard-coded 0-360, so re-centring the axis on the bow can't leave the
+    // markup lying about what the operator may type.
+    if (Array.isArray(j.limits)){
+      const el = $('rdrDeg');
+      el.min = j.limits[0]; el.max = j.limits[1];
+      el.title = `Absolute bar angle, ${j.limits[0]} to ${j.limits[1]}°. `
+               + `0 = dead ahead, + = starboard, - = port.`;
+    }
     // Shade the auto-scan sweep sector (SCAN range), not the full manual range.
     const sw = j.sweep || j.limits;
     if (!sw || j.available === false) return;

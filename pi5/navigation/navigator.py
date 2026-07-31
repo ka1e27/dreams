@@ -78,6 +78,12 @@ class NavConfig:
     # (bias the faster motor's gain down); the heading loop mops up the remainder.
     motor_gain_left: float = 1.0
     motor_gain_right: float = 1.0
+    # ---- Manual (WASD) override ----
+    # Startup speed cap for the dashboard's manual drive, in percent. The
+    # operator moves it live with the speed bar; this is only the initial value.
+    # Deliberately well below 100 so an armed override does not launch at full
+    # throttle on the first keypress.
+    manual_speed: int = 40
     # ---- Water-current estimation + station-keeping (stay mode) ----
     # Through-water speed model  v = thrust_a*|thr| + thrust_b*thr^2  (thr = mean
     # forward command, -1..1). Used to estimate the current as
@@ -119,6 +125,11 @@ class NavState:
     current_set_deg: float = 0.0
     current_drift_ms: float = 0.0
     station_keeping: bool = False
+    # Manual (WASD) override. manual_stale = the dead-man timer tripped, so the
+    # motors are being held at zero until a fresh input arrives.
+    manual: bool = False
+    manual_speed: int = 40
+    manual_stale: bool = False
 
 
 class Navigator:
@@ -160,6 +171,19 @@ class Navigator:
         self._last_thr_frac: float = 0.0            # last mean forward cmd (-1..1)
         self._last_cur_gps: tuple[float, float] | None = None
 
+        # Manual (WASD) override — highest priority in the nav loop.
+        self._manual = False
+        self._manual_surge = 0.0        # -1..+1, + = ahead
+        self._manual_yaw = 0.0          # -1..+1, + = starboard
+        self._manual_speed = int(getattr(self._config, "manual_speed", 40))
+        self._manual_stamp = 0.0        # monotonic() of the last operator input
+
+        # Throttle-failure log de-duplication. The loop runs at update_rate_hz, so
+        # a persistent refusal (a latched Pico ESTOP NAKs every SET_THR) writes
+        # 5 identical lines a second and buries the alert that explains it.
+        self._thr_err_sig: str | None = None
+        self._thr_err_stamp = 0.0
+
         self._task: asyncio.Task[None] | None = None
         self._on_arrived: asyncio.Event = asyncio.Event()
 
@@ -172,6 +196,12 @@ class Navigator:
         from wherever the boat is on the first navigation tick, so a bare
         ``goto()`` still follows a sensible straight line from the current spot.
         """
+        # An explicit autonomous command means the operator is handing control
+        # back. Without this the manual branch would keep outranking the new
+        # target and the boat would sit still while the UI claimed it was under
+        # way. Done here rather than at the API so every caller is covered.
+        if self._manual:
+            self.enable_manual(False)
         self.state.target_lat = lat
         self.state.target_lon = lon
         self.state.arrived = False
@@ -185,6 +215,8 @@ class Navigator:
 
     def hold(self, lat: float, lon: float) -> None:
         """Enter station-keeping mode at a position."""
+        if self._manual:            # same hand-back rule as goto()
+            self.enable_manual(False)
         self._hold_lat = lat
         self._hold_lon = lon
         self._holding = True
@@ -203,6 +235,73 @@ class Navigator:
         self._leg_lat = None
         self._leg_lon = None
         self._xte_integral = 0.0
+
+    # ---- Manual (WASD) override ------------------------------------------
+    # Dead-man interval. The browser repeats the current key state at ~10 Hz; if
+    # nothing arrives within this window the loop zeroes the motors on its own.
+    # That is the whole safety story for a control surface driven over a network
+    # by a tab that can be closed, backgrounded, or lose WiFi mid-turn — the ESCs
+    # hold their last pulse forever otherwise.
+    MANUAL_TIMEOUT_S = 0.75
+
+    def enable_manual(self, on: bool) -> None:
+        """Enter or leave manual override.
+
+        Entering cancels any autonomous navigation (goto/stay) so the two cannot
+        fight over the throttle, and starts from a stopped, stale state — the
+        boat does not move until the operator actually presses a key.
+        """
+        on = bool(on)
+        if on:
+            self.stop_nav()
+            self._manual_surge = 0.0
+            self._manual_yaw = 0.0
+            self._manual_stamp = 0.0        # stale until the first real input
+        else:
+            self._manual_surge = 0.0
+            self._manual_yaw = 0.0
+        self._manual = on
+        self.state.manual = on
+        self.state.manual_stale = False
+        logger.info("MANUAL override %s", "ENABLED" if on else "disabled")
+
+    def manual_input(self, surge: float, yaw: float) -> None:
+        """Feed one operator input sample. Ignored unless manual mode is on."""
+        if not self._manual:
+            return
+        self._manual_surge = max(-1.0, min(1.0, float(surge)))
+        self._manual_yaw = max(-1.0, min(1.0, float(yaw)))
+        self._manual_stamp = time.monotonic()
+
+    def set_manual_speed(self, pct: int) -> int:
+        """Set the manual speed cap (0-100 %). Returns the clamped value."""
+        self._manual_speed = int(max(0, min(100, int(pct))))
+        self.state.manual_speed = self._manual_speed
+        return self._manual_speed
+
+    @property
+    def manual_speed(self) -> int:
+        return self._manual_speed
+
+    def manual_mix(self) -> tuple[int, int]:
+        """Mix surge/yaw into (left, right) percent, scaled by the speed cap.
+
+        Turning is differential: yaw adds to one side and subtracts from the
+        other, so full yaw with no surge pivots in place (which needs the ESCs in
+        bidirectional/3D mode — see docs/esc_setup.md). If the combination would
+        clip past 100 the pair is scaled down together, preserving the *ratio*
+        rather than letting one side saturate and quietly turn the boat.
+        """
+        scale = self._manual_speed / 100.0
+        fwd = self._manual_surge * scale * 100.0
+        turn = self._manual_yaw * scale * 100.0
+        left = fwd + turn
+        right = fwd - turn
+        peak = max(abs(left), abs(right))
+        if peak > 100.0:
+            left = left * 100.0 / peak
+            right = right * 100.0 / peak
+        return int(round(left)), int(round(right))
 
     def set_avoidance_override(self, left: int, right: int) -> None:
         """Set obstacle avoidance throttle override (from CV module).
@@ -321,6 +420,39 @@ class Navigator:
 
         return left, right, dist, brg, err, False
 
+    def _log_thr_error(self, exc: Exception, where: str) -> None:
+        """Log a SET_THR failure once, then at most every 5 s while it persists.
+
+        Adds the recovery step for the one cause the operator can actually clear:
+        a latched Pico ESTOP refuses every throttle command until a RESUME, and
+        nothing else in the stack says so.
+        """
+        reason = getattr(exc, "reason", None)
+        sig = "%s:%s" % (where, reason or str(exc))
+        now = time.monotonic()
+        if sig == self._thr_err_sig and now - self._thr_err_stamp < 5.0:
+            return
+        self._thr_err_sig = sig
+        self._thr_err_stamp = now
+        if reason == "ESTOP":
+            logger.error(
+                "SET_THR refused (%s): Boat Pico is latched in ESTOP — clear it "
+                "(dashboard CLEAR E-STOP / POST /api/resume) before it will drive",
+                where)
+        elif reason == "RC_ACTIVE":
+            logger.error(
+                "SET_THR refused (%s): Boat Pico is in RC override — release RC "
+                "to hand control back to the Pi", where)
+        elif reason == "ESC_UNSAFE":
+            logger.error(
+                "SET_THR refused (%s): a drive ESC is not confirmed bi-directional, "
+                "so 1.5 ms 'neutral' would be ~50%% throttle to it and ESTOP could "
+                "not stop it. Throttle stays blocked until the ESC is set to "
+                "3D/bi-directional mode and escs.BIDIR_CONFIRMED is updated "
+                "(docs/esc_setup.md)", where)
+        else:
+            logger.error("SET_THR failed (%s): %s", where, exc)
+
     def _trim(self, left: int, right: int) -> tuple[int, int]:
         """Scale each motor command by its trim gain and re-clamp to [-100, 100].
 
@@ -408,8 +540,27 @@ class Navigator:
                     self.state.current_set_deg = s_deg
                     self.state.current_drift_ms = drift_ms
 
+                # --- Manual override: outranks everything, including stay mode ---
+                if self._manual:
+                    stale = (time.monotonic() - self._manual_stamp
+                             > self.MANUAL_TIMEOUT_S)
+                    if stale:
+                        left, right = 0, 0
+                    else:
+                        left, right = self._trim(*self.manual_mix())
+                    self.state.manual_stale = stale
+                    self.state.station_keeping = False
+                    self.state.avoiding = False
+                    self.state.throttle_left = left
+                    self.state.throttle_right = right
+                    self._last_thr_frac = (left + right) / 200.0
+                    try:
+                        await self._pico.set_throttle(left, right)
+                    except Exception as e:
+                        self._log_thr_error(e, "manual")
+
                 # --- Stay mode: active current-aware station-keeping (priority) ---
-                if self._holding and self._hold_lat is not None:
+                elif self._holding and self._hold_lat is not None:
                     left, right = self.station_keep(tel.lat, tel.lon, tel.heading)
                     self.state.distance_m = haversine_distance(
                         tel.lat, tel.lon, self._hold_lat, self._hold_lon)
@@ -424,7 +575,7 @@ class Navigator:
                     try:
                         await self._pico.set_throttle(left, right)
                     except Exception as e:
-                        logger.error("SET_THR failed: %s", e)
+                        self._log_thr_error(e, "stay")
                 elif self.state.active and self.state.target_lat is not None:
                     self.state.station_keeping = False
                     # Anchor the LOS track line: use the caller-supplied leg
@@ -486,7 +637,7 @@ class Navigator:
                         try:
                             await self._pico.set_throttle(left, right)
                         except Exception as e:
-                            logger.error("SET_THR failed: %s", e)
+                            self._log_thr_error(e, "nav")
                 else:
                     # Not navigating — ensure motors are stopped
                     self.state.station_keeping = False

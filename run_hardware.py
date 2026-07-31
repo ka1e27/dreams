@@ -26,6 +26,7 @@ import uvicorn
 import yaml
 
 import pi5.server.app as server_app
+from pi5.comms.gps_nmea import NmeaGps
 from pi5.comms.pico_serial import PicoSerial
 from pi5.comms.pod_bridge import PodBridge
 from pi5.cv.buoy_detector import BuoyDetectorConfig
@@ -104,11 +105,39 @@ def main() -> None:
     step_cfg = cfg.get("stepper", {})
     vision_cfg = cfg.get("vision", {})
 
+    gps_cfg = cfg.get("gps", {}) or {}
+
     port = serial_cfg.get("port", "/dev/ttyACM0")
     baud = serial_cfg.get("baud", 115200)
 
     # --- Real hardware interfaces ---
     pico = PicoSerial(port=port, baud=baud)
+
+    # Pi-side GPS. The Pico can't host the GPS on this board (GP9 — J7.3 / UART1
+    # RX — is shorted to GND), so position is read on the Pi's header UART and
+    # injected into pico.telemetry, which is what the whole nav stack already
+    # reads. Heading still comes from the Pico's compass.
+    gps = None
+    if gps_cfg.get("enabled", False):
+        gps_stale = float(gps_cfg.get("stale_after_s", 5.0))
+        gps = NmeaGps(
+            port=gps_cfg.get("port", "/dev/ttyAMA0"),
+            baud=int(gps_cfg.get("baud", 38400)),
+            stale_after_s=gps_stale,
+        )
+        pico.use_external_gps(max_age_s=gps_stale)
+        gps.on_fix(lambda f: pico.set_external_position(
+            f.lat, f.lon, speed_knots=f.speed_knots,
+            fix_quality=f.fix_quality, sats=f.sats, hdop=f.hdop,
+        ))
+        # on_fix is silent until the receiver locks, which left the whole
+        # acquisition phase looking identical to "no GPS fitted". on_status fires
+        # on every GGA regardless, so the command center can say "Pi GPS: 2 of 2
+        # sats, best SNR 34, no fix" instead of falling back to "pico".
+        gps.on_status(lambda s: pico.set_external_gps_status(
+            sats_visible=s.sats_visible, sats_tracked=s.sats_tracked,
+            best_snr=s.best_snr, linked=s.linked,
+        ))
     nav = Navigator(pico, _nav_config(cfg.get("navigation", {})))
     pod = PodBridge(pico)
     mission = MissionManager(pico, nav, pod)
@@ -189,6 +218,8 @@ def main() -> None:
         highlight_classes=det_cfg.get("highlight_classes") or ["boat", "person"],
         track_class=det_cfg.get("track_class", "") or "",
         class_conf=det_cfg.get("class_conf") or {},
+        class_conf_absolute=det_cfg.get("class_conf_absolute") or [],
+        detect_right=bool(det_cfg.get("detect_right", False)),
         num_threads=int(det_cfg.get("num_threads", 0) or 0),
         buoy_fallback=buoy_cfg.enabled,
         buoy_cfg=buoy_cfg,
@@ -212,6 +243,9 @@ def main() -> None:
         min_deg=step_cfg.get("manual_min_degrees", 0),
         max_deg=step_cfg.get("manual_max_degrees", 360),
         has_slip_ring=step_cfg.get("has_slip_ring", False),
+        # Flip if EVERY move comes out mirrored (jog included) — that's the DIR
+        # pin. If only tracking is mirrored, use invert_tracking below instead.
+        invert_direction=step_cfg.get("invert_direction", False),
     )
     radar = RadarTracker(
         stepper, overlay,
@@ -223,6 +257,17 @@ def main() -> None:
         frame_width=cam_cfg.get("width", 640),
         priority_classes=step_cfg.get("priority_classes") or ["boat", "person"],
         initial_mode=step_cfg.get("initial_mode", "SLEEP"),
+        # None → midpoint of the sweep range (90° for the shipped 0-180 sweep).
+        bow_deg=step_cfg.get("bow_degrees"),
+        invert_tracking=step_cfg.get("invert_tracking", False),
+        min_track_conf=step_cfg.get("min_track_confidence", 0.0),
+        center_deadband_deg=step_cfg.get("center_deadband_degrees", 3.0),
+        track_gain=step_cfg.get("track_gain", 0.9),
+        track_speed_min_rpm=step_cfg.get("track_speed_min_rpm", 1.5),
+        max_step_deg=step_cfg.get("max_step_degrees", 30.0),
+        lead_seconds=step_cfg.get("lead_seconds", 0.35),
+        velocity_window_s=step_cfg.get("velocity_window_seconds", 0.8),
+        velocity_speed_margin=step_cfg.get("velocity_speed_margin", 1.4),
     )
 
     # Three-tier survey vision pipeline. LAYERS on the overlay + radar above (it
@@ -235,6 +280,10 @@ def main() -> None:
         config=vision_cfg, pico=pico, navigator=nav,
         fov_deg=step_cfg.get("fov_degrees", 75),
         frame_width=cam_cfg.get("width", 640),
+        # Cameras ride the radar bar, so every bbox bearing is relative to the
+        # bar and the pipeline has to add its angle back in to get bow-relative
+        # (geolocation + avoidance steering both depend on this).
+        cameras_on_bar=step_cfg.get("cameras_on_bar", True),
     )
 
     # Camera clip recorder + Tesla-style sentry (writes .webm to disk on the Pi).
@@ -331,6 +380,21 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001 — keep serving so the UI can report it
             logger.error("Failed to connect to Boat Pico on %s: %s", port, e)
 
+        # GPS: start before the navigator so a fix can land before the first nav
+        # tick. Read-only on its port and self-healing, so it can never block
+        # startup — a missing /dev/ttyAMA0 just logs and retries.
+        if gps is not None:
+            try:
+                await gps.start()
+            except Exception as e:  # noqa: BLE001 — never block startup on the GPS
+                logger.error("GPS reader failed to start: %s", e)
+        else:
+            logger.warning(
+                "GPS DISABLED (gps.enabled=false) — the Pico reports lat/lon 0.0 on "
+                "this board, so the navigator will compute from (0, 0). Waypoint "
+                "navigation and station-keeping will not work."
+            )
+
         await nav.start()
         await pod.start()
 
@@ -358,6 +422,11 @@ def main() -> None:
     async def _shutdown() -> None:
         await nav.stop()
         await pod.stop()
+        if gps is not None:
+            try:
+                await gps.stop()
+            except Exception as e:  # noqa: BLE001
+                logger.error("GPS reader shutdown error: %s", e)
         await pico.disconnect()
         try:
             await pipeline.stop()

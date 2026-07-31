@@ -14,6 +14,24 @@ serial:
   # firmware dev when you flash manually).
   deploy_on_start: true
 
+# Pi-side GPS — a u-blox M10 on the Pi 5 header UART (module TX → GPIO15 /
+# header pin 10). The Pico can't host it: its GP9 (J7.3, UART1 RX) is
+# hard-shorted to GND on the as-built board. See pi5/comms/gps_nmea.py.
+#
+# ⚠ REQUIRES the uart0 overlay, or /dev/ttyAMA0 won't exist:
+#       dtoverlay=uart0        in /boot/firmware/config.txt
+# ⚠ These are the same pins pi5/scripts/am32_config.py uses to flash AM32 ESCs —
+#   unplug the GPS before configuring an ESC.
+gps:
+  enabled: true
+  port: "/dev/ttyAMA0"
+  # 38400 is the u-blox M10 factory default (M8 was 9600 — don't "fix" this).
+  baud: 38400
+  # How old a fix may get before fix_quality is forced to 0 and gps_source
+  # becomes "pi-stale". Position keeps being served either way — the Pico has no
+  # receiver to fall back to, so a few-seconds-old fix beats (0, 0).
+  stale_after_s: 5.0
+
 heartbeat:
   # Interval between HB messages sent to Boat Pico (seconds)
   interval_s: 1.0
@@ -56,6 +74,12 @@ navigation:
   # and lower the gain of whichever motor is faster until it tracks straight.
   motor_gain_left: 1.0
   motor_gain_right: 1.0
+  # ---- Manual (WASD) override ----
+  # Startup speed cap for the dashboard's manual drive, in percent. The operator
+  # moves it live with the speed bar; this is only the value the panel opens at.
+  # Kept well below 100 so an armed override can't launch at full throttle on the
+  # first keypress.
+  manual_speed: 40
   # ---- Water-current estimation + station-keeping (stay mode) ----
   # The boat has no water-speed sensor, so it estimates the current as
   # (GPS ground velocity − modelled through-water velocity). The model is
@@ -246,11 +270,22 @@ camera:
     # water screen. 416/640 see smaller/farther targets but cost proportionally
     # more per frame (the real lever on detection FPS — detect_max_fps only caps).
     imgsz: 320
-    conf: 0.40            # min confidence to keep a detection
-    # Per-class confidence floors, overriding `conf` for that class only. The
-    # model is run at the LOWEST floor in play and each box is then filtered by
-    # its own class's threshold — so a swimmer can be kept at 0.25 without
-    # flooding every other class with junk boxes.
+    # Baseline min confidence to keep a detection. The CONF slider in the command
+    # center overrides this live, and the per-class floors below SHIFT with it
+    # (see class_conf), so it is a real master control rather than a setting that
+    # only bites the untuned classes.
+    conf: 0.40
+    # Per-class confidence floors, RELATIVE to `conf`. The model is run at the
+    # LOWEST floor in play and each box is then filtered by its own class's
+    # threshold — so a swimmer can be kept at 0.25 without flooding every other
+    # class with junk boxes.
+    # ⚠ These are offsets from the `conf` baseline above, not absolutes: person
+    # sits 0.15 BELOW whatever CONF says, so dragging CONF to 0.60 puts person at
+    # 0.45 and keeps the ordering intact. Until 2026-07-29 they were absolute,
+    # which meant the CONF slider did nothing whatsoever for person / swimmer /
+    # surfer / kayak — the classes the boat most cares about — and the operator
+    # saw the same 0.40-era boxes no matter where they dragged it. Classes listed
+    # in class_conf_absolute below opt out and keep a fixed floor.
     # A person in the water is the hardest and most important target on the
     # water: at any range you only see a head and shoulders, low-contrast
     # against glare, often part-submerged, so COCO scores them far below a
@@ -266,8 +301,27 @@ camera:
       # error: at conf 0.40 the weakest real buoys were dropped, and dragging the
       # CONF slider up would have silently switched buoy detection off entirely.
       # Its own geometric gates (min_sat / min_solidity / area / aspect) are the
-      # real filter, so give it a floor below its minimum score.
+      # real filter, so give it a floor 0.10 below the baseline.
       buoy: 0.30
+    # Classes whose class_conf floor is ABSOLUTE — it ignores the CONF slider.
+    # ⚠ EMPTY ON PURPOSE (2026-07-29). 'buoy' was listed here to stop CONF
+    # dragging its floor up and silently switching buoy detection off. On the
+    # bench that backfired: the classical screen was firing constantly indoors
+    # (a room with no buoys in it) at ~0.40, and the pin made those the ONE thing
+    # the operator could not filter out — the exact "the slider does nothing"
+    # complaint, reintroduced by the guard against it. A relative floor already
+    # keeps buoy 0.10 more sensitive than everything else, which is all the
+    # protection it needed. Use `buoy.enabled` below to switch the screen off
+    # outright; use this list only for a score that genuinely can't be compared
+    # to a probability AND that isn't drowning the operator.
+    class_conf_absolute: []
+    # Run the detector on the RIGHT frame too, so the radar tracker can median
+    # the two cameras' box centres into a less noisy bearing. ⚠ It is a second
+    # full forward pass (~30 ms on this Pi 5), so it roughly HALVES detection
+    # FPS — leave it off unless the bearing is visibly jittery. Off, the tracker
+    # uses the left camera's centre alone, which is what it has always done.
+    # Stereo *distance* does not need this (that's a disparity pass).
+    detect_right: false
     # ---- Classical buoy screen (pi5/cv/buoy_detector.py) ----
     # The shipped COCO model has NO 'buoy' class, so without this nothing ever
     # emits the label that threat_assessor grades WARNING and object_memory
@@ -497,18 +551,119 @@ stepper:
   # manual_*_degrees below. With no slip ring the bar is a linear axis with hard
   # stops at each end, so it never winds the cable more than one turn.
   has_slip_ring: false
+  # ---- Angle convention: 0° = DEAD AHEAD, +starboard, -port ----
+  # Changed 2026-07-30 from a 0…360 axis, because the old one had no way to
+  # express "a bit to port". The stepper boots at 0° (`_position_steps = 0`) and
+  # CENTER returns to 0°, so 0 is already the bar's home — it just wasn't the
+  # bow. With bow_degrees at 90 on a 0-180 sweep, the FIRST tracking command was
+  # rotate_to(90 ± offset) from a standing start of 0: a ~90° lurch to starboard
+  # whichever side the target was on, which is what "it immediately turns away
+  # from me" was. Now home, the bow, CENTER and the top of the compass rose all
+  # mean the same thing, and a target to port is simply a negative angle instead
+  # of clamping at the 0 end stop.
+  #
   # Auto-scan sweep range (SCAN mode hunts back and forth between these).
-  sweep_min_degrees: 0
-  sweep_max_degrees: 180
-  # Manual pan / GOTO travel range — the operator can lock the bar anywhere in
-  # here from the command center. Full 0–360° by default. ⚠ Without a slip ring
-  # reaching the far end winds the radar cable up to one full turn; keep this at
-  # 180 (or fit a slip ring) if that's a problem for your cable run.
-  manual_min_degrees: 0
-  manual_max_degrees: 360
+  # ±90 = a forward-looking half-circle, centred on the bow.
+  sweep_min_degrees: -90
+  sweep_max_degrees: 90
+  # Travel range for BOTH manual pan and tracking — ±180 = a **full 360° and no
+  # further**, which is what the bar needs now the cameras ride on it: a target
+  # can be anywhere around the boat, not just within one camera FOV of the bow.
+  # The hard stops are what keep it to one turn of cable; with has_slip_ring
+  # false there is no wrapping, so the bar can never wind past a single rotation.
+  manual_min_degrees: -180
+  manual_max_degrees: 180
   scan_speed_rpm: 3      # sweep speed while hunting for targets
-  track_speed_rpm: 8     # slew speed while following a locked target
   fov_degrees: 75        # camera horizontal FOV, for bbox→bearing mapping
+  # Do the cameras pan WITH the bar? Confirmed true on this build 2026-07-30.
+  # It decides two separate things:
+  #  1. tracking is a closed loop (nudge → cameras turn → offset shrinks) rather
+  #     than an absolute aim;
+  #  2. every bbox bearing is relative to the BAR, not the bow, so the pipeline
+  #     adds the bar angle back in before geolocating a map marker or steering
+  #     around an obstacle. Without that a target held at bar +90° is reported
+  #     dead ahead, and avoidance dodges the wrong way.
+  # Set false for hull-mounted cameras (then the boresight IS the bow).
+  cameras_on_bar: true
+  # ---- Tracking loop (cameras ride ON the bar, so this is a closed loop) ----
+  # Each tick: take the target's box centre (median of both cameras when the
+  # right eye is also running the detector — camera.detection.detect_right —
+  # else the one that is), convert its offset from frame centre to degrees, and
+  # nudge the bar that way. Turning the bar turns the cameras, so the offset
+  # shrinks and the target walks to frame centre.
+  track_speed_rpm: 8            # slew speed with the target out at the frame edge
+  track_speed_min_rpm: 1.5      # …and near centre, so fine corrections creep
+                                # instead of being flung past. Speed ramps
+                                # linearly between the two with |offset|.
+  center_deadband_degrees: 3    # "centred enough" — inside this the bar stops.
+                                # Below ~2° it would buzz chasing corrections
+                                # finer than one 0.9° half-step.
+  track_gain: 0.9               # fraction of the measured offset to move per
+                                # tick. 1.0 aims straight at the target and would
+                                # be exact if fov_degrees were; slightly under
+                                # damps overshoot from FOV error.
+  max_step_degrees: 30          # cap on one correction, so a single bad frame
+                                # can't fling the bar across its range.
+  # ---- Velocity feedforward: aim where the target is GOING ----
+  # A position-only loop can only react to an error that has already opened, so
+  # the faster the target moves the further behind the bar trails — until the
+  # target walks out of frame and the lock drops. The tracker measures the
+  # target's angular rate (deg/s) and adds `rate × lead_seconds` to each
+  # correction, and lets the rate raise the slew speed too.
+  # ⚠ The rate is measured on the BOW-RELATIVE BEARING (bar angle + offset), not
+  # on the pixel offset — with the cameras on the bar the offset shrinks purely
+  # because the bar turned, which is not the target moving.
+  lead_seconds: 0.35            # how far ahead to aim. Covers the 10 Hz loop
+                                # period + detection latency + the bar's ramp.
+                                # 0 disables the feedforward entirely. Raise it
+                                # if fast targets still trail behind centre;
+                                # lower it if the bar overshoots and hunts.
+  velocity_window_seconds: 0.8  # rate is a least-squares fit over this window —
+                                # long enough to average out box jitter, short
+                                # enough to notice a change of pace.
+  velocity_speed_margin: 1.4    # slew headroom above the bare rate needed to
+                                # keep pace. At exactly 1.0 the bar matches the
+                                # target's speed and never closes the gap.
+                                # ⚠ Top speed is still capped by max_rpm above
+                                # (10 rpm = 60°/s); past that the bar physically
+                                # cannot keep up and the panel says so.
+  # ---- Which way is "right"? Two independent knobs, don't guess between them ----
+  # invert_direction flips the A4988 DIR pin, so it mirrors EVERYTHING: manual
+  # jog, GOTO, CENTER, the auto-scan sweep and tracking. Set it when the bar
+  # physically turns the wrong way for a "pan RIGHT" press — i.e. the coil pairs
+  # landed reversed in J18, or the bar is geared through an odd number of stages.
+  # Position accounting is untouched, so 90° still means the same physical place.
+  invert_direction: true
+  # invert_tracking flips ONLY the bbox→bearing sign (target-drifts-right →
+  # bar-goes-left). Set it when manual jog is correct but TRACK chases the wrong
+  # way — the bar's + direction and the camera's + x disagree.
+  # Rule of thumb: jog wrong too → invert_direction. Jog fine, track wrong →
+  # invert_tracking. Both wrong in the same direction → invert_direction alone.
+  #
+  # ✅ MEASURED 2026-07-29: pressing "RIGHT ►" (JOG +15°) turned the bar LEFT, so
+  # invert_direction is now true. That one flag also explains tracking "turning
+  # away" — a target to starboard commands a HIGHER bar angle, which the wrong
+  # DIR polarity was executing as a turn to port. So invert_tracking stays false:
+  # only flip it if TRACK is *still* mirrored now that manual jog is correct.
+  invert_tracking: false
+  # The bar angle that points dead ahead — the origin tracking measures bearings
+  # about. Blank/absent → midpoint of the sweep range, which with the ±90 sweep
+  # above is 0 anyway; it is spelled out here because it MUST match the bar's
+  # physical orientation at power-on (the stepper has no home switch, so it just
+  # assumes it boots at 0°). Point the bar dead ahead before starting the stack.
+  # Tracking is ABSOLUTE about this: a target dead centre in frame parks the bar
+  # here, and the frame edges reach ± fov/2 (±37.5°). It is NOT relative to where
+  # the bar already is — the cameras are fixed forward, so adding the offset to
+  # the current angle each tick just walked the bar off to an end stop (the
+  # "rotates the wrong way when tracking" bug fixed 2026-07-29).
+  bow_degrees: 0
+  # Minimum detection confidence before the bar will LOCK onto a target. This is
+  # the tracker's own gate, separate from camera.detection.conf: the overlay
+  # decides what's worth drawing and mapping, this decides what's worth swinging
+  # a motor at. 0 = lock onto anything the overlay kept. Live-adjustable from the
+  # command center (TRK CONF, beside the TRACK picker) — this is only the boot
+  # value, it is not written back.
+  min_track_confidence: 0.0
   # Detected classes that trigger TRACK mode (must match the YOLO model labels).
   # Covers the COCO fallback ('boat','person') + the maritime model ('vessel','kayak').
   priority_classes: ["vessel", "person", "kayak", "boat"]
