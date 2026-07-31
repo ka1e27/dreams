@@ -1,10 +1,70 @@
-# Drive ESC setup — NeutronRC 70A-G071 (AM32)
+# Drive ESC setup — AM32 (left) + BLHeli-32 (right)
 
-The test-bench drive motors run on two **NeutronRC 70A-G071** ESCs (STM32G071, AM32 firmware,
-2–8S, 70 A, current-telemetry output). The Boat Pico drives them as 50 Hz servo PWM on GP2/GP3
+> **⚠ 2026-07-30 — the two drive ESCs are no longer identical, and they moved pins.**
+>
+> | | pin / connector | ESC | firmware | motor | telemetry |
+> |---|---|---|---|---|---|
+> | **Left** | GP19 · J16 | NeutronRC 70A-G071 | **AM32** | Badass 2814-**1560 kv** | GP16 |
+> | **Right** | GP20 · J15 | FlashHobby FH-70A | **BLHeli-32** | Badass 2320-**1630 kv** | GP11 |
+>
+> They were on GP2/GP3, which belong to the MCP2515 on `Boat_PCB V2` and reach no connector;
+> J16/J15 are the ex-hull-leak connectors (1 = GND, 2 = signal). **Hull leak sensing is gone** —
+> see `docs/pin_map.md`. Both ESCs take the same 1.0/1.5/2.0 ms 50 Hz signal, so the firmware
+> drives them identically — but **each is configured in its own tool** and the two families do
+> not share defaults. Configure both **before first spin-up**.
+
+## 🔴 The bi-directional gate — read this first
+
+**Throttle is blocked in firmware until both ESCs are confirmed bi-directional.** A fresh flash
+ships with `escs.BIDIR_CONFIRMED = {LEFT: False, RIGHT: False}`, every `SET_THR` returns
+`NAK … ESC_UNSAFE`, and both ESCs are pinned at the 1.5 ms neutral pulse. This is deliberate.
+
+### Why — the 2026-07-31 bench incident
+
+`escs.py` maps duty 0.0 to a 1.5 ms pulse and calls it "neutral". **That is only true in
+bi-directional / 3D mode.** A stock **normal-mode** ESC reads the identical 1.5 ms as **~50 %
+throttle**. On the bench the right ESC (BLHeli-32, never configured):
+
+1. sat inert at first — 1.5 ms at power-up is "throttle high", so it **refused to arm**, which read
+   as a dead motor and sent the whole investigation looking at wiring;
+2. **armed** the instant a `-100` command produced 1.000 ms — its *throttle zero*;
+3. then ran on at ~50 % when the sweep returned to 1.5 ms "neutral", and **kept running through
+   `SET_THR 0,0` and through `ESTOP`**, because both of those are that same 1.5 ms.
+
+Only an explicit `-100` stopped it. So on a mis-set ESC, **every stop this firmware can express —
+neutral, `escs.stop()`, `motor_control.estop()`, the heartbeat watchdog — commands half throttle.**
+With props on and in the water, hitting E-STOP would drive the boat forward.
+
+### Why the gate is all-or-nothing
+
+There is **no pulse width that stops both kinds at once**:
+
+| pulse | 3D / bi-directional ESC | normal-mode ESC |
+|---|---|---|
+| **1.5 ms** | stop ✅ | **~50 % throttle** ❌ |
+| **1.0 ms** | **full reverse** ❌ | stop ✅ |
+
+A mixed pair therefore has no safe state at all, which is why one unconfirmed ESC blocks the whole
+drive train rather than just its own channel.
+
+### Clearing it
+
+1. Configure **both** ESCs (AM32 "Bi-Directional" ON; BLHeli-32 "3D Mode" ON **and** throttle range
+   calibrated to 1000–2000 µs). If the right ESC turns out to be BLHeli**_S**, stock firmware has no
+   3D mode at all — reflash with Bluejay or it can never reverse and never has a valid stop.
+2. Verify in the config tool by **reading the setting back**, not by watching the motor.
+3. Set both entries in `firmware/boat-pico/escs.py` to `True` and redeploy.
+4. Boot banner should then read `Drive ESC mode: bi-directional CONFIRMED on both — throttle enabled`.
+
+Tests covering the gate: `pi5/tests/test_esc_bidir_gate.py`.
+
+## Left ESC — NeutronRC 70A-G071 (AM32)
+
+The left drive motor runs on a **NeutronRC 70A-G071** (STM32G071, AM32 firmware,
+2–8S, 70 A, current-telemetry output). The Boat Pico drives it as 50 Hz servo PWM on GP19
 (`firmware/boat-pico/escs.py`). Unlike a plain hobby ESC, AM32 is **configurable firmware** — these
 settings matter for a slow boat drivetrain that reverses, and a few of the drone defaults are wrong
-for this use. Configure both ESCs identically with the AM32 web/desktop configurator (via the
+for this use. Configure it with the AM32 web/desktop configurator (via the
 USB-linker) **before first spin-up**.
 
 > These are sold "for crawler / robot drivetrain", and the vendor recommends **AM32 firmware
@@ -91,17 +151,68 @@ Even at 70 A/ESC, **the pack — not the ESC — is the limit**: two motors at 7
 
 See `docs/battery_architecture.md` for the full drive-rail spec.
 
-## Kv mismatch
+## Right ESC — FlashHobby FH-70A (BLHeli-32)
 
-The two 2814s may spin at slightly different RPM for the same pulse. Correct it in software (there's no
-per-motor ERPM cap on the PWM path): the Pi-side trim `navigation.motor_gain_left/right` in
-`pi5/config.yaml` (lower the faster motor until it tracks straight at equal command), plus the firmware
-`COMP_L/COMP_R` in `motor_control.py`, and the closed-loop heading control nulls the residual crab.
+Same 50 Hz servo signal on GP20, but configured in **BLHeli-32 Suite / BLHeliSuite32**, not the AM32
+tool. The settings map across, with different names:
+
+| BLHeli-32 setting | Value | AM32 equivalent / why |
+|---|---|---|
+| **3D Mode** | **ON** | This is BLHeli's name for bidirectional. Same reason as AM32 "Bi-Directional": 1.5 ms = neutral, <1.5 ms = reverse. **Off = forward-only** and the boat cannot pivot in place or back away. |
+| **Throttle calibration** | **1000–2000 µs** | AM32 auto-detects the servo range; BLHeli-32 generally does **not**. Calibrate it or neutral/end-points will not line up with `escs.py`, which is hard-coded to 1000/1500/2000 µs. |
+| **Motor Direction** | set so positive duty = **forward thrust** | AM32's "Reversed". The two firmwares do not agree on default spin direction — expect to flip this one, not both. |
+| **Low RPM Power Protect** | **OFF** | A boat spends its life at low RPM under load; this drone-oriented limiter cuts power exactly there. |
+| **Low Voltage Protection** | ~3.0 V/cell, **5 cells** (≈15 V) | Match the AM32 side and the M18 pack cutoff. |
+| **Telemetry** | **ON, continuous/auto** | `esc_telem.py` expects a streamed KISS frame. BLHeli-32 can be set to answer only on DShot request — that yields no telemetry on this PWM path. |
+| **Brake on Stop / Damped** | OFF | Avoid braking a prop against water on every neutral. |
+
+> BLHeli-32 is closed-source and its configurator needs the ESC's own passthrough or a USB linker.
+> If this ESC turns out to be BLHeli_S (not _32), it has **no 3D mode on stock firmware** — reflash
+> it with **Bluejay** and enable bidirectional there, or the right motor will never reverse.
+
+> ### ⚠ There is no Pi-side tool for this ESC, and there cannot easily be one
+>
+> BLHeli_32 is closed source and was **discontinued in 2024**; `esc-configurator` supports only
+> BLHeli_S, Bluejay and AM32, so there is no open implementation of the _32 settings protocol to
+> build against. `am32_config.py` and `esc_passthrough.py` are **AM32-only** and will not configure
+> this ESC. Setting 3D mode here means **BLHeliSuite32 + a USB linker**, by hand.
+>
+> **The recommended alternative is to convert this ESC to AM32** — its MCU (STM32F051) is a
+> supported AM32 target (`FLASHHOBBY_F051`), which puts both ESCs on one firmware, makes
+> `am32_config.py` work on it, and enables telemetry. It needs SWD access, but **no ST-Link** — the
+> Pi 5 can act as the programmer via OpenOCD, which is already installed. Full procedure:
+> **`docs/esc_am32_conversion.md`**.
+
+## Kv mismatch — ⚠ these motors are genuinely different
+
+Not a small manufacturing spread any more: **2814-1560 kv (left) vs 2320-1630 kv (right)**, so the
+right motor runs ~4.5 % faster at the same pulse.
+
+This is trimmed in the firmware only — **`motor_control.COMP_R = 0.957`** (= 1560/1630), with
+`COMP_L = 1.0` as the reference. **Leave `navigation.motor_gain_left/right` at 1.0** in
+`pi5/config.yaml`: setting both would compensate the same mismatch twice.
+
+Kv only equalises *no-load* rpm. Different frames (2814 vs 2320) have different torque constants and
+prop loading, so treat 0.957 as a starting point and tune `COMP_R` on the bench — run both at a fixed
+throttle and match erpm from the ESC telemetry. The closed-loop heading control nulls the residual crab.
 
 ## First-spin checklist
 
-1. Props **off**. Flash AM32 ≥ v1.99, set Bi-directional ON + LVC (5S) on **both** ESCs.
-2. Arm at neutral (the firmware sends a 1.5 ms stop pulse on init) — confirm both ESCs arm and stay stopped.
-3. Command small **forward** then small **reverse** throttle; confirm both spin the right way and *reverse*.
-4. Fix per-motor direction; set `motor_gain_*` so equal command tracks straight.
-5. Props on, in water. Verify the Pico watchdog kills to neutral when heartbeats stop (pull the Pi link).
+1. Props **off**. Left: flash AM32 ≥ v1.99, Bi-directional ON + LVC (5S). Right: BLHeli-32
+   3D Mode ON, throttle calibrated 1000–2000 µs, LVC (5S), telemetry continuous.
+2. **Read both settings back in the config tool**, then set `escs.BIDIR_CONFIRMED` → `True` for each
+   and redeploy. Until you do, throttle is blocked (`NAK … ESC_UNSAFE`) — see the gate section above.
+3. Confirm the boot banner reports `Drive ESCs: GP19(L,AM32,...)/GP20(R,BLHeli32,...) PWM 50Hz OK`
+   **and** `Drive ESC mode: bi-directional CONFIRMED on both`.
+4. Arm at neutral (the firmware sends a 1.5 ms stop pulse on init) — confirm both ESCs arm and stay
+   stopped. An ESC that instead beeps continuously is still in normal mode: 1.5 ms is ~50 % throttle
+   to it and it is refusing to arm. Stop and fix the mode — do **not** "wake it" with a low pulse,
+   which is exactly what armed it into a runaway on 2026-07-31.
+5. Command small **forward** then small **reverse** throttle; confirm both spin the right way and
+   *reverse*. Expect to flip direction on the BLHeli side only.
+6. Match rpm at a fixed throttle via ESC telemetry; adjust `COMP_R` from 0.957 as measured.
+7. Props on, in water. Verify the Pico watchdog kills to neutral when heartbeats stop (pull the Pi
+   link) — and confirm the motors actually **stop**, rather than settling to a steady hum.
+
+> ⚠ **No hull leak alarm any more.** J15/J16 are these ESC signals now, so a swamped hull will not
+> be detected — only the pod's leak sensor remains. Factor that into wet testing.

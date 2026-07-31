@@ -31,402 +31,540 @@ describing what you did.
 <!-- New entries below this line, newest first. Keep at most 5 — move older ones to
      docs/session_journal_archive.md. -->
 
-## 2026-07-29 — GPS bench test: the module can't reach the Pico, and the board gives it no path
+## 2026-07-31 — Motor runaway: a non-3D ESC turns "neutral" into 50 % throttle, and ESTOP into acceleration
 
-**Worked on:** user plugged in the GPS, it wasn't working, asked me to test it. Diagnosed on the live
-bench Pico (no code changes to firmware or the nav stack).
+**Worked on:** user reported the drive motors not spinning, with both ESCs powered and connected.
+Diagnosed on the bench, hit a **runaway**, then added a firmware safety gate. Props were off
+throughout; drive pack is now unplugged.
 
-**Result — the GPS is not connected to anything that can read it.** Three independent checks:
-1. **Nothing is transmitting.** Scanned 18 Pico GPIOs (all but the ESC/winch/NeoPixel outputs and the
-   dead GP0/GP1): **zero edges** over 1.3 s each, and **GP4/GP5 both read floating** (internal pull-up
-   → 1, pull-down → 0). No NMEA anywhere on the Pico.
-2. **No path exists on the board.** Confirmed by solving the schematic's net graph directly
-   (`Boat_PCB.kicad_sch`; the solver self-validates — all eight Pico GND pads and VSYS/VBUS resolve
-   correctly). **J7, the "GPS + Compass" connector, carries no UART:** 1=GP14, 2=GP15, 3=GP9, 4=GP8,
-   5=**VSYS 5 V**, 6=GND. GP4 goes only to U1.15 (MCP2515 SO) and GP5 to the GND net. This confirms the
-   2026-07-28 audit's claim from the board file rather than the netlist export.
-3. **Not on the Pi either.** No USB serial device but the Pico (`lsusb`, `/dev/serial/by-id`), and Pi
-   GPIO14/15 measure floating with `pinctrl` and are muxed to function *none* — so nothing is wired to
-   the Pi's header UART, and `/dev/serial0` (→ ttyAMA10) isn't connected to those pins anyway.
+### What happened
 
-**Two live-board facts that contradict the docs — measurement wins, KiCad is stale (again):**
-- **GP5 is NOT tied to GND on the built board** (an internal ~55 kΩ pull-up takes it to 1, so there is
-  no low-resistance path). The schematic *does* tie it — `docs/pin_map.md` and `main.py`'s docstring
-  state this as as-built fact. A jumper into GP5 therefore works, which is what makes a bench test
-  possible at all.
-- **GP9 (= J7.3) reads hard low against the internal pull-up** — a real short to GND, and the schematic
-  shows no such tie. If a module is sitting in J7, its pin 3 is a ground, i.e. **its pinout doesn't
-  match J7's order**. That also explains why I²C0 scans empty. J7.5 is 5 V, so a mismatched plug can put
-  5 V on a module data pin or try to power the module through a Pico GPIO — flagged to the user; leave
-  J7 unplugged until the module's pinout is checked.
-- Also measured: U1 (MCP2515) is **not driving GP4**, so the documented UART-TX-vs-SO contention isn't
-  live on this board. Electronics M18 present (GP27 → 17.7 V); drive + winch packs disconnected
-  (GP26/GP28 ≈ 0.2 V), which is why a firmware restart was safe here.
+Bench sweep with props off, one motor at a time, then a staged reverse ramp. The **AM32 (left/GP19)
+behaved correctly the whole time**. The **BLHeli-32 (right/GP20)** sat inert, then **armed partway
+through and kept running after the test ended — through `SET_THR 0,0` and through `ESTOP`.**
 
-**Changed:**
-- `pi5/scripts/gps_probe.py` (NEW) — four-mode bench tool, following `am32_config.py`'s
-  self-documenting-CLI pattern. `boat` (read-only: decodes the firmware's TEL health bit + GPS
-  SENSOR_FAULT alerts, and detects "firmware isn't running"), `pins` (the GPIO scan above),
-  `uart` (opens UART1 on GP5 and parses what arrives), `host` (sniffs a USB-TTL adapter, auto-baud).
-  Reuses `deploy_pico._request_repl` so the REPL modes drop the firmware via `$REFLASH` — which estops
-  the motors first — and restarts it after. Reports the distinction that matters on a bench: **no data
-  at all** (wiring/power) vs **data but no fix** (antenna/sky view). The docstring carries the measured
-  J7 pinout and the 3-jumper bypass so nobody re-derives this.
+Cause: `escs.py` maps duty 0.0 to a 1.5 ms pulse and calls it neutral, which is **only true in
+bi-directional / 3D mode**. The BLHeli-32 was never configured (the flagged "Next steps (1)", never
+done), so in stock normal mode it reads that same 1.5 ms as **~50 % throttle**:
 
-**Verified (on the Pi):** all four modes exercised against the live Pico; `pins` reproduced the manual
-scan including the GP9 short; `boat` reported `health=001110`, GPS bit 0, 9 `SENSOR_FAULT,gps` alerts in
-8 s. `pytest pi5/tests` **293 green**, ruff clean.
+| stage | pulse | what the BLHeli did |
+|---|---|---|
+| power-up / neutral | 1.500 ms | ~50 % throttle → **refused to arm** — which is why it looked dead |
+| `-100` | **1.000 ms** | its *throttle zero* → **armed** |
+| back to "neutral" | 1.500 ms | **~50 % throttle → ran on** |
 
-**Decisions / open questions:** the Pico was found **halted at the REPL** — the firmware wasn't running,
-so nothing was reading the GPS regardless of wiring. I left it **running** (drive/winch rails
-disconnected, so ESC PWM at neutral can't move anything). Awaiting the user on which bench path to take
-(jumper GPS TX → GP5, or a USB-TTL adapter) and on what module it actually is.
-**Separate leftover bug, not fixed:** `firmware/boat-pico/main.py:589` still prints
-`Hull: GP17(L) GP18(R)` in the boot banner, but `sensors.py` moved to GP19/GP20 on 2026-07-28 — the
-banner is now misleading. Also `IMU: I2C0 GP8/GP9 addr=0x4A FAIL` every boot: the board wires the IMU
-connector **J5.3/J5.4 to GP15/GP14** (the SHT41 #B SoftI2C bus), not to I²C0 GP8/GP9 where
-`compass.py` looks — a firmware-vs-board mismatch of the same family as the GPS one, worth its own pass.
+### 🔴 The generalisation, which is the actually serious part
 
-**Re-test after the user re-seated the module in J7** (they asked specifically about GP8 / GP9 — J7.4
-and J7.3). Still no GPS, and now measured properly rather than inferred:
-- **GP8 changed from floating to driven high**, but it is *not* transmitting: 10 s of PIO soft-UART RX at
-  9600 captured **0 bytes**. It's a pull-up, not a TX. (GP8 needed the soft UART — hardware UART1 RX can
-  only be GP5/GP9/GP21/GP25, so GP8 is otherwise unlistenable.)
-- **GP9 is still held at ground:** PIO captured **5356 bytes of pure 0x00** — one endless start bit,
-  which is the signature of a grounded pin rather than data. Hardware UART1 on GP9 gave 0 bytes at
-  9600/38400/115200.
-- Still **zero edges on all 18 scanned pins**, which rules out *any* baud (edge counting is
-  baud-independent), and both I²C buses re-scanned: nothing on GP8/GP9 (SCL held low, so it can't work)
-  and only the SHT41 `0x44` on GP14/GP15. No compass, no u-blox DDC at `0x42` → the module isn't
-  answering on I²C either, so it is not alive through J7.
-- Read together: one J7 pin held to GND and another pulled high means **the module's connector isn't
-  landing where J7 expects**. Since J7.5 is 5 V, a reversed/offset plug puts 5 V on one of the module's
-  signal pins — or on its GND pin. User told to unplug it pending the module's pinout.
+**Every stop this firmware can express is 1.5 ms** — neutral, `escs.stop()`,
+`motor_control.estop()`, and the heartbeat watchdog. So against a normal-mode ESC *the entire safety
+system commands half throttle*. With props on and in the water, hitting E-STOP would drive the boat
+forward. Only an explicit `-100` stopped it.
 
-**Changed (second pass):**
-- `pi5/scripts/gps_probe.py` — added a **`soft` mode**: PIO 8N1 soft-UART RX on *any* pin, reusing the
-  same PIO program as `esc_telem.py`/`sbus.py` at the GPS baud. Needed for GP8, and it's also the shape a
-  permanent fix would take given no connector routes a hardware UART. Recognises the all-zeros case and
-  names it (grounded pin, not a transmitter) instead of reporting it as garbage data. Also a `--pins`
-  filter on the scan for fast re-checks, refusing pins outside the safe list. ruff clean, 293 still green.
+And a mixed pair has **no safe state at all** — 1.5 ms stops a 3D ESC but is 50 % to a normal one;
+1.0 ms stops a normal one but is **full reverse** to a 3D one. No single pulse width stops both.
 
-**CORRECTION — J7 *is* the GPS UART; the firmware is on the wrong pins.** The user pointed out that
-GP8/GP9 are UART1, and they're right: the RP2040 muxes UART1 TX to GP4/**GP8**/GP20/GP24 and RX to
-GP5/**GP9**/GP21/GP25. So J7.4/J7.3 are a legitimate UART1 TX/RX pair and **the connector was laid out as
-the GPS serial link** — my earlier "no board connector carries a UART" was wrong, and it came from
-`docs/pin_map.md` listing GP8/GP9 as I²C0 only when they are dual-function. The board-side fix is
-`gps.init` → `UART(1, tx=Pin(8), rx=Pin(9))`, no rewiring. GP4/GP5, which the firmware uses today, reach
-no connector at all.
+### The guard (deployed and verified on hardware)
 
-**Why it still doesn't work, and why the firmware change is NOT yet applied:** the user reports the
-module's LED blinking constantly, i.e. it is powered and (on u-blox parts, TIMEPULSE at 1 Hz) very likely
-holding a fix and transmitting. But **GP9 — the GPS TX line — is shorted to GND**, so nothing arrives:
-hardware UART1 on GP8/GP9 at 9600 captured 0 bytes (the UART drops the endless framing errors), while a
-PIO capture on the same pin returned 5356 bytes of pure 0x00, the signature of a held-low line. The
-schematic has no such tie, so it is a build fault — Pico pads **12 (GP9) and 13 (GND) are adjacent**, so a
-solder bridge is the first thing to check. Separately, GP8 is currently held high by something
-unidentified; pointing the firmware's UART **TX** at GP8 before knowing what that is could drive a GPIO
-into a supply rail, so the one-line change waits on the module's pinout.
+`escs.BIDIR_CONFIRMED` — per-ESC, **defaults to False on both**, all-or-nothing (one unconfirmed ESC
+blocks the whole drive train, because of the no-shared-stop-pulse argument above).
 
-**FAULT LOCALISED — a hard short across three adjacent Pico pads: 12 (GP9) · 13 (GND) · 14 (GP10).**
-User confirmed continuity GP9→GND with a multimeter and localised it to the Pico, not the PCB. Probing
-every pad that neighbours a GND pad (7, 9, 12, 14, 17, 19, 22, 24, 27, 29) found **GP9 and GP10 both
-shorted to GND and every other one clean** — so it's one localised blob spanning pads 12-13-14, not a
-systematic soldering problem. Software bound on the short: under ~18 kΩ, since the internal ~55 kΩ
-pull-up can't lift either pin above logic 0.
+- **Hard floor in `escs.set_duty()`**: while unconfirmed it emits *only* 1.5 ms, whatever it is
+  asked for. Enforced at the lowest level so SBUS, a mission, or a REPL poke cannot route around it.
+  Holding 1.5 ms is what keeps a normal-mode ESC **inert** — it refuses to arm; the pulse that must
+  never be emitted is its arming pulse (1.000 ms), and now cannot be.
+- `set_throttle()` → `(False, "ESC_UNSAFE")`; **every** value refused including 0, since 0 is not a
+  stop for a normal-mode ESC. `set_throttle_rc()` (SBUS) gated too. ESTOP still outranks it and
+  keeps its own distinct reason.
+- One-shot `CRIT ESC_UNSAFE` alert on the **first refused SET_THR**, not at boot — the Pi usually
+  connects after the Pico has booted, so a boot alert would reach nobody. Keeps it out of the
+  per-cycle SENSOR_FAULT stream.
+- Loud boot banner; `navigator._log_thr_error()` prints the recovery step.
 
-**One blob explains three separate symptoms:**
-- **GPS dead** — GP9 is J7.3 and UART1 RX; the module's TX drives into the short.
-- **Status NeoPixel dead** — GP10 is `status_led.PIN` (J12). Free visual confirmation: that LED can never
-  have lit. Worse, `status_led.py` drives GP10 as an *output*, so every LED update since the board was
-  built has been sourcing current into a dead short — the pin may itself be damaged by now.
-- **`IMU: I2C0 GP8/GP9 addr=0x4A FAIL` on every boot** — GP9 is also SCL0, and a clock line held low
-  kills the bus.
+**Verified on the real Pico** (drive pack out): banner shows the block; `$NAK,…,SET_THR,ESC_UNSAFE`
+for both 30 % and 0; `$ALERT,0,CRIT,ESC_UNSAFE,LEFT/AM32,RIGHT/BLHeli32` fires exactly once (0
+repeats in the following 6 s); and a direct `set_duty(-1.0)` — the exact call that armed the ESC —
+now writes 4915 (1.500 ms), not 3277. **500 tests pass** (+18 new), ruff clean.
 
-**It is a HARD short, and not the LED harness.** User reports J12 unplugged and no visible solder
-bridge anywhere — yet GP10 (whose only board net is J12.2) is still shorted, so the fault is at the Pico
-or in its mount, not in a harness. Quantified it by forcing the pad's DRIVE field to 2 mA
-(`PADS_BANK0 + 0x04 + 4n`, bits 5:4) and reading the **real pad level** from `SIO.GPIO_IN` (0xd0000004)
-rather than the output latch: **GP10 driven high still reads 0** — the driver loses. Control pin GP5 reads
-1 under the identical test, so the method is sound. Tested GP10 rather than GP9 because `status_led.py`
-has been driving GP10 into this fault continuously anyway. A hard short rules out flux/contamination
-(that would be kΩ and the 2 mA driver would win); this is metal or damaged silicon.
+**Changed:** `firmware/boat-pico/escs.py` (gate + hard floor + docstring), `motor_control.py` (both
+throttle paths), `main.py` (banner + one-shot alert), `pi5/navigation/navigator.py` (ESC_UNSAFE
+recovery line), `docs/serial-protocol.md` (NAK reason + alert code), `docs/esc_setup.md` (new
+"bi-directional gate" section + reworked first-spin checklist), new
+`pi5/tests/test_esc_bidir_gate.py` (18 tests; first harness here that runs **firmware** modules on
+CPython with `machine` stubbed — reusable pattern).
 
-**Firmware left STOPPED deliberately.** It drives GP10 into the dead short on every status-LED update, so
-running it is active stress on a suspect pin. Restart with
-`.venv/bin/python -m mpremote connect /dev/ttyACM0 reset` when needed.
+**Decisions / open questions:** `LEFT` is left `False` even though the AM32 demonstrably behaved
+bi-directionally — that is strong evidence, not the read-it-back-in-the-config-tool confirmation the
+gate asks for. Deliberately fail-safe; flip it when verified. The gate is **not clearable from the
+Pi** by design: it needs an ESC config change plus a firmware edit.
 
-**Hypothesis worth testing: this is the schematic's GP5-to-GND tie, executed on the wrong pads.** The user
-asked whether GP5 being grounded could explain it. It can't cause it (independent pins), and **GP5 is
-measurably free on this board** — it read 1 in the same drive test GP10 failed, which *voids the
-2026-07-28 audit's loudest hardware worry* ("GP5 tied to GND, so the GPS can never work"). But the
-inversion is suspicious: the design ties exactly one Pico GPIO to its adjacent GND pad (pad 7 → pad 8),
-and the board instead ties two GPIOs to *their* adjacent GND pad (pads 12/14 → pad 13) while the designed
-tie is absent. Same motif, wrong location. This board has form for exactly that class of error — the
-2026-07-28 audit found J3's footprint has its odd/even rows transposed. If the hypothesis holds, the
-copper is on the **carrier board**, not the Pico, and the fix is cutting one connection.
+### Then: asked to set 3D mode for them — can't, and the reason redirects the whole plan
 
-**Repo gap — the board's routing has no source of truth here.** `Boat_PCB.kicad_pcb` contains **zero
-copper**: no nets, no tracks, no vias, no zones, only placed footprints. No gerbers in the repo either, and
-`report.txt` is a stale KiCad update log (still lists `F1`, and shows GP5/GP8/GP9/GP10 all *unconnected*).
-So every "the board does X" claim in the docs — including this session's — actually derives from the
-**schematic**, and the physical board demonstrably diverges from it. Flagged as a V3 blocker: nobody can
-review this board's wiring from the repo.
+Investigated properly before answering. **BLHeli_32 is closed source and was discontinued in 2024**;
+`esc-configurator` supports only BLHeli_S / Bluejay / AM32, so there is **no open implementation of
+the _32 settings protocol** to build a Pi-side tool from. This repo's `am32_config.py` and
+`esc_passthrough.py` are AM32-only and say so. Declined to write one: it would mean reverse-engineering
+a closed protocol and then writing EEPROM to the ESC that just ran away, with nothing to validate
+against.
 
-**Option analysed, no code written: move the GPS to the Pi 5.** Traced the position path — the whole nav
-stack reads `PicoSerial.telemetry` (`pi5/comms/pico_serial.py:22`), written *only* by `_handle_tel`, and
-`navigator.py:399-437` consumes `tel.lat`/`tel.lon`. So a Pi-side NMEA reader writing into that one object
-needs **no other changes**, and would deliver position at the module's native 1-10 Hz rather than relayed
-at 1 Hz through TEL. Heading must stay on `tel.heading` (Pico compass). Three gotchas: `SENSOR_FAULT,gps`
-would spam forever (`main.py:452`) and reported state would sit at `WARN` (`main.py:481`) — checked, and
-**neither cuts the motors**; the GPS health bit stays 0; and **the Pod Pico shares the GPS UART**
-(`main.py:555` `pod_uart.init(gps._uart)`, demuxed by sentence prefix in `task_uart1_reader`), so
-`gps.init()` cannot simply be dropped. Wiring: a USB-TTL dongle → `/dev/ttyUSB0` (respects the "Pi 5 =
-USB only" locked decision; `gps_probe host` already tests it), or the Pi's GPIO14/15 — measured floating,
-function `none` — which needs `dtoverlay=uart0` plus the serial console freed and would then collide with
-`am32_config.py`, which uses the same two pins. **Main attraction:** it routes around the dead GP9
-entirely, so it doesn't matter whether the short is the Pico or the board. Weighed against the one-wire
-GP5 jumper, which works today with zero code changes. Awaiting the user's choice.
+**Better path found, and it fixes the root cause rather than the instance:** the ESC is a
+**FlashHobby FHD 70A on an STM32F051**, and AM32 has a first-class **`FLASHHOBBY_F051`** target
+(`USE_SERIAL_TELEMETRY`, current + voltage sense defined). Converting puts **both ESCs on AM32** —
+one firmware, one settings vocabulary, mixed-mode hazard class gone — makes `am32_config.py` work on
+it, and makes ESC telemetry reachable.
 
-**Next steps:** (1) Look at the Pico's **underside / castellations** and its mount — a top-side-invisible
-bridge or wicked solder under the module fits a hard short with nothing visible. If it's socketed, pull it
-and measure GP9→GND and GP10→GND on the Pico **alone**; that's the only way to separate Pico from carrier
-board conclusively. Still shorted standalone with nothing visible → internal damage, replace the Pico.
-(2) **Zero-rework workaround, which does not need GP9 at all:** move the module's TX wire from J7.3 to
-Pico **GP5 (pin 7)**, leaving VCC/GND in J7.5/J7.6. GP5 measures floating and passed the drive test, and
-`gps.init` *already* listens on GP5 — so the GPS works with **no firmware change and no rework**.
-(3) Consequences of writing GP9/GP10 off: the status NeoPixel needs a jumper from J12.2 to a free pin
-(GP6 measures floating — the MCP2515 isn't driving it) plus a one-line `status_led.PIN` change; and I²C0
-is permanently dead, which makes moving `compass.py` to SoftI2C **GP14/GP15** mandatory rather than
-merely correct — that is where the board wires J7's compass pins anyway.
-(4) Alternatively, if the short is cleared, apply `UART(1, tx=Pin(8), rx=Pin(9))` in
-`gps.init`, or move just the GPS TX wire from J7.3 to Pico GP5 (pin 7), which needs **no** firmware
-change since GP5 is what `gps.init` already listens on and it measures floating. (4) `compass.py` is on
-I²C0 GP8/GP9 but the board puts J7's compass pins on **GP14/GP15** (SoftI2C #B, shared with J5 + both
-SHT41s) — the firmware has J7's UART and I²C swapped relative to the board; worth its own pass.
-(5) Fix `docs/pin_map.md`: GP8/GP9 are **I²C0 *or* UART1**, and J7 is the GPS UART + compass connector.
+**And it needs no ST-Link: the Pi 5 is the programmer.** OpenOCD 0.12 is already installed with
+`raspberrypi5-gpiod.cfg`, the `linuxgpiod` + `cmsis-dap` drivers, `target/stm32f0x.cfg`, and
+`stm32f1x unlock` for clearing BLHeli_32's SWD readout protection. Only collision is OpenOCD's
+default SWDIO (**GPIO8** = the A4988's sleep pin) — remap to GPIO9; SWCLK GPIO11 and GND are already
+free and adjacent (header pins 21 / 23 / 25).
 
----
+**Full procedure written up in `docs/esc_am32_conversion.md`** — user is doing it in a later session.
+Artefacts identified: `AM32_F051_BOOTLOADER_PA2_V17.hex` + `AM32_FLASHHOBBY_F051_2.20.hex`. Three
+things flagged in that doc as unverified: the **PA2** bootloader choice is *inferred* (from
+`FD6288_F051` sharing `HARDWARE_GROUP_F0_A` and being named "FD6288_PA2"), the chip must be checked
+as a genuine STM32F051 and **not a CKS32F051 clone**, and **Stage 1 has never been run** — the
+sandbox permission classifier blocked OpenOCD from driving GPIO, so the user must run it. Stage 2
+(RDP clear) is **irreversible** — no going back to BLHeli_32.
 
-## 2026-07-28 — Applied the pin-map audit to code: winch → GP21, stepper 8× fix, divider ratio
+**Next steps:** (1) **Work through `docs/esc_am32_conversion.md`** — non-destructive Stage 1
+pre-flight first. (2) Afterwards, read the setting back, set `BIDIR_CONFIRMED` → True on **both**,
+redeploy, re-run the first-spin checklist, and confirm the watchdog kills to an actual **stop**.
+(3) While in there: solder the GP11 telemetry wire (never connected — `frames_ok = 0`) and re-tune
+`COMP_R` off real erpm. (4) Still open from the previous entry: the watchdog re-arm hole, the 22 bad
+doc checksums, the CDC write wedge. (5) Minor: the repo calls this ESC "FH-70A"; it is the
+**FHD 70A**.
 
-**Worked on:** pulled `e27ee7f` (the Boat_PCB V2 netlist audit below) and applied the three items it
-had flagged but left unfixed in code.
+## 2026-07-30 — Bench check: the latched ESTOP was real, the GPS got a fix, and the watchdog does not re-arm
 
-**Changed:**
-- `firmware/boat-pico/motor_control.py` — winch PWM **GP6 → GP21** (`MW_PIN`). The board routes the
-  winch signal to GP21 (J8.1 + J9.1 in parallel); GP6 is the MCP2515's `~INT`, so the old pin drove
-  the CAN chip, not the winch ESC. GP21 was unused by firmware, making this the **only** one of the
-  five CAN-contested pins (GP2/3/4/6/7) that a pin move can resolve.
-- `pi5/cv/stepper.py`, `pi5/config.yaml`, `pi5/cv/stepper_test.py`, `run_hardware.py` —
-  `steps_per_rev` **3200 → 400**. The A4988 is half step (MS1 high off the Pi's 3V3, MS2/MS3
-  hard-grounded), not 1/16. Verified: a commanded 10° pan now moves 9.9°, not 80°. It also fixes an
-  8× *overspeed* — the pulse train ran at 8× the commanded rpm, so the motor was likely skipping
-  steps rather than tracking. Docstring rewritten: RESET is tied to SLEEP on the board (so
-  `reset_pin` stays null), plus the auto-sleep-resets-the-translator drift caveat and the
-  VDD-comes-from-the-Pi dependency.
-- `firmware/boat-pico/sensors.py` — **`INV_P_RATIO` 14.0 → 6.6.** User confirmed the physical board
-  has **56k/10k fitted on all three** dividers, so every rail reconstructs at ×6.6. At ×14.0 a full
-  21 V drive pack reported 16.4 V — under `P_WARN` (17.0), a hair over `P_CRIT` (16.0) — i.e. return-
-  to-home on a full battery. Verified all three rails now report 21.00/18.00/17.00/16.00 V exactly
-  and trip WARN/CRIT at the right pack voltages.
-- Docs synced: `docs/pin_map.md`, `CLAUDE.md`, `docs/battery_architecture.md`,
-  `docs/pcb_design_notes.md`, `docs/PROJECT_CONTEXT.md`, `docs/hardware_changes_v2_to_testbench.md`,
-  and the `main.py`/`sensors.py`/`esc_telem.py` docstrings. Also fixed a stale row the pulled pin map
-  still carried: the PIO buses table listed ESC telemetry on GP19 (the hull-leak connector) after the
-  table above it had already moved it to GP11.
+**Worked on:** "check the pico", then "check everything and clear the e stop". Diagnosis + one
+one-line lint fix. No firmware changed — but a **new firmware safety bug** was found and is not fixed.
 
-**Verified (on the Pi):** `pytest pi5/tests` **293 green**, ruff clean, firmware `py_compile` OK, sim
-boots with `/` and `/planner` 200. A static pin-claim sweep over the Boat Pico firmware shows **zero
-collisions** and matches `docs/pin_map.md` exactly (GP2/3, 4/5, 7, 8/9, 10, 11, 12–15, 16, 19/20, 21,
-26–28 claimed; GP6/17/18/22 free).
+### 🔴 The watchdog never re-arms after a RESUME that isn't followed by a heartbeat
 
-**Decisions / open questions:** the audit's "as-built" divider values (×17.92/×4.33/×6.56) came from
-the **KiCad netlist, which is the stale copy** — the populated board is 56k/10k throughout. Docs now
-say so in all five places and flag the KiCad edit as the outstanding task; 13k/30k/18k aren't in the
-on-hand resistor kit, which corroborates they were never fitted. That also **voids the GP27
-over-range warning** (4.15 V into a 3.3 V pin) from the previous entry. Nothing committed — tree left
-for review.
+`watchdog._triggered` is a one-shot latch cleared **only** by `feed()`. So after a heartbeat-loss
+ESTOP, a `RESUME` re-enables the motors while the watchdog stays in its already-triggered state:
+`check()` keeps returning True but never calls `_on_timeout()` again. Measured directly —
 
-**Next steps:** unchanged from the entry below except the three items now closed — still open: route
-the MCP2515 `~CS`, free GP5 before expecting CAN or GPS to work, fit the 100 nF ADC caps + I²C
-pull-ups, update the six divider values in KiCad, reposition the R9/R11/R2 reference texts, re-export
-the gerbers under version control.
+```
+RESUME with no HB ever fed  ->  IDLE
+  ... 6.5 s later           ->  IDLE      (watchdog should have re-fired)
+  SET_THR,0,0               ->  $ACK      *** motors enabled, heartbeat dead 6.5 s ***
+```
 
----
+Protection only returns once a real heartbeat arrives. This is worst combined with the **CDC write
+wedge** already flagged twice: the wedge lets telemetry keep streaming (link looks healthy) while
+commands stop → HB_LOST → ESTOP → operator clicks CLEAR E-STOP → motors armed with **no watchdog at
+all**. Suggested fix: have `motor_control.resume()` call `watchdog.feed()`, which restarts the timer
+*and* clears `_triggered`, giving a clean 3 s grace window that re-fires if no real HB follows.
 
-## 2026-07-28 — Boat_PCB V2 netlist audit; pin maps rebuilt from the board; hull leak + ESC telem realigned
+Normal watchdog operation is fine and was re-verified: HB → `ACTIVE`, stop → ~3 s → `HB_LOST` + ESTOP.
 
-**Worked on:** full wiring double-check of `Boat_PCB V2` against the KiCad netlist, then updating every
-pin map to match reality. Verified three ways: an S-expression parse of `Boat_PCB.kicad_pcb`, a raw
-regex extraction, and `kicad-cli sch export netlist` from the schematic. DRC + ERC run with
-`kicad-cli` 10.0.5. Board files were unchanged by the 18 commits pulled from origin, so the audit
-holds against current `single-hull-test-bench`.
+### The latched ESTOP was real — and is now cleared
+
+`$STATUS,1,ESTOP,001110,NONE` read straight off the wire, confirming the previous entry's
+by-elimination diagnosis (`safety_overrides=NONE`, so not RC_ACTIVE). `RESUME` ACK'd, state → `IDLE`,
+`SET_THR,0,0` → `$ACK`. **Bench left un-estopped**, i.e. in the no-watchdog state described above.
+`$NAK,71,SET_THR,ESTOP` en route also validates this morning's NAK-reason fix reading `fields[1]`.
+
+### ✅ The GPS has a 3D fix — the top open item from two entries ago is closed
+
+`/dev/ttyAMA0` @38400: **151/151 NMEA checksums valid, 0 bad.** GGA quality **1**, **6 sats**,
+HDOP 2.80, alt 158.7 m; RMC status **A** (valid). Taking the antenna outside worked.
+
+### Link, and a measurement trap worth remembering
+
+75/75 frames checksum-valid over 20 s; write path `TIOCOUTQ` 1280 → 0 in <200 ms. **No CDC wedge
+today** — still intermittent, still unexplained. ⚠ Checksums are **decimal** (`"$%s*%d"`, both sides);
+scoring them as hex reports ~75 % of a healthy link as corrupt. Separately, **all 22 concrete
+examples in `docs/serial-protocol.md` have fabricated checksums** matching neither base (e.g.
+`$SET_THR,13,40,40*71` should be `*125`); same in `pi5/comms/protocol.py:71`'s docstring. The spec's
+*definition* ("decimal ASCII") is correct — only the worked examples are wrong. Not yet fixed.
+
+### Everything else
+
+- **Power — still the known unfixed PSU problem.** All 4 recent boots ended with **zero**
+  clean-shutdown markers (hard power-offs); 5 boots today. 34 `Undervoltage detected!` events, all
+  clustered 14:19–14:49, none in the last 4 boots. Currently `throttled=0x0`, 47.7 °C.
+- **Cameras fine.** video0 + video2 both capture (640x480); video1/3 are metadata nodes.
+  `config.yaml` already documents this trap and is correct (`left_device: 0`, `right_device: 2`).
+- **Sensors unchanged:** elec rail 19.06 V / 67 % healthy; drive 0.21 V + winch 0.18 V (packs
+  unplugged — correctly *not* flagged critical by the `> 5.0` guard); SHT41 #B alive (25.2 °C /
+  48.7 %, pull-ups still holding); SHT41 #A dead; IMU dead; pod absent. Health `001110`.
+- **Stepper** on real GPIO, not mock. **482 tests pass.**
+
+**Changed:** `pi5/tests/test_pico_nak.py` — dropped an unused `Alert` import (the only `ruff` error in
+`pi5`; `run_hardware.py` clean, firmware's 130 are MicroPython builtins + the documented intentional
+bare-excepts and are not in the lint gate). Journal. Nothing else.
+
+**Decisions / open questions:** the watchdog re-arm bug is firmware and needs a reflash, so it was
+left for sign-off rather than changed unasked. Also spotted: `CLAUDE.md` says `pi5/config.yaml`
+carries a `mode: simulator|hardware` flag — it does not; the entry points are `run_sim.py` /
+`run_hardware.py`.
+
+**Next steps:** (1) **Fix the watchdog re-arm** — highest priority, it is a live safety hole.
+(2) Regenerate the 22 doc checksums + the docstring. (3) The bench is left **un-estopped with no
+watchdog**; keep props off until the stack is running and heartbeating. (4) Still open: the CDC write
+wedge, the parked IMU float-pin wiring, the stepper `find`/`burst` runs, the buoy screen's
+false-positive gates.
+
+## 2026-07-30 — Manual override: 429'd off the boat, and a NAK message that hid its own reason
+
+**Worked on:** user report — "i get these when i try to run the manual override", with a log full of
+`429 Too Many Requests` on `/api/manual/drive` and `SET_THR failed (manual): Command SET_THR NAK'd:
+SET_THR`. Three separate faults, one per layer.
+
+### 1. The rate limiter was starving the dashboard (the actual blocker)
+
+`RateLimitMiddleware` counted **every** path against one 60 rpm per-IP bucket. Manual override
+repeats `/api/manual/drive` at `MAN_HZ = 10` (600 rpm), so six seconds after arming, that bucket was
+full and *everything* from that IP 429'd — the drive frames, `/api/map/objects`, telemetry, E-STOP.
+The limiter was already below the dashboard's **idle** draw: objects 2 s + obstacles 3 s +
+recordings 3 s ≈ **70 rpm** against a 60 rpm cap, which is the `/api/map/objects` 429 in the log.
+
+Now counted **per (IP, path class)** with three classes: `/api/manual/drive` 900 rpm (10 Hz + the
+extra keydown/keyup sends), sensitive paths unchanged at 10–20, default raised 60 → **300**. Buckets
+also mean ordinary polling can no longer eat the E-STOP budget. Trade-off accepted and documented:
+an abuser spreading traffic gets the sum of the limits — this bounds runaway client loops, the API
+key and Tailscale-only exposure do the security.
+
+### 2. The NAK reason was never being read
+
+`NAK,<seq>,<command>,<reason>` — `_send_command` logged `fields[0]`, which is the *echoed command*.
+Hence the tautology `SET_THR NAK'd: SET_THR`, with the one diagnostic in the frame (ESTOP /
+RC_ACTIVE / RANGE / PARSE) thrown away. Reads `fields[1]` now and raises **`PicoNak`** (subclasses
+RuntimeError, so existing `except` clauses are unaffected) carrying `.command` / `.reason`.
+`docs/serial-protocol.md`'s sequence diagram said `NAK,seq,reason` — wrong, and the likely origin of
+the bug; fixed to match the canonical §5 form.
+
+### 3. Root cause of the NAKs: the Pico's ESTOP is latched, and nothing on the Pi knew
+
+By elimination the reason can only be ESTOP or RC_ACTIVE (RANGE/PARSE are impossible — `manual_mix`
+→ `_trim` returns clamped ints; RC_ACTIVE needs an explicit `RC_OVERRIDE`). The firmware's
+`motor_control.estop()` is **sticky until RESUME**, `TEL` carries no estop field, and nothing polls
+`GET_STATUS` — so a Pico latched by an `HB_LOST` (3 s watchdog, e.g. the *previous* server shutdown)
+refuses every `SET_THR` from the next run, forever, silently. The dashboard meanwhile shows ARMED
+with live throttle numbers on dead motors.
+
+`PicoSerial.estopped` now mirrors it best-effort — set by an ESTOP-class ALERT
+(`ESTOP_AUTO`/`HB_LOST`/`SBUS_LOST`), an `ESTOP` NAK, or an ESTOP we sent (latched *before* the ACK:
+if the ACK is what gets lost, the boat is still stopped); cleared only by an ACK'd RESUME. Surfaced
+as `pico_estopped` on nav telemetry + both manual endpoints, and shown in the panel as a note
+pointing at **CLEAR E-STOP**. Deliberately **not** auto-cleared on arming manual or on reconnect —
+silently clearing an estop someone set on purpose is the wrong direction to be wrong in, and the
+first refused `SET_THR` re-latches the flag anyway, so it self-heals.
 
 **Changed:**
-- `firmware/boat-pico/sensors.py` — hull leak **GP17/GP18 → GP19/GP20** to match the board's actual
-  J16/J15 connectors. On V2, GP17/GP18 are the BNO085's RST/INT on J5, so the old pins were reading
-  the IMU's control lines, not leak contacts. Docstring now flags that the quoted divider values are
-  the M18 *target*, not what's fitted.
-- `firmware/boat-pico/esc_telem.py` — right ESC telemetry **GP19 → GP11**. GP19 is the J16 hull-leak
-  connector; a leak switch shorts to GND and would have held the telemetry line low. GP11/GP16 are
-  the only unconnected pins on V2, so both taps are now clash-free — all four inputs fit.
-- `docs/pin_map.md` — Boat Pico table was missing **ten pins** (GP2/3/6/7/11/16/19/20/21/22). Added
-  them plus a verified `Board (V2)` column, a full connector index, the divider-mismatch table, and
-  the missing-pull-up / 5 V-on-sensor-connectors warnings. Corrected the stepper section: it claimed
-  1/16 microstepping but MS2/MS3 are grounded → **half step**.
-- `docs/pcb_design_notes.md` — described a board that doesn't exist (BT2/BT3, F1–F4, XT90 outputs
-  J4/J5, DHT11, IMU on J10, "no Pi 5 on this board"). Rebuilt from the netlist; added the CAN
-  interface, A4988, DRC/ERC status. It also mislabelled R9 as a leak pull-up.
-- `CLAUDE.md` — quick-orientation pin list, Boat_PCB highlights table, architecture diagram.
-- `docs/esc_telemetry.md`, `docs/esc_setup.md`, `docs/am32_config.md`, `pi5/scripts/am32_config.py` —
-  GP19 → GP11 for the right telemetry tap.
-- `firmware/pod-pico/main.py` — docstring was missing GP22 (pressure ADC), which `sensors.py` uses.
+- `pi5/server/rate_limit.py` — per-(IP, path-class) buckets; high-rate class for the drive tick
+- `pi5/server/app.py` — `default_rpm=300`; `pico_estopped` in `_nav_out`, `_manual_state`, drive reply
+- `pi5/comms/pico_serial.py` — `PicoNak`; reason = `fields[1]`; `estopped` latch mirror
+- `pi5/navigation/navigator.py` — `_log_thr_error()`: de-duplicates the 5 Hz flood to once per 5 s
+  and prints the recovery step for ESTOP / RC_ACTIVE
+- `pi5/server/models.py`, `templates/command_center.html` — `pico_estopped` field + panel note
+- `pi5/tests/test_rate_limit.py` (9), `pi5/tests/test_pico_nak.py` (15) — new; **480 pass**
+- `docs/serial-protocol.md` — fixed the NAK diagram; documented the field offset + the latch
+
+**Decisions / open questions:** the latched-ESTOP diagnosis is by elimination, not observed — the
+server was down by the time I looked, so I could not read the live reason. The fixed log line now
+prints it: **if the next run says `RC_ACTIVE` instead, the cause is different** (a stray
+`RC_OVERRIDE`, not an estop). Unresolved: nothing ever polls `GET_STATUS`, so the Pico's authoritative
+state string is still unused — a periodic poll would make `estopped` exact instead of inferred.
+
+**Next steps:** (1) Restart the stack and arm manual — the 429s should be gone; if the boat still
+does not move, read the new `SET_THR refused` line and click CLEAR E-STOP. (2) Consider adding estop
+to `TEL` (or polling `GET_STATUS`) so the mirror cannot drift. (3) Still open from before: the
+stepper `find`/`burst` runs, and the buoy screen's false-positive gates.
+
+## 2026-07-30 — Drive ESCs moved onto the hull-leak connectors; WASD manual override in the dashboard
+
+**Worked on:** two user requests. (1) Repurpose the hull-leak pins as the two drive-ESC signals, now
+that the ESCs are mismatched hardware. (2) Add a game-style manual override to the command center.
+
+### 1. Drive ESCs GP2/GP3 → GP19/GP20 (hull leak removed)
+
+`escs.py` drove **GP2/GP3**, which belong to the MCP2515 on `Boat_PCB V2` and reach **no connector**
+— the bench was tapping the Pico header directly. The two hull-leak connectors are JST-XH 2-pin
+wired **1 = GND, 2 = signal**, i.e. exactly an ESC servo lead, so propulsion moved onto them.
+
+| | pin | connector | ESC | motor | telemetry |
+|---|---|---|---|---|---|
+| **Left** | GP19 | J16 (ex-"Hull Leak Left") | NeutronRC 70A-G071 · **AM32** | Badass 2814-**1560 kv** | GP16 |
+| **Right** | GP20 | J15 (ex-"Hull Leak Right") | FlashHobby FH-70A · **BLHeli-32** | Badass 2320-**1630 kv** | GP11 |
+
+This relieves **three of the five MCP2515 clashes** (GP6 winch → GP21 earlier, now GP2/GP3).
+**SBUS on GP7 still clashes** and has nowhere to go (GP0/GP1 dead).
+
+PWM slices verified: GP19 = slice 1B (free once GP2/GP3 are released), GP20 = slice 2A, sharing
+slice 2 with the winch on GP21 (2B). Same-slice channels share a *frequency* but keep independent
+duty; both want 50 Hz. Noted at `MW_PIN` because it is a trap for a future edit.
+
+**⚠ Hull leak sensing is gone.** `sensors.py` must never configure GP19/GP20 again — `sensors.init()`
+runs *after* `motor_control.init()`, so a pull-up input there would fight live ESC PWM. That
+ordering was the one genuine bug risk in this change.
+
+`hull_status()` now returns **`--`**, not `DRY`: returning `DRY` would assert a dry hull on a boat
+with no hull sensor. That required Pi-side changes, because `--` would otherwise read as a *leak* —
+the sentry pre-roll trigger in `app.py`, plus two places in `command_center.html` that would have
+raised a **false CRITICAL leak alarm**. `--` now renders muted. The pod leak sensor
+(`pod_uart.leak_detected`) is the only remaining leak alarm.
+
+Kv mismatch is trimmed in firmware only: **`motor_control.COMP_R = 0.957`** (1560/1630).
+`navigation.motor_gain_*` deliberately left at 1.0 — setting both compensates twice.
+
+**Changed:** `escs.py` (pins + docstring), `sensors.py` (leak removed), `main.py` (alerts, LED
+condition, pin map, banner), `motor_control.py` (COMP_R, slice note), `esc_telem.py` +
+`esc_passthrough.py` (docstrings; passthrough already derives pins from `escs.*` so it followed),
+`docs/pin_map.md`, `docs/esc_setup.md` (now covers **both** ESCs), `docs/serial-protocol.md`,
+`pi5/server/app.py`, `command_center.html`.
+
+### 2. Manual (WASD) override
+
+New: arm/disarm panel in CONTROLS with W/A/S/D (arrows too), a live speed-limit bar, L/R readout,
+ALL STOP (Space), and lit key indicators.
+
+Architecture: the endpoints are **thin and never touch the Pico** — they only feed the Navigator,
+which owns the throttle. Manual is the **highest-priority branch in `_nav_loop`**, above stay mode.
+Mixing lives in `navigator.manual_mix()` so it is testable in Python and uses the same `_trim()`
+clamp as the autonomous path.
+
+Safety, which is most of the work here:
+- **Dead-man timeout** (`MANUAL_TIMEOUT_S = 0.75`). The browser repeats key state at 10 Hz; if
+  nothing arrives the loop zeroes the motors itself. A closed tab, frozen renderer or dropped WiFi
+  stops the boat with no operator action. The ESCs hold their last pulse forever otherwise.
+- Must be **armed explicitly**; arming cancels goto/stay and starts *stale*, so the boat does not
+  move until a key is actually pressed.
+- **ESTOP disarms manual**, or the next keypress would drive straight through the ESTOP.
+- `goto()`/`hold()` disarm manual **in the navigator**, so every caller (API + mission manager) is
+  covered — otherwise manual would outrank a new target and the boat would sit still while the UI
+  claimed it was under way.
+- Refuses to arm while a mission is running (409) rather than silently aborting someone's survey.
+- Browser releases all keys on blur / tab-hide / Escape — `keyup` never fires for a key held when
+  the window loses focus.
+- Combined W+D scales the *pair* instead of clamping one side, so full-speed turns keep their ratio
+  rather than quietly straightening out.
+
+**Changed:** `navigator.py` (manual state/mix/loop branch, NavConfig.manual_speed), `models.py`,
+`app.py` (`/api/manual`, `/api/manual/drive`, `/api/manual/speed`, ESTOP interlock),
+`command_center.html` (panel + CSS + input loop), `config.yaml`, new
+`pi5/tests/test_manual_override.py`.
+
+**Verification:** 456 tests pass (437 → +19 new). A 24-check smoke test of the handlers passed
+(validation, mission interlock, ESTOP disarm, goto hand-back, NaN rejection, clamping). Dashboard JS
+parses clean under `node --check`; all referenced element IDs exist. `httpx` is absent so
+`TestClient` is unavailable — handlers were called directly instead; routes verified registered.
 
 **Decisions / open questions:**
-- **`pi5/cv/stepper.py` has an 8× error and is NOT yet fixed.** It assumes 1/16 microstepping
-  (`steps_per_rev = 3200`) but the board is half step (400). A commanded 10° pan travels 80° and blows
-  through the soft limits. One-line fix, left for a deliberate change.
-- **Three hard board faults, all inherited from V1:** MCP2515 `~CS` (U1.16) tied to GND (SPI can't
-  frame transactions); Pico **GP5 tied to GND** (kills UART1 RX / GPS, and GP4 sits on the MCP2515's
-  `SO` output — two drivers on one net); A4988 VDD has no on-board supply, fed only from the Pi's 3V3
-  via J3 pad 2.
-- **GP2/3/4/6/7 conflict is unresolved and unresolvable by pin moves** — the V2 board commits them to
-  the MCP2515, this branch drives ESCs/winch/SBUS/GPS on them, and no free pins remain.
-- **Silkscreen swap:** R9's and R11's reference text sit over each other's footprints (verified
-  geometrically — 6.32 mm offsets vs. 5.08 mm elsewhere). Fit 1 kΩ at the pad printed "R11" and 10 kΩ
-  at "R9". R2's label has drifted over J4.
-- **J3's pad numbering is transposed** (odd/even rows shifted one position), so schematic pad *N* =
-  Pi pin *N∓1*. Confirmed by 6/6 power-pin alignment and by matching `stepper.py`'s BCM numbers.
-  Reading Pi pins off the schematic pad numbers gives a wrong — and alarming — answer.
-- Dividers still pre-M18: drive ×17.92 (firmware expects ×14.0), elec ×4.33 (expects ×6.6, and
-  over-range on an M18 at 4.15 V into a 3.3 V pin). Fitting 56k/10k on all three gives ×6.6 exactly;
-  then set `INV_P_RATIO = 6.6`. Also no ADC filter caps and no I²C pull-ups anywhere.
+- Manual is Pi-side, **not** the Pico's SBUS `RC_OVERRIDE` path. It therefore depends on the USB
+  link — which is exactly the link that wedged twice earlier today (see the entry below). The
+  dead-man timeout is what covers that, but **the CDC wedge is now on the critical path for a
+  control surface** and deserves the investigation it is already flagged for.
+- ⚠ **None of the ESC re-pin work has run on hardware** — the changed pins are the ones being
+  rewired. Boot banner should read `Drive ESCs: GP19(L,AM32,...)/GP20(R,BLHeli32,...) PWM 50Hz OK`.
 
-**Next steps:** fix `stepper.py`'s `steps_per_rev`; rework the three dividers + add the 100 nF ADC
-caps and I²C pull-ups; route `~CS` and free GP5 before expecting CAN or GPS to work; reposition the
-three reference texts and annotate the mounting holes MH1–MH4; re-export the gerbers (those in
-`Boat_PCB V2/` predate the current `.kicad_pcb`) and get them under version control.
+**Next steps:**
+1. Configure both ESCs before first spin-up — they are no longer identical: AM32 "Bi-Directional"
+   vs BLHeli-32 **"3D mode"**, and BLHeli-32 also needs its **throttle range calibrated to
+   1000–2000 µs** (AM32 auto-detects, BLHeli generally does not) and telemetry set to
+   **continuous**, not DShot-request-only, or `esc_telem.py` gets nothing. Full table in
+   `docs/esc_setup.md`. If it turns out to be BLHeli**_S** rather than _32, stock firmware has no 3D
+   mode — reflash with Bluejay or the right motor will never reverse.
+2. Tune `COMP_R` from 0.957 on the bench via ESC telemetry erpm — Kv only equalises *no-load* rpm and
+   these are different frames (2814 vs 2320).
+3. Bench-test manual override with props **off** first; confirm the dead-man actually cuts by
+   closing the tab mid-throttle.
+
+## 2026-07-30 — Pull-ups fitted: **the bus is fixed.** The BNO085 module now fails on its own — it resets on every write
+
+**Worked on:** user power-cycled the Pico and asked to retest the IMU. Diagnosis only — no firmware,
+config or repo code changed. Two findings, one of which is more serious than the IMU.
+
+**⚠ FINDING 1 — the Pi could not send the Pico anything. The control link was one-way.**
+Before any I²C work: every write to `/dev/ttyACM0` blocked. `os.write()` accepted 8 bytes and
+`TIOCOUTQ` stayed pinned at 1280 indefinitely — the Pico was **NAKing its OUT endpoint**. Telemetry
+(`$TEL`/`$ENV`/`$ALERT`) streamed out fine the whole time, so the link *looked* healthy. Not DTR/RTS
+(both asserted, toggling changed nothing), not flow control (`CRTSCTS`/`IXON` clear), not
+enumeration (one clean `cdc_acm` attach at boot, no re-enumerate). **A `USBDEVFS_RESET` cleared it
+instantly** and writes worked again.
+This means `SET_THR`, `ESTOP` and the heartbeat could not reach the Pico — and the AM32 ESCs hold
+their last PWM. `task_serial_rx` → `read_usb()` cannot die (bare `except` inside its loop), so the
+wedge is below the firmware, in the CDC RX path. **Unexplained and not fixed — treat as a safety
+item.** Workaround: USB-reset the device before trusting the link.
+
+**FINDING 2 — the IMU is fine; the bus it lives on has no pull-ups, and that is the whole story.**
+Confirms and supersedes the "intermittent, cannot be solder" reasoning in the entry below.
+
+- **The BNO085 boots and talks properly.** After a bus recovery it ACKs at **0x4B** and its boot
+  queue drains cleanly in 28-byte chunks — `len=276 → 248 → 220 → … → 24` on ch0, then `len=5` on
+  **ch1 (executable = reset complete)**, then ch2. `SET_FEATURE(RotationVector)` returns **True**.
+- **The bus wedges with SCL held low.** Caught it directly: `SDA(GP14)=1, SCL(GP15)=0`, still low a
+  second later — a slave stretching the clock, exactly as predicted. **The standard 9-clock recovery
+  sequence frees it every time** (SCL→1), and the rescan then found **`0x44`** — the SHT41 on the
+  same pins, which is why *both* devices vanish together.
+- **Speed-dependent, and that is the tell.** With a `~RST` pulse the device answered **8/8 at 50k,
+  100k and 400k**; long reads are what corrupt (`OSError(110)` ETIMEDOUT mid-body on a 276-byte
+  read), short ones survive. Slow rise time on an unpulled bus, nothing else.
+- **The earlier "GP14/GP15/GP17 short migrates between pins" mystery is resolved** — those were
+  snapshots of a wedged bus, not shorts. `map` now reads GP14/GP15 **both idle-high**.
+- **Still no heading.** Channel census after a successful `SET_FEATURE`: `{ch0: 82, ch1: 6, ch2: 6}`
+  and **zero packets on ch3 (reports)**. The reports channel never opens, so `compass.read()` gets
+  nothing — consistent with the part re-announcing rather than streaming on a bus that keeps hanging.
+
+**Unchanged and re-confirmed:** GP9 and GP10 still `*** SHORTED LOW ***` every run. Firmware boot
+banner still prints `IMU: I2C0 GP8/GP9 addr=0x4A FAIL` — the wrong-bus + wrong-address pair from the
+entry below is still there, untouched.
+
+**Changed:** nothing in the repo. `pi5/scripts/pico_i2c_probe.py` was used as-is; all new probes were
+throwaway scratchpad scripts. The Pico firmware was left **running** (verified `$TEL` after a soft
+reset) — the probe stops it, so it must be restarted or it sits dead at the REPL.
+
+**Decisions / open questions:**
+- The probe's docstring claims hw I²C1 @400 kHz is the reliable config. **Partly wrong** — 400 kHz
+  works for short transactions but the failure is transaction *length*, not clock rate. Chunked
+  ≤28-byte reads at 100 kHz drained the advertisement that 400 kHz could not.
+- Why the CDC RX endpoint wedges is unknown. It survived a firmware restart and only a USB reset
+  cleared it. Worth reproducing deliberately.
 
 ---
 
-## 2026-07-28 — Buoy detection was dead on hardware; inference thread budget; health-loop forks; dashboard safety UI
+### ⟶ SAME SESSION, AFTER THE USER FITTED 2× 2.2 kΩ TO 3V3 ON GP14/GP15
 
-**Worked on:** `/goal` — three max-effort passes: make the stack cheaper on the Pi, *verify* buoy +
-person-in-water detection, and fix the dashboard's buttons/clutter. Pass 1 = 4 parallel Opus audits
-(read-only, so they added no CPU load); pass 2 = 3 fresh Opus agents re-reviewing my own diff; pass 3 =
-verification on the Pi. Everything ran under a 1 Hz `EXT5V`/throttle watchdog with heavy commands pinned
-to 2 cores (`nice -n 15 taskset -c 0,1`).
+**The pull-ups worked. The bus is fixed — this is measured, not inferred:**
 
-**Headline: the boat could not detect a buoy at all.** The active detector is
-`pi5/cv/models/yolov8n_ncnn_model` — generic **COCO, 80 classes, no `buoy`**. `maritime_yolov8n_info.json`
-is a placeholder (`mAP50: 0.0`) and its weights are absent, so *nothing* ever emitted the label that
-`threat_assessor` grades WARNING and `object_memory` charts as a PERMANENT marker. The entire
-"confirm a buoy → drop a GPS marker" feature (docs/object_memory.md) was only ever exercised by the
-sim's ground-truth `SimObjectMapper`. The existing buoy/person tests pass because `FakeOverlay` injects
-detections — YOLO never runs in them. `water_seg.onnx` is also absent, so Tier-1b hybrid seg is off.
+- **SHT41 (0x44) CRC integrity: 120/120 clean** measurements, **0 bad-CRC, 0 I²C errors**, at *both*
+  100 kHz and 400 kHz. The SHT41 ships a CRC-8 with every reading, so this is a real data-integrity
+  test of the wire, not a presence check. It used to vanish from the bus constantly.
+- **The 276-byte boot advertisement now reads in ONE full-length 400 kHz transaction** and decodes to
+  real ASCII (`SHTP`, `1.0.0`). That exact read previously returned all-nonprintable or `ETIMEDOUT`.
+- `0x44` and `0x4B` now enumerate together, every scan.
+- No more SCL-low wedges under normal traffic.
 
-**Changed:**
-- `pi5/cv/buoy_detector.py` (NEW) — classical colour/shape buoy screen: one HSV threshold pass +
-  contour filter (saturation / solidity / area / aspect), **measured 0.62–0.96 ms/frame** on this Pi
-  (640×480→1280×720, ripple noise) vs ~30 ms for a YOLO pass. Emits the same
-  `(x1,y1,x2,y2,label,conf)` tuples, so boxes/distance/radar/threat/map all work unchanged.
-  **Suppression uses containment, not IoU** — an orange life jacket is a small blob *inside* a large
-  `person` box where IoU is tiny, so an IoU gate would have charted a phantom PERMANENT buoy on a
-  swimmer. Green is off by default (sunlit foliage) and the top 35% of frame is skipped (sky/treeline).
-- `pi5/cv/vision_overlay.py` — `class_conf` per-class confidence floors (backend runs at the lowest
-  floor, each box then filtered by its own class) so a distant swimmer survives at 0.25 without
-  flooding other classes; `buoy_fallback` that **auto-disables when the loaded model emits `buoy`
-  itself**; `_infer_conf` is a property (the CONF slider mutates `_cfg.conf`, so a cached copy went stale).
-- `pi5/cv/threat_assessor.py` — `swimmer` was graded **INFO, i.e. not tracked at all**, while
-  `object_memory` canonicalises it to `person`. Added it plus jetski/raft/canoe/paddleboard as CRITICAL.
-- `pi5/cv/cpu_budget.py` (NEW) + `ncnn_detector`/`onnx_detector`/`ort_utils`/`segmentation` — inference
-  no longer pins **all four** Pi 5 cores. Measured (yolov8n@320, NCNN, median of 15): 1 thread 27.9 ms /
-  2 → 18.4 / 3 → 19.2 / 4 → 17.7. Thread 2 gets ~96% of the speed-up; **the 4-thread pass drove this Pi's
-  sticky throttle flags `0x0` → `0x50000` (under-voltage occurred + throttling occurred)**. Since
-  `detect_max_fps: 15` is a 66.7 ms budget, even one thread clears the cap with 2.4× headroom — the extra
-  threads bought latency nobody consumes and cost a brown-out. Default is now cores−2; override via
-  `camera.detection.num_threads` / `vision.seg_num_threads`.
-- `pi5/server/app.py` — the 1 Hz health loop forked **7 `vcgencmd` subprocesses every second, forever**
-  (604,800/day). Temp + ARM clock now come from sysfs (~37 µs for both), the 4 voltage rails are sampled
-  every 10 s, and `get_throttled` still forks every tick because it *is* the under-voltage alarm.
-  Measured 7 → 1.4 forks/s, child CPU **2.5 → 0.5 ms/s**, tick wall time 19.2 → 2.7 ms. During an
-  **active** throttle (`_throttled_now`, live bits 0-3 only — the sticky 16-19 bits latch until reboot)
-  it spends the fork on `measure_clock arm` so the operator never sees a masked clock while debugging.
-- `pi5/server/templates/command_center.html` — removed two **duplicated live-handler** control groups
-  from COMMANDS (VISION SEG/YOLO/AVOID and RADAR BAR CENTER/SCAN/STOP); both existed twice, and only
-  the surviving copies are the ones `renderVision()` actually keeps in sync. Replaced **every** native
-  `window.confirm()` with an in-page `#mConfirm` dialog (a browser can suppress native dialogs
-  permanently — unacceptable for ABORT / CLEAR E-STOP / DELETE clip / CLEAR MARKS / ARM PASSTHROUGH /
-  ESC WRITE). Added a real focus trap + focus restore + ESC-to-close to back up the new
-  `role=dialog aria-modal=true` (aria-modal without a trap is a promise the page was breaking). Put a
-  deliberate gap between E-STOP and CLEAR E-STOP. Moved CLEAR MARKS out of the sim-only group — the
-  buoy screen charts real markers on hardware now. Added `min-width:0` + 1200/820 px breakpoints for the
-  8-group camera bar and `pointer:coarse` tap targets for dockside tablet use.
+**Two earlier conclusions were wrong and are corrected here:**
+1. **There is no reboot loop.** The "1.4 reboots/s" in the entry above was an artifact of *chunked*
+   reads never fully consuming the advertisement. With full-length reads the queue drains to
+   genuinely empty (`ch0 len=276` → `ch1 len=5` → NAK) and stays quiet.
+2. **Most "errors" were plain NAKs.** A BNO08x NAKs reads when its queue is empty; MicroPython
+   surfaces that as `OSError`, identical to a real fault. Earlier passes treated normal idle as a bus
+   hang and thrashed the recovery routine against nothing.
 
-**Verified (on the Pi):** `pytest pi5/tests` **293 green** (from 247, **+46**), ruff clean, firmware
-`py_compile` OK, inline `<script>` passes `node --check`, div balance 304/304, no undefined onclick
-handlers. Proved the detection chain on the **live** backend, not a mock: ncnn loads (80 COCO classes) →
-fallback auto-activates → `_raw_detect` returned `('buoy', 0.681)` boxed on the target →
-`threat_level_for` = WARNING → `category_for` = PERMANENT. Sim booted, `/` and `/planner` 200, `/ws/health`
-frames carry correct `temp_c` / `clock_mhz` (tracked 1500↔2400 MHz) / decoded throttle / volts, and
-`sysfs` vs `vcgencmd` cross-checked (clock delta 0.0 MHz over 6 samples).
+**⚠ The remaining fault is the IMU module itself — it resets on every write.** Isolated with a
+read-only control arm:
 
-**Pass-2 reviewers found 4 real bugs in my own changes — all fixed:** (1) the volts cache guard used
-`_volts_cache is not None`, but off a Pi the reading legitimately *is* None, so it re-forked 4 probes
-every tick — worse than before; now keyed off a separate `_volts_sampled` flag. (2) Buoy suppression ran
-against *unfiltered* YOLO boxes, so a sub-threshold box (boat @ 0.32 vs its 0.40 floor) could kill a buoy
-and then be dropped itself, leaving the operator with neither. (3) `x1`/`y1` weren't clamped to the frame.
-(4) The segmentation model silently inherited the new thread count — now explicit via config.
-**Rejected:** the per-client telemetry-recompute "MED" finding (~300 µs/s with 1–2 dashboards; not worth
-the staleness risk), a raw-BGR recorder pre-roll (+330 MB on a 4 GB Pi — worse than the JPEG ring), and a
-claim that `scaling_cur_freq` systematically masks throttling (6 back-to-back samples showed *exact*
-agreement with `measure_clock arm` at both 1500 and 2400 MHz; the RPi cpufreq driver queries the
-firmware). The concern was still addressed via the throttle-aware fallback above.
+| | result |
+|---|---|
+| address ACK | **30/30** |
+| reads (incl. 276-byte) | clean, correct ASCII |
+| **1st write** | lands, and the chip immediately emits `ch0 len=276` + `ch1 len=5` → **it reboots** |
+| **writes 2–5** | **NAK'd, 20 retries each, all fail** |
+| control: reads only, no writes | **0 resets, 0 packets** — quiet and stable |
 
-**Decisions / open questions:** the classical screen is a **stopgap, not a substitute for a trained
-model** — it finds red/orange/yellow buoys by colour, so it will miss unlit black/green marks and wants
-on-water tuning of `min_sat` / `roi_top_frac`. Charting a buoy as a *map marker* still needs **stereo
-range**, so a mono rig detects and grades buoys but won't place them. This Pi now carries sticky
-`0x50000` flags from the thread benchmark — the 27 W PSU swap from the 2026-07-27 entry is still
-outstanding and still recommended. Nothing committed — tree left for review.
+So `SET_FEATURE` can never take effect, `GET_FEATURE_REQUEST` never returns a response, **channel 3
+(reports) never opens**, and there is no heading. `INT` (GP18) never asserts, consistent with the
+chip never having data to announce.
 
-**Next steps:** on-water pass with a real buoy + camera to tune the colour gates; train/export the
-maritime model so the fallback can switch itself off; still-open UI ideas the reviewer and I both rated
-low priority (auto-refreshing DIAGNOSTICS instead of 3 manual poll buttons, folding TRIM/ESC into one
-DRIVE settings modal).
+**GP17 is NOT the IMU's reset.** An A/B test (GP17 driven push-pull high vs left high-Z) produced
+*byte-identical* results. Correct conclusion, wrong reason — see the RST/INT section below: GP17 is
+the **interrupt**, so pulsing it was always a no-op. GP9/GP10 remain shorted as always.
 
-## 2026-07-27 — Pi 5 power-off during camera record/replay = computer-USB brown-out
+**Changed:** still nothing in repo code — diagnosis only. Journal only. Firmware verified running
+again afterwards (`$TEL` streaming); the probe stops it, so it must be restarted or it sits dead at
+the REPL. Firmware boot banner unchanged: `IMU: I2C0 GP8/GP9 addr=0x4A FAIL`.
 
-**Worked on:** the on-camera hardware pass flagged last session. User reported the Pi 5 **fully powered
-off** twice — once while recording, once while replaying a clip — and asked why.
-**Root cause: a 5 V brown-out from underpowering.** The bench Pi 5 was powered from the user's **computer
-USB port** (~0.5–0.9 A @ 5 V); a Pi 5 needs 5 A/25 W and pulls 1.5–2.5 A+ under the always-on CV stack +
-both USB cameras. `vcgencmd pmic_read_adc` showed `EXT5V` idling at only ~5.0 V *with the software
-stopped* (no headroom). Recording adds a **VP8 software encode** (`pi5/cv/recorder.py:337`, `VP80`)
-across all cores; replay is a cheap static serve (`pi5/server/app.py:1643`) but the CV pipeline still
-runs under it — either tips total draw past the port's limit → PMIC undervoltage cutoff → instant off.
-Active Cooler fitted + 49 °C idle → thermal ruled out. No code bug.
-**Why the crashes left no logs:** journald was volatile (`/var/log/journal` empty, logs in tmpfs) and
-rsyslog absent → wiped on reboot.
-**Changed (system state, NOT the repo):**
-- Enabled **persistent journald** — drop-in `/etc/systemd/journald.conf.d/99-persistent.conf`
-  (`Storage=persistent`; machine-id dir now present) so a future hard-off is captured in
-  `journalctl -b -1 -k`.
-- Added `~/pi_power_monitor.py` (off-repo) — a black-box logger sampling EXT5V/Vcore/temp/throttle to
-  `~/pi_power_monitor.csv` with **fsync per line**, so a brown-out preserves readings to the last second.
-**Fix given to user:** power the Pi from a real **5 V/5 A USB-C PSU** (official 27 W); do **not** set
-`usb_max_current_enable=1` on a weak supply (removes the USB safety cap → worse brown-outs).
-**Decisions / open questions:** on the deployed boat the Pi runs off the **M18 → 5 V UBEC**, which faces
-the same CV+record peak — offered to switch the recorder **VP8 → MJPG** (cameras already emit MJPG,
-near-zero CPU) or trim record fps/res to widen the power margin. **Awaiting user go-ahead**; no code
-touched this session.
-**Next steps:** user swaps to the 27 W PSU + re-runs record/replay (optionally under
-`~/pi_power_monitor.py` to confirm `EXT5V` stays ~5.1 V flat); then decide on the MJPG recorder change
-for the boat's UBEC budget.
+**⚠⚠ THE RST AND INT WIRES ARE SWAPPED — and GP17 was never a short.** The user reported having only
+power / SDA / SCL / RST / INT connected, which contradicted the measurements, so the two lines were
+located empirically:
 
-<!-- Older entries (right-view box fix + live depth view, stereo vision review + Windows camera fix, live camera assignment, commit/push housekeeping,
-     align-first steering, waypoint planner page, M18 battery migration, token-bloat audit,
-     third-downloaded-file audit, repomix/rtk, token-optimization config pass) live in
-     docs/session_journal_archive.md. -->
+- **RST is on GP18** (pin map says GP18 = `~INT`, J5.8). Driving GP18 low makes 0x4B stop ACKing;
+  releasing it brings the device straight back. No other candidate pin does this.
+- **INT is on GP17** (pin map says GP17 = `~RST`, J5.7). During a guaranteed post-reset data-pending
+  window GP17 read low **500/500 samples**, while GP12/13/16/19/20/22 stayed high throughout.
 
+**This retires the "GP17 is SHORTED LOW" finding that has been in the docs and in
+`pico_i2c_probe.py`'s `map` output all along.** GP17 is a correctly-functioning **active-low
+interrupt** that has been asserted continuously because the boot advertisement was never drained.
+`map` reports any asserted active-low signal as a short — it cannot tell the two apart. GP9/GP10
+remain genuinely shorted; **GP17 does not, and `docs/pin_map.md` needs correcting.**
+
+Consequence: every "reset pulse" in this session and the one before it was applied to GP17, which is
+the interrupt line — i.e. **the module was never actually being reset**. With real reset control on
+GP18 the chip resets cleanly and re-emits a 280-byte advertisement + ch1.
+
+**Writes are INT-gated.** Writes land only while INT (GP17) is asserted and are NAK'd when the queue
+is empty — which explains the earlier 4/5-then-0/10 write pattern exactly. Gating writes on INT low
+made `SET_FEATURE` land reliably. **But the chip still answers it with `ch0` + `ch1` — a reset — and
+channel 3 still never opens.** A correctly framed, correctly timed command still reboots the part.
+
+**The chip is running its full application firmware — not a bootloader.** The advertisement decodes
+completely: `SHTP / control / executable / device / sensorhub / control / inputNormal / inputWake /
+inputGyroRv`, SHTP `1.0.0`, app `1.1.0`, followed by ch1 payload `01` = reset complete. So the part
+boots correctly and its sensor app is alive.
+
+**⚠ THE ACTUAL BLOCKER: the part ACKs its address but NAKs every data write once idle.**
+- `bus.scan()` — an address-only write — succeeds **30/30**, and both `0x44` and `0x4B` enumerate.
+- A write *with payload* only ever lands inside the post-reset INT-low window, and when it does land
+  the chip **ignores it**: no ch2 response, no ch3 reports.
+- Once the boot queue drains, **INT (GP17) never asserts again** and writes fail 100 %:
+  0/52 tries, then 0/26 at each of four post-reset delays (60/150/300/600 ms).
+- Tried both transports: **hardware I2C1** (strict on clock stretching, which the BNO08x does during
+  writes) *and* **SoftI2C** (tolerant). Neither changes it.
+- `Product ID Request (0xF9)` — the canonical liveness command — **cannot be delivered at all**, and
+  a commanded reset on the executable channel likewise never lands.
+
+This is the classic signature of a BNO08x that is **not ready / asleep** rather than a broken bus or
+a broken part: reads are flawless, the address ACKs, only payload writes are refused. On a BNO08x
+that state is governed by strap/interface pins that are **not connected**.
+
+**⇒ ROOT CAUSE (very likely): the module's unused host-interface inputs are left FLOATING.** The user
+confirmed: **MOSI/ADDR is not connected, CS is not connected**, and BOOT is an on-board plated hole,
+not a header pin (so BOOT is already strapped — consistent with the app-firmware advertisement we
+read). Floating CMOS inputs on a BNO08x host interface produce exactly the observed behaviour: the
+address decodes and ACKs, then the interface state machine refuses payload writes.
+
+This also probably explains the **0x4B vs 0x4A address mismatch** that the docs have treated as an
+inherent property of the module: **MOSI doubles as ADDR on this breakout** (the user's own labelling),
+and a floating ADDR reads high → 0x4B. Grounding it should yield **0x4A**, which is what
+`compass.py` already hardcodes.
+
+Note also: an earlier decoder bug meant report payloads were parsed without stripping the 4-byte
+SHTP header that the part repeats on every read. Fixed — but no ch3 packet ever arrived, so it
+changed no conclusion.
+
+---
+
+## 🚩 FLAGGED — PARKED 2026-07-30, PICK UP HERE
+
+**The bench is left working:** pull-ups fitted and proven, bus clean, Pico firmware running and
+verified (`$TEL` streaming). No repo code was changed in this session — diagnosis only.
+
+**Step 1 — wire the four floating pins (physical, blocks everything else):**
+
+| module pin | tie to | why |
+|---|---|---|
+| **MOSI / ADDR** | **GND** | address select; floating reads high → 0x4B. Grounded → **0x4A** |
+| **CS** | **3V3** | SPI chip-select, unused in I²C — park it deasserted, not floating |
+| **PS0** | **GND** | I²C mode |
+| **PS1** | **GND** | I²C mode |
+| VIN | **3V3, not 5 V** | `docs/pin_map.md` flags J5/J7/J11/J13 as 5 V; a bare BNO085 is 3.6 V max |
+
+`PS1=0 / PS0=0 = I²C` is solid. Leave BOOT alone. **Scan for both 0x4A and 0x4B afterwards** — the
+address is expected to move.
+
+**Step 2 — re-run the bring-up.** Scratch scripts are gone (they were in the session scratchpad);
+the reusable tool is `pi5/scripts/pico_i2c_probe.py`. The sequence that works: 9-clock bus recovery →
+reset via **GP18** → wait for INT low on **GP17** → drain the advertisement with full-length reads →
+`SET_FEATURE` → read ch3. Success = packets on **channel 3**; that is the one thing never yet seen.
+
+**Step 3 — only if writes still NAK:** swap in a known-good module. Reads flawless + address ACK
+30/30 + every payload write refused is narrow enough that a substitution settles it fastest.
+
+**Then the code work (all still pending, none of it done):**
+1. **Correct `docs/pin_map.md`:** at the Pico, **reset behaves as GP18 and interrupt as GP17** — the
+   reverse of what the map says. User confirmed their wiring follows the connector labels, so the
+   swap is **board-side**, same class of defect as the documented J3 odd/even row transposition.
+2. **Retract the GP17 short from the docs.** There is no GP17 short — it is an asserted active-low
+   interrupt. Also fix the `map` verdict in `pico_i2c_probe.py`, which cannot tell an asserted
+   active-low signal from a solder bridge and has been reporting it as `*** SHORTED LOW ***`.
+   GP9/GP10 *are* genuinely shorted; leave those.
+3. **`compass.py`:** bus → GP14/GP15 **sharing `sensors.py`'s bus object** (not a second one), the
+   address per whatever Step 1 lands on, plus 9-clock bus recovery and INT-gated reads on GP17.
+4. **Pi→Pico CDC write wedge** — independent of the IMU and a safety issue: the Pi could not send
+   `SET_THR`/`ESTOP`/heartbeat while telemetry still streamed out, looking healthy. Seen **twice**
+   this session; `USBDEVFS_RESET` clears it each time. Cause unknown.

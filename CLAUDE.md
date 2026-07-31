@@ -65,17 +65,29 @@ hardware is attached.
    ⚠ Boat_PCB V2 instead fits an MCP2515 + TJA1051 on GP2/3/4/6/7 → J2 for the
      VESC architecture. The board and this firmware collide — see docs/pin_map.md.
 
-Pi 5 USB peripherals (+ the radar-bar A4988 stepper on the 40-pin header, the one GPIO user):
+Pi 5 USB peripherals (+ two 40-pin-header users: the radar-bar A4988 stepper and,
+since 2026-07-29, the **GPS UART** — module TX → GPIO15, /dev/ttyAMA0 @ 38400):
   USB-A (1) → Boat Pico (CDC ACM → /dev/ttyACM0)
   USB-A (2) → Left USB camera  (cv2.VideoCapture(0))
   USB-A (3) → Right USB camera (cv2.VideoCapture(1), stereo pair, 120mm baseline)
   USB-A (4) → SIM7600G-H 4G HAT, OR a USB-TTL HC-12 dongle (emergency backup)
   USB-C     → 5V power in (from the 3S logic-domain buck)
   Internal  → Pi 5 onboard WiFi (dock/dev link)
+  Header p10 → GPS module TX (GPIO15 / RXD0, u-blox M10 @ 38400 → /dev/ttyAMA0)
 ```
 
-Navigation logic runs on the Pi 5. The Boat Pico is a low-level executor. All sensors live on the
-Boat Pico or the Pod Pico — the Pi 5 only talks USB.
+Navigation logic runs on the Pi 5. The Boat Pico is a low-level executor. Nearly all sensors live on
+the Boat Pico or the Pod Pico — the two exceptions on the Pi's header are the radar-bar stepper and
+the **GPS**.
+
+> **GPS is on the Pi, not the Pico** (2026-07-29). The Pico's **GP9 is hard-shorted to GND** on the
+> as-built board — one solder blob across Pico pads 12/13/14, which also kills GP10's status NeoPixel
+> and I²C0 — and GP9 is both J7.3 (where the GPS TX lands) and UART1 RX. The module now reads on the
+> Pi's header UART at **38400** (the u-blox M10 default, *not* the 9600 in
+> `firmware/boat-pico/gps.py`), via `pi5/comms/gps_nmea.py`, and is injected into `pico.telemetry` by
+> `PicoSerial.set_external_position` — the one object the whole nav stack already reads. Heading still
+> comes from the Pico's compass. Needs `dtoverlay=uart0`; ⚠ shares GPIO14/15 with
+> `pi5/scripts/am32_config.py`, so the GPS must be unplugged to flash an ESC.
 
 ---
 
@@ -119,16 +131,23 @@ The authoritative pin maps live in **`docs/pin_map.md`**, generated from the Boa
 `main.py` docstrings. Do not duplicate them here — edit `docs/pin_map.md` and the firmware docstrings
 together. Quick orientation only:
 
-- **Boat Pico (test-bench firmware):** GP0/GP1 dead. GP2/3 drive ESC PWM. GP4/5 UART1 (GPS M10Q +
-  Pod, shared 9600). GP7 SBUS (PIO). GP8/9 I²C0 (BNO085 @ 0x4A). GP10 status NeoPixel.
-  GP11/16 AM32 ESC telemetry RX (PIO). GP12/13 SHT41 #A, GP14/15 SHT41 #B (both SoftI2C).
-  GP19/20 hull leak (J16/J15). GP21 winch PWM (J8/J9). GP26 ADC drive (2× M18 parallel),
-  GP27 ADC electronics (M18), GP28 ADC winch (M18).
-  > ⚠ **Board divergence.** On `Boat_PCB V2` the MCP2515 CAN interface owns GP2/3/4/6/7 and GP5 is
-  > tied to GND, so the drive-ESC / SBUS / GPS assignments above collide with the board — and with
-  > GP0/GP1 dead there is no free pin left to move them to. Three things *were* realigned to the
-  > board (2026-07-28): hull leak → GP19/20, ESC telemetry → GP16/GP11, and **winch PWM GP6 → GP21**
-  > (the board's real winch net; GP6 is the MCP2515 `~INT`). Full table in `docs/pin_map.md`.
+- **Boat Pico (test-bench firmware):** GP0/GP1 dead. GP2/3 drive ESC PWM. GP4/5 UART1 (**Pod only**
+  at 9600 — the GPS moved to the Pi; GP4/5 reach no connector). GP7 SBUS (PIO). GP8/9 I²C0
+  (BNO085 @ 0x4A). GP10 status NeoPixel. GP11/16 AM32 ESC telemetry RX (PIO). GP12/13 SHT41 #A,
+  GP14/15 SHT41 #B (both SoftI2C). GP19/20 hull leak (J16/J15). GP21 winch PWM (J8/J9).
+  GP26 ADC drive (2× M18 parallel), GP27 ADC electronics (M18), GP28 ADC winch (M18).
+  > ⚠ **GP9 and GP10 are hard-shorted to GND on the built board** (2026-07-29, one blob across Pico
+  > pads 12/13/14). So the two entries above that use them **do not work**: I²C0 is dead (GP9 = SCL0,
+  > held low), and the status NeoPixel is dead (GP10) — `status_led.py` has been driving an output
+  > into a dead short since the board was built. GP9 is also J7.3/UART1 RX, which is why the GPS had
+  > to move to the Pi. `compass.py` needs moving to SoftI2C GP14/GP15, where the board actually wires
+  > J7's compass pins.
+  > ⚠ **Board divergence.** On `Boat_PCB V2` the MCP2515 CAN interface owns GP2/3/4/6/7, so the
+  > drive-ESC / SBUS assignments above collide with the board — and with GP0/GP1 dead there is no free
+  > pin left to move them to. (GP5 *is* tied to GND in the schematic, but measures **free** on the
+  > built board.) Three things *were* realigned to the board (2026-07-28): hull leak → GP19/20, ESC
+  > telemetry → GP16/GP11, and **winch PWM GP6 → GP21** (the board's real winch net; GP6 is the
+  > MCP2515 `~INT`). Full table in `docs/pin_map.md`.
 - **Pod Pico:** GP0/1 UART to Boat Pico (slip ring). GP17 EC drive, GP20 leak, GP21 bottom contact,
   GP22 pressure, GP26 water-temp NTC, GP27 EC sense, GP28 light.
 
@@ -215,7 +234,7 @@ resolves the old midpoint-vs-dedicated ambiguity.
 
 | Decision | Reason |
 |----------|--------|
-| Pi 5 uses only USB — no GPIO | All sensors on the Picos; Pi 5 is just the brain |
+| Pi 5 is USB-first — GPIO only where forced | Sensors live on the Picos. Two exceptions: the radar-bar stepper, and the **GPS** (2026-07-29) after the Pico's GP9 turned out to be shorted to GND |
 | USB cameras, not CSI | Simpler wiring, no HAT; stereo pair on standard USB |
 | HC-12 demoted to USB backup | Removed from the PCB; kept only as an emergency USB-TTL link |
 | BNO085 (not QMC5883P) | Full 9-DOF IMU at I²C 0x4A with onboard fusion |
@@ -235,6 +254,8 @@ resolves the old midpoint-vs-dedicated ambiguity.
 - `docs/system_tree.md` — Mermaid system/power diagram
 - `docs/pcb_design_notes.md` — Boat_PCB component breakdown
 - `docs/hardware_changes_v1_to_v2.md` — V1 → V2 hardware delta
+- `docs/esc_setup.md` — drive ESC config; **the bi-directional safety gate that currently blocks throttle**
+- `docs/esc_am32_conversion.md` — **planned, not started**: convert the right ESC BLHeli_32 → AM32 (Pi 5 as SWD programmer, no ST-Link)
 - # ... 2 more
 
 ---

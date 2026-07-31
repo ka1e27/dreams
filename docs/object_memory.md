@@ -45,9 +45,27 @@ folds straight back in, refining it rather than planting a duplicate. That's the
 "drop the marker once you've confirmed it, then just verify the coordinate each
 time you see it again" behaviour.
 
-The cameras are **fixed forward** (the stereo calibration is rigid); the A4988
-stepper drives a *separate* radar bar, so the object's bearing off the bow is
-purely `heading + pixel offset` — the radar-pan angle is **not** part of it.
+> ### ⚠ Corrected 2026-07-30 — the cameras ride ON the radar bar
+>
+> This section used to read: *"The cameras are **fixed forward**; the A4988 stepper
+> drives a separate radar bar, so the object's bearing off the bow is purely
+> `heading + pixel offset` — the radar-pan angle is **not** part of it."*
+>
+> **That is wrong, and it was wrong in a way that mattered.** The builder confirmed the
+> cameras pan with the bar. A bbox offset is therefore relative to the **bar**, not the
+> bow, and the true bearing is:
+>
+> ```
+> true bearing = heading + bar angle + pixel offset
+> ```
+>
+> The stereo pair still moves rigidly *together* (the calibration is unaffected — both
+> eyes ride the same bar), so distance is unchanged. But the missing `bar angle` term
+> put every marker out by however far the bar was panned: a buoy seen with the bar at
+> 90° was charted 90° off the boat, and the same bearing feeds **avoidance steering**,
+> so the boat would have dodged the wrong way. Fixed in
+> `pipeline._avoidance_bearing`, gated on `stepper.cameras_on_bar` (set it false for a
+> hull-mounted camera, where the boresight *is* the bow).
 
 ## Permanent vs transient — what's kept, what's forgotten
 

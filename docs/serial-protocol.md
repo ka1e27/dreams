@@ -58,7 +58,7 @@ Pi 5 (commander)                    Boat Pico (controller)
      │──── CMD,seq,... ──────────────────>│  Command
      │                                     │
      │<──── ACK,seq,... ─────────────────│  Success response
-     │<──── NAK,seq,reason ──────────────│  Failure response
+     │<──── NAK,seq,cmd,reason ──────────│  Failure response
      │                                     │
      │<──── TEL,0,... ──────────────────│  Unsolicited telemetry (periodic)
      │<──── ALERT,0,... ────────────────│  Unsolicited alert
@@ -125,7 +125,18 @@ $SET_THR,<seq>,<left>,<right>*<cs>\n
 $ACK,<seq>,SET_THR,<left>,<right>*<cs>\n
 $NAK,<seq>,SET_THR,RANGE*<cs>\n
 $NAK,<seq>,SET_THR,RC_ACTIVE*<cs>\n
+$NAK,<seq>,SET_THR,ESTOP*<cs>\n
+$NAK,<seq>,SET_THR,ESC_UNSAFE*<cs>\n
 ```
+
+> **`ESC_UNSAFE`** — a drive ESC is not confirmed to be in bi-directional / 3D
+> mode (`escs.BIDIR_CONFIRMED`), so the whole throttle path is blocked and both
+> ESCs are pinned at the 1.5 ms neutral pulse. A normal-mode ESC reads that
+> 1.5 ms as **~50 % throttle**, which means neutral, `SET_THR 0,0` and the entire
+> ESTOP / watchdog kill path would all *accelerate* it — and no single pulse
+> width stops a mixed 3D/normal pair. **Every** throttle value is refused,
+> including 0. Clear it by putting the ESC in 3D mode and updating
+> `escs.BIDIR_CONFIRMED` — see `docs/esc_setup.md`.
 
 **Example:**
 ```
@@ -399,7 +410,7 @@ $TEL,0,<lat>,<lon>,<heading>,<speed>,<batt_v>,<batt_pct>,<hull>,<mt_l>,<mt_r>,<h
 | speed | float | GPS speed (knots) |
 | batt_v | float | Battery voltage |
 | batt_pct | int | Battery percentage (0–100) |
-| hull | string | `DRY`, `L!`, `R!`, or `L!R!` |
+| hull | string | `--` (no sensor), `DRY`, `L!`, `R!`, or `L!R!` |
 | mt_l | float | Left motor temperature (°C) |
 | mt_r | float | Right motor temperature (°C) |
 | health | string | 6-char binary: GPS,IMU,P_BAT,E_BAT,MOT,POD |
@@ -473,7 +484,7 @@ $ALERT,0,<severity>,<code>,<detail>*<cs>\n
 |------|----------|--------|-------------|
 | `HB_LOST` | CRIT | — | Pi 5 heartbeat lost, motors killed |
 | `BATT_CRIT` | CRIT | `<voltage>,<pct>` | Battery critically low |
-| `HULL_LEAK` | CRIT | `LEFT`, `RIGHT`, or `BOTH` | Water detected in hull |
+| `HULL_LEAK` | CRIT | `LEFT`, `RIGHT`, or `BOTH` | Water detected in hull. ⚠ **No longer emitted** since 2026-07-30 — the hull leak switches (GP19/GP20) became the drive ESC outputs, and `hull` reports `--`. Kept for protocol compatibility; the pod leak sensor is now the only leak alarm |
 | `MOTOR_OVERHEAT` | CRIT | `<side>,<temp_c>` | Motor temp above critical threshold |
 | `BATT_LOW` | WARN | `<voltage>,<pct>` | Battery below warning level |
 | `MOTOR_HOT` | WARN | `<side>,<temp_c>` | Motor temp above warning level |
@@ -483,6 +494,7 @@ $ALERT,0,<severity>,<code>,<detail>*<cs>\n
 | `POD_LOST` | WARN | — | Pod stopped responding to polls |
 | `POD_LEAK` | CRIT | — | Pod leak sensor triggered |
 | `ESTOP_AUTO` | CRIT | `<reason>` | Automatic emergency stop triggered |
+| `ESC_UNSAFE` | CRIT | `<esc names>` | A drive ESC is not confirmed bi-directional — throttle is blocked. Emitted **once**, on the first refused `SET_THR` rather than at boot (the Pi usually connects after the Pico has booted, so a boot-time alert would reach nobody) |
 | `RC_ON` | INFO | — | RC override activated |
 | `RC_OFF` | INFO | — | RC override released |
 
@@ -510,9 +522,24 @@ $NAK,<seq>,<command>,<reason>*<cs>\n
 | `PARSE` | Could not parse the command |
 | `RC_ACTIVE` | Command rejected — RC override is active |
 | `ESTOP` | Command rejected — emergency stop is active, send RESUME first |
+| `ESC_UNSAFE` | Command rejected — a drive ESC is not confirmed bi-directional (`escs.BIDIR_CONFIRMED`). **Not clearable from the Pi**: it needs an ESC config change + a firmware edit. Refuses every throttle value including 0 |
 | `TIMEOUT` | Downstream operation timed out (e.g., pod poll) |
 | `NO_POD` | Pod is not connected or not responding |
 | `UNKNOWN` | Unrecognized command type |
+
+> **The reason is field 1, not field 0.** `fields[0]` echoes the *command*, so a
+> parser that reads it logs `SET_THR NAK'd: SET_THR` and throws away the only
+> diagnostic in the frame. `PicoSerial._send_command` raises `PicoNak` with
+> `.command`/`.reason` split out.
+>
+> **`ESTOP` is latched, and outlives the Pi process.** The firmware's
+> `motor_control.estop()` is sticky until a `RESUME`, and nothing in `TEL` reports
+> it (only `GET_STATUS`, which nothing polls). So a Pico that estopped — including
+> from an `HB_LOST` when the Pi was last shut down — refuses *every* `SET_THR` from
+> the next run too. The Pi mirrors this best-effort in `PicoSerial.estopped` (set by
+> an ESTOP-class `ALERT`, an `ESTOP` NAK, or an ESTOP we sent; cleared by an ACK'd
+> `RESUME`) and surfaces it as `pico_estopped` in nav telemetry so the dashboard can
+> say so instead of silently showing live throttle numbers on dead motors.
 
 ---
 
