@@ -25,19 +25,26 @@ telem frame*, so a frame arriving between polls overflows and stalls the SM. Her
 we pack **4 bytes per FIFO word (`push_thresh=32`) → a 32-byte buffer**, which
 comfortably holds a whole frame between drains. (The same fix would harden sbus.py.)
 
-Pin assignment (free Pico header pins, hand-tapped on the bench like GP2/GP3):
-    Left  ESC TX → GP16   (was the unused DHT11 pin)
-    Right ESC TX → GP11
+Pin assignment (free Pico header pins, hand-tapped on the bench):
+    Left  ESC TX → GP16   (was the unused DHT11 pin)  — AM32 NeutronRC 70A
+    Right ESC TX → GP11                               — BLHeli-32 FlashHobby FH-70A
 Change TELEM_L_PIN / TELEM_R_PIN if you tap different pins.
+
+⚠ **The two ESCs run different firmware** (2026-07-30): AM32 on the left, BLHeli-32
+on the right. Both speak the *same* KISS 10-byte telemetry frame at 115200 8N1
+(temp, voltage, current, mAh, erpm, CRC8), so this decoder is unchanged and works
+for both — but each has to have telemetry *enabled* in its own configurator, and
+BLHeli-32 must be set to continuous/auto telemetry rather than DShot-request-only.
 
 GP16 and GP11 are the only two pins left unconnected on Boat_PCB V2, so neither
 collides with a board net — but for the same reason neither is routed to a
 connector: solder the ESC telemetry leads directly to the Pico pins.
 
-Right ESC telemetry was moved GP19 -> GP11 on 2026-07-28. GP19 is the board's
-"Hull Leak Left" connector (J16); a leak switch there shorts to GND and would
-have held the telemetry line low. Hull leak now reads GP19/GP20 to match the
-board's connectors (see sensors.py and docs/pin_map.md).
+Right ESC telemetry was moved GP19 -> GP11 on 2026-07-28, when GP19 was still the
+"Hull Leak Left" connector (J16) and a leak switch there would have held the line
+low. As of 2026-07-30 GP19/GP20 are the drive ESC *signal* outputs and hull leak
+is gone entirely (see escs.py, sensors.py, docs/pin_map.md) — so that clash can
+no longer recur, but the pins stay put.
 
 Bench-verify items (documented in docs/esc_telemetry.md):
   1. AM32 must actually *emit* telemetry in servo-PWM mode — enable the telemetry

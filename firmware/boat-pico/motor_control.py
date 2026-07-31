@@ -4,13 +4,13 @@ Single-hull test-bench variant. Propulsion is two standard hobby ESCs driven as
 50 Hz servo PWM (see `escs.py`) instead of the dual-hull boat's VESC / CAN chain.
 
 Propulsion:
-  - Left + right stern motors driven by two dumb ESCs on GP2 / GP3.
+  - Left + right stern motors driven by two ESCs on GP19 / GP20 (the ex-hull-leak
+    connectors J16 / J15 — moved off GP2/GP3 on 2026-07-30, see escs.py).
   - Throttle range -100..+100 percent maps to duty -1.0..+1.0 after applying the
-    (unity) compensation, trim, and the thermal throttle multiplier, then handed
-    to `escs.set_duty()`.
-  - Single hull with two identical motors, so there is no pulley asymmetry to
-    correct: COMP_L = COMP_R = 1.0 (the dual-hull boat corrected for 18:27 vs
-    15:30 pulley ratios here).
+    compensation, trim, and the thermal throttle multiplier, then handed to
+    `escs.set_duty()`.
+  - ⚠ The two motors are NOT identical any more, so COMP_L != COMP_R. See the
+    COMP_L/COMP_R comment below.
 
 Winch:
   - Standard hobby ESC on GP21, 50 Hz PWM. GP21 is where Boat_PCB V2 actually
@@ -39,13 +39,28 @@ MAX_PWM = 6553
 FWD_RANGE = MAX_PWM - STOP_PWM  # 1638
 REV_RANGE = STOP_PWM - MIN_PWM  # 1638
 
-MW_PIN = 21   # Boat_PCB V2 winch signal (J8.1 + J9.1, parallel). PWM slice 2B.
+# Boat_PCB V2 winch signal (J8.1 + J9.1, parallel). PWM slice 2B.
+# ⚠ Shares slice 2 with the RIGHT drive ESC on GP20 (slice 2A). Same-slice channels
+# share one frequency — both want 50 Hz so this is fine, but if either is ever
+# retuned the other follows it. Keep them equal.
+MW_PIN = 21
 
-# Compensation (propulsion only). Single hull, two identical motors → unity.
+# Compensation (propulsion only). No pulleys on this bench — these now correct a
+# genuine MOTOR MISMATCH:
+#   LEFT   AM32 NeutronRC 70A → Badass 2814-1560kv   (slower — the reference)
+#   RIGHT  BLHeli-32 FH-70A   → Badass 2320-1630kv   (faster by ~4.5 %)
+# Trim the faster motor down to the slower one: 1560 / 1630 = 0.9571.
+#
+# ⚠ Kv only equalises no-load rpm. The two motors are different frames (2814 vs
+# 2320) with different torque constants and prop loading, so this is a starting
+# point, not a calibration — expect to tune COMP_R on the bench by running both
+# at a fixed throttle and matching thrust/rpm (ESC telemetry erpm is the easiest
+# readout). Do NOT also set navigation.motor_gain_* in pi5/config.yaml for the
+# same mismatch; that would compensate twice. Leave those at 1.0.
 PULLEY_L = 1.0
 PULLEY_R = 1.0
 COMP_L = 1.0
-COMP_R = 1.0
+COMP_R = 0.957
 
 # Runtime state
 _mw = None
@@ -111,6 +126,11 @@ def set_throttle(left, right):
         return False, "RC_ACTIVE"
     if _estop_active:
         return False, "ESTOP"
+    if not escs.bidir_ok():
+        # A non-bi-directional ESC treats our 1.5 ms "neutral" as ~50% throttle,
+        # so there is no throttle value here — including 0 — that it would read
+        # as stop. Refuse the whole command path. See escs.BIDIR_CONFIRMED.
+        return False, "ESC_UNSAFE"
     if not (-100 <= left <= 100 and -100 <= right <= 100):
         return False, "RANGE"
     _ml_spd = left
@@ -136,9 +156,15 @@ def set_winch(speed):
 
 
 def set_throttle_rc(left, right):
-    """SBUS forwarder entry point — bypasses the RC gate. ESTOP still wins."""
+    """SBUS forwarder entry point — bypasses the RC gate. ESTOP still wins.
+
+    The bi-directional gate wins too: it is a property of the ESCs, not of who
+    is driving, so a hand controller must not be able to reach past it either.
+    """
     global _ml_spd, _mr_spd
     if _estop_active:
+        return
+    if not escs.bidir_ok():
         return
     _ml_spd = max(-100, min(100, int(left)))
     _mr_spd = max(-100, min(100, int(right)))

@@ -9,7 +9,7 @@ hardware modules and runs the async task loop using uasyncio.
 
 Architecture:
   - Pi 5 sends commands over USB serial (SET_HDG, SET_THR, HB, etc.)
-  - Boat Pico drives two ESCs via 50 Hz PWM (GP2/GP3), reads sensors, talks
+  - Boat Pico drives two ESCs via 50 Hz PWM (GP19/GP20), reads sensors, talks
     to the underwater pod, and reports telemetry
   - Heartbeat watchdog kills motors if Pi 5 goes silent (3 s). Dumb ESCs have no
     self-timeout, so this heartbeat → estop path is the motor kill.
@@ -17,30 +17,34 @@ Architecture:
 
 Pin map (test bench):
   GP0/GP1   — DEAD, do not use
-  GP2       — Left drive ESC (50 Hz PWM)   [free header pin]
-  GP3       — Right drive ESC (50 Hz PWM)  [free header pin]
   GP4/GP5   — UART1 (GPS M10Q + Pod, shared bus, 9600 baud)
   GP7       — SBUS receiver (PIO)          [free header pin]
   GP8/GP9   — I2C0 (BNO085 IMU at 0x4A)
   GP10      — Status NeoPixel (WS2812, 1 pixel)
-  GP11      — Right ESC telemetry RX (AM32 KISS, PIO UART 115200)
+  GP11      — Right ESC telemetry RX (KISS, PIO UART 115200)
   GP12/GP13 — SHT41 #A air temp/humidity (SoftI2C, J11)
   GP14/GP15 — SHT41 #B air temp/humidity (SoftI2C, J13)
-  GP16      — Left  ESC telemetry RX (AM32 KISS, PIO UART 115200)
-  GP19      — Hull leak left  [J16]
-  GP20      — Hull leak right [J15]
+  GP16      — Left  ESC telemetry RX (KISS, PIO UART 115200)
+  GP19      — Left  drive ESC (50 Hz PWM)  [J16, ex-hull-leak] AM32   → 2814-1560kv
+  GP20      — Right drive ESC (50 Hz PWM)  [J15, ex-hull-leak] BLHeli-32 → 2320-1630kv
   GP21      — Winch ESC (50 Hz PWM)        [J8 + J9, wired in parallel]
   GP26      — Drive battery (2× M18 parallel) ADC — 130k/10k divider (×14.0)
   GP27      — Electronics battery (1× M18) ADC — 56k/10k divider (×6.6)
   GP28      — Winch battery (1× M18) ADC — 56k/10k divider (×6.6)
 
-Both SHT41 temp sensors are kept on their native as-built pins (GP12-15); the
-drive ESCs and SBUS moved to free Pico header pins (GP2/3/7) so nothing collides
-with them. See docs/hardware_changes_v2_to_testbench.md.
+Both SHT41 temp sensors are kept on their native as-built pins (GP12-15). SBUS
+sits on a free header pin (GP7). See docs/hardware_changes_v2_to_testbench.md.
+
+⚠ 2026-07-30 — DRIVE ESCs MOVED GP2/GP3 -> GP19/GP20, AND HULL LEAK IS GONE.
+GP2/GP3 belong to the MCP2515 on Boat_PCB V2 and had no connector behind them, so
+the two hull-leak connectors (J16/J15 — pin 1 = GND, pin 2 = signal, i.e. an ESC
+servo lead) were repurposed as the drive ESC outputs. `sensors.py` no longer
+touches GP19/GP20 and `sensors.hull_status()` reports `--` instead of `DRY`; the
+pod leak sensor is now the only leak alarm. The two ESCs differ — AM32 on the
+left, BLHeli-32 on the right — see escs.py and docs/esc_setup.md.
 
 Realigned to the as-built board after the 2026-07-28 netlist audit:
-  - hull leak GP17/GP18 -> GP19/GP20, the real J16/J15 connectors (GP17/GP18 are
-    the BNO085's RST/INT on J5)
+  - hull leak GP17/GP18 -> GP19/GP20 (now superseded — see above)
   - right-ESC telemetry GP19 -> GP11; GP11 and GP16 are the only pins left
     unconnected on Boat_PCB V2, so both telemetry taps clash with nothing — but
     neither reaches a connector, so solder those two leads to the Pico pins
@@ -50,9 +54,10 @@ Realigned to the as-built board after the 2026-07-28 netlist audit:
 !! Board divergence — GP2/3/7 are NOT free on Boat_PCB V2. That board fits an
 MCP2515 + TJA1051 CAN interface (for the VESC architecture) which owns GP2 (SCK),
 GP3 (SI), GP4 (SO), GP6 (~INT) and GP7 (~RESET). This test-bench pin map assumes
-no CAN, so the two are mutually exclusive. Of those five, only GP6 (winch) had a
-free board-side pin to move to; GP0/GP1 are dead and every other pin is committed,
-so the drive-ESC / SBUS / GPS claims cannot be relieved by pin moves. Also on V2:
+no CAN, so the two are mutually exclusive. Three of those five have now been
+relieved: GP6 (winch) → GP21, and **GP2/GP3 (drive ESCs) → GP19/GP20** on
+2026-07-30, by giving up the two hull-leak connectors (J16/J15). **SBUS on GP7
+still clashes**, and GP0/GP1 are dead, so it has nowhere to go. Also on V2:
   - GP5 is tied to GND, so UART1 RX (GPS) cannot work as wired, and GP4 (TX) sits
     on the MCP2515's SO output — two drivers on one net. J7 carries no UART at all,
     only the two I2C pairs, so the GPS needs off-board wiring either way
@@ -110,9 +115,20 @@ def _handle_set_hdg(heading):
     return True, None
 
 
+_esc_unsafe_alerted = False
+
+
 def _handle_set_thr(left, right):
     """Pi 5 commands motor throttle directly."""
-    return motor_control.set_throttle(left, right)
+    global _esc_unsafe_alerted
+    ok, reason = motor_control.set_throttle(left, right)
+    # Alert once, on the first refusal rather than at boot: the Pi usually
+    # connects after we have booted, so a boot-time alert would be talking to
+    # nobody. Once-only keeps it out of the per-cycle SENSOR_FAULT stream.
+    if not ok and reason == "ESC_UNSAFE" and not _esc_unsafe_alerted:
+        _esc_unsafe_alerted = True
+        serial.alert("CRIT", "ESC_UNSAFE", ",".join(escs.unconfirmed()))
+    return ok, reason
 
 
 def _handle_set_winch(speed):
@@ -208,8 +224,6 @@ def _battery_alert(name, is_crit, is_low, was_warned, v, pct):
 
 _prop_batt_warned = False
 _elec_batt_warned = False
-_hull_sent_l = False
-_hull_sent_r = False
 _pod_lost_sent = False
 _sbus_warned = False
 _motor_hot_warned = False
@@ -384,7 +398,6 @@ async def task_env_telemetry():
 async def task_watchdog():
     """Heartbeat + safety checks at ~1 Hz."""
     global _prop_batt_warned, _elec_batt_warned
-    global _hull_sent_l, _hull_sent_r
     global _pod_lost_sent, _sbus_warned, _motor_hot_warned
     while True:
         try:
@@ -401,20 +414,9 @@ async def task_watchdog():
                 _elec_batt_warned,
                 sensors.elec_batt_v, sensors.elec_batt_pct)
 
-            # Hull leak alerts
-            if sensors.hull_leak_left and not _hull_sent_l:
-                _hull_sent_l = True
-                serial.alert("CRIT", "HULL_LEAK", "LEFT")
-            elif not sensors.hull_leak_left:
-                _hull_sent_l = False
-            if sensors.hull_leak_right and not _hull_sent_r:
-                _hull_sent_r = True
-                serial.alert("CRIT", "HULL_LEAK", "RIGHT")
-            elif not sensors.hull_leak_right:
-                _hull_sent_r = False
-            if sensors.both_hulls_leaking():
-                motor_control.estop()
-                serial.alert("CRIT", "HULL_LEAK", "BOTH")
+            # Hull leak alerts removed 2026-07-30 — GP19/GP20 are the drive ESC
+            # outputs now (escs.py) and there are no hull switches left to read.
+            # The pod leak sensor still alerts, below.
 
             # Motor over-temperature (edge-triggered WARN). Real ESC temps now
             # come from AM32 KISS telemetry via esc_telem; max_motor_temp() is
@@ -469,8 +471,7 @@ def _compute_led_mode():
     rc, estop = motor_control.get_state()
     if estop:
         return "ESTOP"
-    if (sensors.hull_leak_left or sensors.hull_leak_right
-            or pod_uart.leak_detected
+    if (pod_uart.leak_detected
             or sensors.is_prop_critical() or sensors.is_elec_critical()):
         return "CRIT"
     if rc:
@@ -570,10 +571,20 @@ async def main():
 
     watchdog.init(timeout_ms=3000, on_timeout=_on_heartbeat_lost)
 
-    print("  Drive ESCs: GP%d(L)/GP%d(R) PWM 50Hz %s" % (
-        escs.LEFT_PIN, escs.RIGHT_PIN, "OK" if escs_ok else "FAIL"))
+    print("  Drive ESCs: GP%d(L,AM32,2814-1560kv)/GP%d(R,BLHeli32,2320-1630kv)"
+          " PWM 50Hz %s" % (
+              escs.LEFT_PIN, escs.RIGHT_PIN, "OK" if escs_ok else "FAIL"))
     if not escs_ok:
         print("  !! DRIVE ESC INIT FAILED — ESTOP cannot neutralise motors; do NOT arm")
+    if escs.bidir_ok():
+        print("  Drive ESC mode: bi-directional CONFIRMED on both — throttle enabled")
+    else:
+        print("  !! DRIVE ESCs NOT CONFIRMED BI-DIRECTIONAL: %s"
+              % ", ".join(escs.unconfirmed()))
+        print("  !! Throttle is BLOCKED (SET_THR -> NAK ESC_UNSAFE) and both ESCs are")
+        print("  !!   pinned at 1.5 ms neutral. A normal-mode ESC reads 1.5 ms as ~50%")
+        print("  !!   throttle, so it will refuse to arm — that is the safe outcome.")
+        print("  !! Fix the ESC config, then set escs.BIDIR_CONFIRMED — docs/esc_setup.md")
     print("  Winch: GP%d PWM 50Hz" % motor_control.MW_PIN)
     print("  GPS: UART1 GP4/GP5 9600bd (M10Q)")
     print("  IMU: I2C0 GP8/GP9 addr=0x4A %s" % ("OK" if imu_ok else "FAIL"))
@@ -586,7 +597,7 @@ async def main():
     print("  SHT41 #A: SoftI2C GP%d/GP%d (J11)  #B: GP%d/GP%d (J13)" % (
         sensors.SHT_A_SDA, sensors.SHT_A_SCL,
         sensors.SHT_B_SDA, sensors.SHT_B_SCL))
-    print("  Hull: GP17(L) GP18(R)")
+    print("  Hull leak: REMOVED (GP19/GP20 are the drive ESCs) — pod leak only")
     print("  Drive batt: GP26 (2xM18)  Elec batt: GP27 (M18)  Winch batt: GP28 (M18)")
     print("  Watchdog: 3000ms heartbeat timeout")
     print("Ready — waiting for Pi 5")

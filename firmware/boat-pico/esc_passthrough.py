@@ -7,12 +7,20 @@ are the parts most likely to need tuning. See docs/esc_passthrough.md for the
 bring-up/validation plan. Do NOT rely on it until the loopback + real-ESC checks
 in that doc pass.
 
+⚠ **AM32 only — this will not configure the right ESC.** Since 2026-07-30 the
+right-hand ESC is a **BLHeli-32** (FlashHobby FH-70A), which uses a different
+one-wire protocol than AM32 and a different (closed-source) configurator. Passing
+`esc=1` here bridges the wire, but BLHeliSuite32 is not driven by this path.
+Configure the BLHeli side with its own linker/tool — see docs/esc_setup.md.
+
 What it does
 ------------
 The AM32 configurator (am32.ca) talks to an ESC over a **one-wire half-duplex
 serial** line on the ESC's signal pin — the USB "linker" is just a USB-serial
-adapter on that wire. Those signal wires are already on this Pico (GP2 = left ESC,
-GP3 = right ESC). This module lets the Pi drive that link *through* the Pico, the
+adapter on that wire. Those signal wires are already on this Pico — **GP19 = left
+ESC, GP20 = right ESC** since 2026-07-30 (they were GP2/GP3; the pins are taken
+from `escs.LEFT_PIN`/`escs.RIGHT_PIN`, so this module follows the move
+automatically). This module lets the Pi drive that link *through* the Pico, the
 same way a flight controller does BLHeli/AM32 passthrough: the Pico repurposes its
 USB-CDC as a transparent byte bridge onto the selected ESC's signal wire, so the
 configurator (or a CLI probe) running on the Pi can read/write the ESC in place —

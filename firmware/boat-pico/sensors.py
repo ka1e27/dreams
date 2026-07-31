@@ -32,12 +32,19 @@ Pin assignments:
       — divider 56k/10k → ×6.6; 21 V → 3.18 V
   - SHT41 #A:        GP12 (SDA) / GP13 (SCL)   [SoftI2C, J11]  — open air
   - SHT41 #B:        GP14 (SDA) / GP15 (SCL)   [SoftI2C, J13]  — electronics enclosure
-  - Hull leak left:  GP19  [J16 "Hull Leak Left"]
-  - Hull leak right: GP20  [J15 "Hull Leak Right"]
+  - (no hull leak — see below)
 
-Hull leak moved GP17/GP18 -> GP19/GP20 on 2026-07-28 to match the Boat_PCB V2
-connectors. On that board GP17/GP18 are the BNO085's RST and INT lines on J5, so
-the old assignment read the IMU's control pins rather than any leak contact.
+⚠ HULL LEAK SENSING REMOVED 2026-07-30. GP19/GP20 (J16/J15) are now the two drive
+ESC signal outputs (`escs.py`) — the board gives GP2/GP3 to the MCP2515, so
+propulsion had to move onto real connectors. This module must NOT touch GP19/GP20:
+`sensors.init()` runs *after* `motor_control.init()`, so configuring them as
+pull-up inputs would fight the ESC PWM already running on them.
+
+The pod's leak sensor (`pod_uart.leak_detected`) is unaffected and remains the
+boat's leak alarm. `hull_status()` now reports `--` (no sensor) instead of `DRY`,
+so telemetry does not assert a dry hull it can no longer measure.
+Hull leak had moved GP17/GP18 -> GP19/GP20 on 2026-07-28 to match the Boat_PCB V2
+connectors; that assignment is now retired entirely.
 
 All three dividers are 56k/10k on the physical board (confirmed by the builder,
 2026-07-28), so every rail reconstructs at the same x6.6 and INV_P_RATIO was
@@ -99,8 +106,6 @@ _elec_adc = None
 _winch_adc = None
 _sht_a = None
 _sht_b = None
-_hull_l = None
-_hull_r = None
 
 # ---- Sensor readings ----
 prop_batt_v = 0.0
@@ -113,13 +118,11 @@ air_temp = 0.0        # SHT41 #A (J11) — open air
 air_humidity = 0.0
 air_temp2 = 0.0       # SHT41 #B (J13) — electronics enclosure
 air_humidity2 = 0.0
-hull_leak_left = False
-hull_leak_right = False
 
 
 def init():
     """Initialise all onboard sensor hardware."""
-    global _prop_adc, _elec_adc, _winch_adc, _sht_a, _sht_b, _hull_l, _hull_r
+    global _prop_adc, _elec_adc, _winch_adc, _sht_a, _sht_b
     try:
         _prop_adc = ADC(26)
     except:
@@ -146,14 +149,8 @@ def init():
         _sht_b.reset()
     except:
         _sht_b = None
-    try:
-        # J16 "Hull Leak Left" = GP19, J15 "Hull Leak Right" = GP20 (Boat_PCB V2
-        # netlist). Both connectors are pin 1 = GND, pin 2 = signal, so a closed
-        # contact pulls the pin low — hence PULL_UP + active-low below.
-        _hull_l = Pin(19, Pin.IN, Pin.PULL_UP)
-        _hull_r = Pin(20, Pin.IN, Pin.PULL_UP)
-    except:
-        pass
+    # No hull-leak pins here any more: GP19/GP20 (J16/J15) carry the drive ESC
+    # PWM now, and this runs after motor_control.init() has already started it.
 
 
 def _read_battery_voltage(adc, inv_ratio):
@@ -214,15 +211,6 @@ def read_temp_humidity():
         air_humidity2 = _sht_b.humidity
 
 
-def read_hull():
-    """Read hull leak sensors."""
-    global hull_leak_left, hull_leak_right
-    if _hull_l is not None:
-        hull_leak_left = _hull_l.value() == 0
-    if _hull_r is not None:
-        hull_leak_right = _hull_r.value() == 0
-
-
 def read_all_fast():
     """Read fast sensors — all three battery rails. Call at ~10 Hz."""
     read_prop_battery()
@@ -231,9 +219,8 @@ def read_all_fast():
 
 
 def read_all_slow():
-    """Read slow sensors — SHT41 air temp/humidity ×2, hull. Call at ~0.3 Hz."""
+    """Read slow sensors — SHT41 air temp/humidity ×2. Call at ~0.3 Hz."""
     read_temp_humidity()
-    read_hull()
 
 
 # ---- Battery state predicates ----
@@ -259,14 +246,12 @@ def is_elec_low():
 
 
 def hull_status():
-    """Return 'DRY', 'L!', 'R!', or 'L!R!'."""
-    s = ""
-    if hull_leak_left:
-        s += "L!"
-    if hull_leak_right:
-        s += "R!"
-    return s if s else "DRY"
+    """Return '--' — the hull leak switches no longer exist.
 
-
-def both_hulls_leaking():
-    return hull_leak_left and hull_leak_right
+    GP19/GP20 became the drive ESC outputs on 2026-07-30, so there is nothing to
+    read. This deliberately does NOT return 'DRY': that would assert a dry hull
+    on a boat with no hull sensor. '--' is the TEL "no sensor" value (see
+    docs/serial-protocol.md) and the Pi treats it as "not a leak" rather than as
+    a leak. The pod leak sensor is unaffected — see pod_uart.leak_detected.
+    """
+    return "--"
