@@ -58,9 +58,22 @@ class DetectionConfig:
     # LOWEST floor present and each box is then filtered by its own class's
     # threshold, so a hard-to-see swimmer can be kept at 0.25 without flooding
     # every other class with low-confidence boxes. Case-insensitive.
-    # Also how the classical buoy screen is kept out of the CONF slider's way —
-    # its score is a quality proxy, not a probability. See config.yaml.
+    #
+    # These are RELATIVE to `conf`: they record how much more (or less) sensitive
+    # a class should be than the global threshold, and they move with the CONF
+    # slider so it stays a real master control. Before 2026-07-29 they were
+    # absolute, which meant dragging CONF changed nothing at all for person /
+    # swimmer / surfer / kayak — most of what the boat actually looks for.
     class_conf: dict[str, float] = field(default_factory=dict)
+    # Classes whose class_conf floor is ABSOLUTE and does not track the slider,
+    # because their score isn't a learned probability and so isn't comparable to
+    # one. Case-insensitive.
+    # ⚠ Default EMPTY. 'buoy' lived here briefly and it was a mistake: pinning
+    # the floor of a class that false-positives heavily makes it the one thing
+    # the operator can't filter, which is the complaint the relative floors
+    # existed to fix. Reach for `buoy_fallback=False` to silence the classical
+    # screen instead of pinning its threshold.
+    class_conf_absolute: list[str] = field(default_factory=list)
     # Cores the inference session may use. 0/None = auto (leave headroom for the
     # rest of the stack — see pi5/cv/cpu_budget.py for why 4 is the wrong choice).
     num_threads: int = 0
@@ -69,6 +82,14 @@ class DetectionConfig:
     # a 'buoy' label (i.e. a real maritime model was dropped in).
     buoy_fallback: bool = True
     buoy_cfg: "BuoyDetectorConfig | None" = None
+    # Run the detector on the RIGHT frame too. Off by default: it is a second
+    # full forward pass, so it roughly halves detection FPS (~30 ms/frame on this
+    # Pi 5 — see cpu_budget.py). The only consumer is the radar tracker, which
+    # medians the two cameras' box centres for a less noisy bearing; with this
+    # off it falls back to the left camera's centre alone, which is what it has
+    # always used. Stereo *distance* does NOT need this — that's a disparity
+    # pass, not a detection.
+    detect_right: bool = False
 
 
 class DetectionOverlay:
@@ -87,6 +108,10 @@ class DetectionOverlay:
         # (x1,y1,x2,y2,label,conf,highlight,distance_m|None) — distance_m is only
         # populated when a stereo pair + calibration are available.
         self._boxes: list[tuple] = []
+        # Right-camera boxes, only populated when cfg.detect_right is on. Kept
+        # separate from _boxes so nothing downstream (drawing, object memory,
+        # threat grading) accidentally double-counts the same object twice.
+        self._boxes_right: list[tuple] = []
         self._detections: list[dict] = []      # [{label, confidence, distance_m}] for the UI
         self._primary: tuple | None = None     # the box we mark as "tracked"
         self._fps: float = 0.0
@@ -98,10 +123,23 @@ class DetectionOverlay:
         self._buoy = (BuoyDetector(self._cfg.buoy_cfg or BuoyDetectorConfig())
                       if self._cfg.buoy_fallback else None)
         self._buoy_active: bool = False
+        # Operator kill switch, separate from _buoy_active (which is the *model*
+        # verdict: "this model can't emit buoy, so run the classical screen").
+        # The screen is tuned for saturated orange/red against desaturated water
+        # and false-positives freely anywhere else — indoors on the bench it
+        # fires constantly — so the operator needs to silence it without a
+        # config edit and a restart.
+        self._buoy_enabled: bool = True
         # Lowest per-class floor: the backend must run at least this permissive
         # or a class with a reduced threshold would be dropped before we see it.
         self._class_conf = {k.lower(): float(v) for k, v in
                             (self._cfg.class_conf or {}).items()}
+        self._class_conf_abs = {str(c).lower()
+                                for c in (self._cfg.class_conf_absolute or [])}
+        # The config's conf is the baseline the per-class floors were written
+        # against; the CONF slider shifts every relative floor by its distance
+        # from here. Captured once at init so it survives apply_controls().
+        self._conf_baseline = float(self._cfg.conf)
 
     # -- model -------------------------------------------------------------- #
     def _resolve_model_path(self) -> str:
@@ -227,6 +265,12 @@ class DetectionOverlay:
         that need geometry — e.g. radar_tracker.RadarTracker."""
         return list(self._boxes)
 
+    def boxes_right(self) -> list[tuple]:
+        """Same, for the RIGHT camera. Empty unless ``detect_right`` is on — the
+        radar tracker medians the two centres when both are available and falls
+        back to the left camera alone when this is empty."""
+        return list(self._boxes_right)
+
     def primary_target(self) -> dict | None:
         """The single object being tracked (highest-confidence highlight class),
         or None. Used for the command-center tracking readout. The same box gets
@@ -245,6 +289,28 @@ class DetectionOverlay:
             "x1": x1, "y1": y1, "x2": x2, "y2": y2,
         }
 
+    def _class_floor(self, label_l: str) -> float:
+        """Effective confidence floor for one (lower-cased) class label.
+
+        A class with no entry in ``class_conf`` simply uses the global threshold.
+        A class listed in ``class_conf_absolute`` keeps its configured floor
+        verbatim, whatever the slider says. Everything else is *relative*: it
+        keeps its configured distance from the baseline threshold, so moving CONF
+        moves it too and the slider governs every class instead of only the ones
+        nobody bothered to tune.
+        """
+        base = self._class_conf.get(label_l)
+        if base is None:
+            return self._cfg.conf
+        if label_l in self._class_conf_abs:
+            return base
+        return max(0.01, min(0.99, base + (self._cfg.conf - self._conf_baseline)))
+
+    def conf_floors(self) -> dict[str, float]:
+        """Effective floor per tuned class right now (for the UI / diagnostics)."""
+        return {label: round(self._class_floor(label), 2)
+                for label in sorted(self._class_conf)}
+
     @property
     def _infer_conf(self) -> float:
         """Threshold to run the backend at: the most permissive floor in play.
@@ -255,7 +321,8 @@ class DetectionOverlay:
         """
         if not self._class_conf:
             return self._cfg.conf
-        return min([self._cfg.conf, *self._class_conf.values()])
+        return min([self._cfg.conf,
+                    *(self._class_floor(k) for k in self._class_conf)])
 
     def class_names(self) -> list[str]:
         """Sorted unique class labels the loaded model can emit (for the UI's
@@ -263,7 +330,7 @@ class DetectionOverlay:
         names = self._names
         vals = names.values() if isinstance(names, dict) else names
         labels = {str(v) for v in vals}
-        if self._buoy_active:
+        if self._buoy_active and self._buoy_enabled:
             # The classical screen emits this label even though the model can't,
             # so the operator can pick it in the TRACK picker.
             labels.add(self._buoy.cfg.label if self._buoy else "buoy")
@@ -274,6 +341,14 @@ class DetectionOverlay:
             "detection_enabled": self.enabled,
             "detect_max_fps": self._cfg.detect_max_fps,
             "conf": round(self._cfg.conf, 2),
+            # What CONF actually resolves to per tuned class — the slider shifts
+            # these, so the operator can see it bite instead of guessing.
+            "conf_floors": self.conf_floors(),
+            "conf_absolute": sorted(self._class_conf_abs),
+            # Classical buoy screen: _available_ when the model can't emit 'buoy',
+            # _enabled_ when the operator hasn't switched it off.
+            "buoy_available": self._buoy_active,
+            "buoy_enabled": self._buoy_active and self._buoy_enabled,
             "imgsz": self._onnx.imgsz if self._onnx is not None else self._cfg.imgsz,
             "model": self._cfg.model,
             "backend": (("ncnn" if type(self._onnx).__name__ == "NcnnYolo" else "onnx")
@@ -312,6 +387,8 @@ class DetectionOverlay:
             # "" or "AUTO" → auto (highest-confidence highlight class).
             tc = str(updates["track_class"] or "").strip()
             self._cfg.track_class = "" if tc.upper() == "AUTO" else tc
+        if "buoy_enabled" in updates:
+            self._buoy_enabled = bool(updates["buoy_enabled"])
         return self.controls()
 
     # -- detection loop ----------------------------------------------------- #
@@ -327,6 +404,7 @@ class DetectionOverlay:
                     continue
                 if not self.enabled or not self.available:
                     self._boxes, self._detections, self._primary, self._fps = [], [], None, 0.0
+                    self._boxes_right = []
                     continue
                 interval = 1.0 / max(0.5, self._cfg.detect_max_fps)
                 now = time.monotonic()
@@ -335,6 +413,17 @@ class DetectionOverlay:
                 boxes, dets, primary = await loop.run_in_executor(
                     None, self._infer, frame.left, frame.right)
                 self._boxes, self._detections, self._primary = boxes, dets, primary
+                # Optional second pass on the right eye — raw geometry only, it
+                # never reaches drawing / memory / threat grading.
+                if self._cfg.detect_right and frame.right is not None:
+                    try:
+                        self._boxes_right = await loop.run_in_executor(
+                            None, self._raw_detect, frame.right)
+                    except Exception as e:  # noqa: BLE001 — left result still stands
+                        logger.debug("right-eye detect failed: %s", e)
+                        self._boxes_right = []
+                elif self._boxes_right:
+                    self._boxes_right = []
                 if last_run:
                     dt = time.monotonic() - last_run
                     if dt > 0:
@@ -377,7 +466,7 @@ class DetectionOverlay:
         against ~30 ms for the forward pass. ``dets`` is passed in so an overlapping classified
         object keeps its label — see BuoyDetector._suppress_overlaps.
         """
-        if not self._buoy_active or self._buoy is None:
+        if not self._buoy_active or not self._buoy_enabled or self._buoy is None:
             return dets
         # Suppress against only the boxes that will actually survive _infer's
         # per-class floor. Otherwise a sub-threshold box (say boat @ 0.32 when
@@ -389,12 +478,12 @@ class DetectionOverlay:
         return dets + found if found else dets
 
     def _passes_conf(self, label_l: str, conf: float) -> bool:
-        """Per-class confidence floor, falling back to the global threshold.
+        """Per-class confidence floor (slider-relative), else the global one.
 
         The backend already ran at the lowest floor of any class, so this is
         where a class without a reduced threshold gets held to the strict value.
         """
-        return conf >= self._class_conf.get(label_l, self._cfg.conf)
+        return conf >= self._class_floor(label_l)
 
     def _infer(self, frame_bgr, right_bgr=None) -> tuple[list[tuple], list[dict], tuple | None]:
         try:

@@ -74,11 +74,22 @@ class StepperMotor:
                  steps_per_rev: int = 400, max_speed_rpm: float = 10.0,
                  auto_sleep_s: float = 5.0,
                  min_deg: float = 0.0, max_deg: float = 180.0,
-                 has_slip_ring: bool = False) -> None:
+                 has_slip_ring: bool = False,
+                 invert_direction: bool = False) -> None:
         self.steps_per_rev = int(steps_per_rev)
         self.max_speed_rpm = float(max_speed_rpm)
         self.auto_sleep_s = float(auto_sleep_s)
         self.has_slip_ring = bool(has_slip_ring)
+        # DIR polarity. Whether "DIR high" is clockwise depends on which way the
+        # two coil pairs landed in J18 and on the gearing between motor and bar,
+        # neither of which the software can know — so if EVERY move (jog, goto,
+        # scan, track) comes out mirrored, flip this instead of re-wiring the
+        # motor. It inverts the pin only: the position accounting, the travel
+        # limits and the reported angle are unchanged, so 90° still means the
+        # same physical place, the shaft just gets there turning the other way.
+        # If only *tracking* is mirrored the fault is upstream — see
+        # radar_tracker.invert_tracking, which flips the bbox→bearing sign.
+        self.invert_direction = bool(invert_direction)
         # Travel limits and "may the position wrap past 360°?" are SEPARATE
         # concerns. Only a slip ring permits a free, wrapping full rotation; the
         # caller can still ask for a 0–360° linear axis (min_deg/max_deg) without
@@ -122,11 +133,11 @@ class StepperMotor:
                 logger.warning("Stepper GPIO claim failed (%s) — mock mode", e)
                 self.mock = True
         logger.info("StepperMotor init: pins step=%d dir=%d en=%d slp=%d rst=%s "
-                    "steps/rev=%d limits=[%.0f,%.0f] slip_ring=%s mock=%s",
+                    "steps/rev=%d limits=[%.0f,%.0f] slip_ring=%s invert_dir=%s mock=%s",
                     step_pin, dir_pin, enable_pin, sleep_pin,
                     reset_pin if reset_pin is not None else "jumper→SLEEP",
                     self.steps_per_rev, self.min_deg, self.max_deg,
-                    self.has_slip_ring, self.mock)
+                    self.has_slip_ring, self.invert_direction, self.mock)
 
     # -- low-level pin helpers --------------------------------------------- #
     def _w(self, dev, value: int) -> None:
@@ -194,7 +205,10 @@ class StepperMotor:
         if not self._enabled:
             self.enable()
         with self._lock:
-            self._w(self._dir, 1 if direction >= 0 else 0)
+            level = 1 if direction >= 0 else 0
+            if self.invert_direction:
+                level ^= 1
+            self._w(self._dir, level)
             time.sleep(1e-6)  # DIR setup time (>200 ns)
             cruise = max(delay_us, 1) / 1_000_000.0
             ramp = min(200, steps // 2)
@@ -334,6 +348,7 @@ class StepperMotor:
             "asleep": self._asleep,
             "limits": [self.min_deg, self.max_deg],
             "has_slip_ring": self.has_slip_ring,
+            "invert_direction": self.invert_direction,
         }
 
     def cleanup(self) -> None:

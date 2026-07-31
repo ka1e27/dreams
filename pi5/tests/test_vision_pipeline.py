@@ -44,16 +44,27 @@ class FakeStepper:
 
 
 class FakeRadar:
-    def __init__(self):
+    def __init__(self, bow_deg=90.0, bar_deg=None):
         self.stepper = FakeStepper()
+        self.bow_deg = bow_deg
+        # Default the bar to the bow, i.e. boresight 0 — the cameras ride the
+        # bar, so "where is the bar pointing" is now part of every bearing and
+        # tests need an unambiguous baseline.
+        self.stepper._angle = bow_deg if bar_deg is None else bar_deg
         self.modes = []
         self.track_classes = []
+        # Every pipeline-driven command must be flagged automatic, so the
+        # tracker can let operator intent (a manual pin, TRACK-only) outrank it.
+        self.mode_automatic = []
+        self.class_automatic = []
 
-    def set_mode(self, m):
+    def set_mode(self, m, *, automatic=False):
         self.modes.append(m)
+        self.mode_automatic.append(automatic)
 
-    def set_track_class(self, c):
+    def set_track_class(self, c, *, automatic=False):
         self.track_classes.append(c)
+        self.class_automatic.append(automatic)
 
 
 class FakeOverlay:
@@ -296,6 +307,21 @@ def test_pipeline_resumes_scan_after_threat_clears():
     assert p.vision_state()["tracking_engaged"] is False
 
 
+def test_pipeline_radar_commands_are_flagged_automatic():
+    """Threat assessment must not be able to override an operator who has pinned
+    the bar (manual class pick, or TRACK-only). The tracker enforces that on the
+    `automatic` flag, so the pipeline has to actually set it."""
+    ov = FakeOverlay([_box("vessel", 40, 40, 120, 120, 0.9, 10.0)])
+    radar = FakeRadar()
+    p = _pipeline(ov, radar)
+    p.segmentation_enabled = False
+    p._process(_frame(_img((140, 90, 30))), now=100.0)
+    ov._boxes = []
+    p._process(_frame(_img((140, 90, 30))), now=106.0)
+    assert radar.modes and all(radar.mode_automatic)
+    assert radar.track_classes and all(radar.class_automatic)
+
+
 def test_confirm_spotcheck_wakes_yolo_on_clear_water():
     # Classical screen reads clear blue water (no trigger), but a fresh eWaSR-style
     # confirm verdict flags an anomaly → YOLO must wake (fail-safe hybrid gate),
@@ -349,14 +375,38 @@ def test_toggles():
     assert p._overlay.enabled is False  # disabling YOLO idles the overlay
 
 
-def test_bearing_uses_stepper_angle_and_fov():
-    radar = FakeRadar()  # stepper at 30 deg
+def test_bearing_is_measured_about_the_bow_and_fov():
+    radar = FakeRadar(bow_deg=90.0)   # bar at the bow → boresight 0
     p = _pipeline(FakeOverlay(), radar)
-    # bbox centred → zero offset → bearing == current angle
-    assert p._bearing_for((70, 0, 90, 20)) == pytest.approx(30.0, abs=0.5)
+    # bbox centred → zero offset → bearing == the bow angle
+    assert p._bearing_for((70, 0, 90, 20)) == pytest.approx(90.0, abs=0.5)
     # bbox at right edge → positive offset up to +fov/2
-    b = p._bearing_for((150, 0, 160, 20))
-    assert b > 30.0
+    assert p._bearing_for((150, 0, 160, 20)) > 90.0
+
+
+def test_bearing_follows_the_bar_because_the_cameras_ride_it():
+    """The cameras pan with the bar, so the pixel offset is relative to the BAR.
+    A centred box means "straight down the bar", and the reported bearing has to
+    move with it — otherwise a target held at bar +90° reads as dead ahead."""
+    radar = FakeRadar(bow_deg=0.0, bar_deg=0.0)
+    p = _pipeline(FakeOverlay(), radar)
+    centred = (70, 0, 90, 20)
+    assert p._bearing_for(centred) == pytest.approx(0.0, abs=0.5)
+    radar.stepper._angle = 90.0                      # bar swings to starboard
+    assert p._bearing_for(centred) == pytest.approx(90.0, abs=0.5)
+    radar.stepper._angle = -45.0
+    assert p._bearing_for(centred) == pytest.approx(-45.0, abs=0.5)
+
+
+def test_hull_mounted_cameras_ignore_the_bar_angle():
+    """cameras_on_bar=False restores the fixed-boresight behaviour."""
+    radar = FakeRadar(bow_deg=0.0, bar_deg=0.0)
+    p = _pipeline(FakeOverlay(), radar)
+    p._cameras_on_bar = False
+    centred = (70, 0, 90, 20)
+    before = p._bearing_for(centred)
+    radar.stepper._angle = 120.0
+    assert p._bearing_for(centred) == before
 
 
 # --------------------------------------------------------------------------- #
@@ -392,6 +442,27 @@ def test_pipeline_confirms_and_maps_buoy():
                                          90.0, 20.0)
     assert haversine_distance(o["lat"], o["lon"], exp_lat, exp_lon) < 1.0
     assert p.vision_state()["object_memory"]["permanent"] == 1
+
+
+def test_geolocation_accounts_for_the_bar_angle():
+    """With the cameras on the bar, a marker must land where the bar is looking.
+    Boat heading 90° (east), bar swung 90° to starboard, centred box at 20 m →
+    the object is due SOUTH (180°), not east. Ignoring the bar angle would plant
+    the marker 90° out — and the same bearing steers avoidance."""
+    pico = FakePico(heading=90.0)
+    ov = FakeOverlay([_box("buoy", 70, 50, 90, 70, 0.9, 20.0)])
+    cfg = {"threat_tracking": {"clear_timeout_s": 5.0},
+           "object_memory": {"confirm_sightings": 3}}
+    p = SurveyVisionPipeline(
+        camera=None, overlay=ov, radar=FakeRadar(bow_deg=0.0, bar_deg=90.0),
+        config=cfg, pico=pico, fov_deg=75.0, frame_width=160)
+    p.segmentation_enabled = False
+    for i in range(3):
+        p._process(_frame(_img((140, 90, 30))), now=100.0 + i)
+    o = p.map_objects()[0]
+    exp_lat, exp_lon = destination_point(pico.telemetry.lat, pico.telemetry.lon,
+                                         180.0, 20.0)
+    assert haversine_distance(o["lat"], o["lon"], exp_lat, exp_lon) < 1.0
 
 
 def test_pipeline_no_marker_before_confirmation():

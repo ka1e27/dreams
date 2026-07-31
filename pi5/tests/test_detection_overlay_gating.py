@@ -85,9 +85,68 @@ def test_infer_conf_follows_a_runtime_conf_change():
     would go stale and silently re-raise the threshold we lowered."""
     ov = _overlay(conf=0.40, class_conf={"person": 0.25})
     ov.apply_controls({"conf": 0.10})
-    assert ov._infer_conf == 0.10          # slider now the most permissive
+    # person shifts down with the slider and bottoms out at the 0.01 floor
+    # (0.25 - 0.30 would be negative), so inference runs wide open.
+    assert ov._infer_conf == pytest.approx(0.01)
     ov.apply_controls({"conf": 0.90})
-    assert ov._infer_conf == 0.25          # person floor still honoured
+    # person keeps its 0.15 head start over the slider: 0.90 - 0.15 = 0.75.
+    assert ov._infer_conf == pytest.approx(0.75)
+
+
+# -- the CONF slider as a master control ----------------------------------- #
+# Before 2026-07-29 class_conf floors were absolute, so dragging CONF changed
+# nothing at all for person / swimmer / surfer / kayak — the operator saw the
+# same 0.40-era boxes wherever they put the slider. They are now relative to the
+# configured baseline and move with it.
+
+def test_conf_slider_raises_a_tuned_class_floor_too():
+    ov = _overlay(conf=0.40, class_conf={"person": 0.25})
+    assert ov._passes_conf("person", 0.30) is True
+    ov.apply_controls({"conf": 0.90})     # operator drags CONF to the top
+    assert ov._passes_conf("person", 0.30) is False
+    assert ov._passes_conf("person", 0.80) is True
+
+
+def test_conf_slider_lowers_a_tuned_class_floor_too():
+    ov = _overlay(conf=0.40, class_conf={"person": 0.25})
+    assert ov._passes_conf("person", 0.15) is False
+    ov.apply_controls({"conf": 0.20})     # "show me everything"
+    assert ov._passes_conf("person", 0.15) is True
+
+
+def test_relative_floors_keep_their_ordering_across_the_range():
+    ov = _overlay(conf=0.40, class_conf={"person": 0.25, "kayak": 0.30})
+    for slider in (0.15, 0.40, 0.75):
+        ov.apply_controls({"conf": slider})
+        f = ov.conf_floors()
+        assert f["person"] < f["kayak"] <= ov._cfg.conf
+
+
+def test_absolute_classes_ignore_the_slider():
+    """A score that isn't a probability can't be compared to one, so 'buoy'
+    keeps a fixed floor however far CONF is dragged."""
+    ov = _overlay(conf=0.40, class_conf={"buoy": 0.30, "person": 0.25},
+                  class_conf_absolute=["buoy"])
+    ov.apply_controls({"conf": 0.90})
+    assert ov.conf_floors()["buoy"] == 0.30
+    assert ov.conf_floors()["person"] == 0.75
+    assert ov._passes_conf("buoy", 0.35) is True    # weakest real buoy survives
+
+
+def test_floors_stay_inside_a_usable_range():
+    ov = _overlay(conf=0.40, class_conf={"person": 0.25})
+    ov.apply_controls({"conf": 0.05})
+    assert 0.0 < ov.conf_floors()["person"] <= 0.05
+    ov.apply_controls({"conf": 0.95})
+    assert ov.conf_floors()["person"] < 1.0
+
+
+def test_controls_exposes_the_resolved_floors():
+    ov = _overlay(conf=0.40, class_conf={"person": 0.25},
+                  class_conf_absolute=["buoy"])
+    c = ov.controls()
+    assert c["conf_floors"] == {"person": 0.25}
+    assert c["conf_absolute"] == ["buoy"]
 
 
 def test_lowered_class_keeps_a_faint_box_that_others_lose():
@@ -115,11 +174,47 @@ def test_weak_buoys_survive_the_confidence_filter():
     assert ov._passes_conf("buoy", 0.29) is False
 
 
-def test_buoy_survives_the_conf_slider_being_dragged_up():
-    """Dragging CONF to 0.9 must not silently switch buoy detection off."""
+def test_buoy_stays_more_sensitive_than_everything_else():
+    """'buoy' keeps its 0.10 head start at every slider position — but it IS
+    governed by the slider. It was briefly pinned absolute, which made the
+    classical screen's false positives the one thing an operator couldn't filter
+    out (reported from the bench 2026-07-29: "a ton of buoys in a place with no
+    buoys, and they still show at 0.75")."""
     ov = _overlay(conf=0.40, class_conf={"buoy": 0.30})
-    ov.apply_controls({"conf": 0.90})
-    assert ov._passes_conf("buoy", 0.40) is True
+    for slider in (0.40, 0.60, 0.75):
+        ov.apply_controls({"conf": slider})
+        assert ov.conf_floors()["buoy"] == pytest.approx(slider - 0.10)
+
+
+def test_dragging_conf_up_filters_weak_buoys_out():
+    ov = _overlay(conf=0.40, class_conf={"buoy": 0.30})
+    assert ov._passes_conf("buoy", 0.40) is True     # a 0.40 blob at baseline
+    ov.apply_controls({"conf": 0.75})
+    assert ov._passes_conf("buoy", 0.40) is False    # …gone once CONF is raised
+    assert ov._passes_conf("buoy", 0.70) is True     # a strong one survives
+
+
+# -- the classical buoy screen's operator kill switch ---------------------- #
+
+def test_buoy_screen_can_be_switched_off_at_runtime():
+    ov = _overlay()
+    ov._names = COCO_SUBSET
+    ov._buoy_active = True
+    assert ov.controls()["buoy_enabled"] is True
+    ov.apply_controls({"buoy_enabled": False})
+    assert ov.controls()["buoy_enabled"] is False
+    assert ov._add_buoys(None, [("x",)]) == [("x",)]   # screen never runs
+    assert "buoy" not in ov.class_names()              # and leaves the picker
+
+
+def test_buoy_toggle_reports_unavailable_when_the_model_emits_buoy():
+    """With a maritime model the screen isn't running at all, so 'enabled' must
+    read False regardless of the operator switch — a toggle would be a lie."""
+    ov = _overlay()
+    ov._names = MARITIME
+    ov._buoy_active = False
+    c = ov.controls()
+    assert c["buoy_available"] is False and c["buoy_enabled"] is False
 
 
 # -- _add_buoys against the real detector ---------------------------------- #

@@ -262,6 +262,13 @@ class MockPicoSerial:
             health="111111",
             curr_left=round(1.0 + 44.0 * load_l, 1),
             curr_right=round(1.0 + 44.0 * load_r, 1),
+            # The sim is its own position source, so report a healthy fix rather
+            # than the fix_quality=0 default — otherwise sim telemetry claims
+            # every sensor healthy (health="111111") while also claiming no GPS.
+            fix_quality=1,
+            sats=12,
+            hdop=0.8,
+            gps_source="sim",
         )
 
     @property

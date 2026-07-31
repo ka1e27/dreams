@@ -62,7 +62,8 @@ class SurveyVisionPipeline:
     def __init__(self, camera, overlay=None, radar=None, *,
                  config: dict | None = None, seg: WaterSegmentation | None = None,
                  pico=None, uploader=None, navigator=None,
-                 fov_deg: float = 75.0, frame_width: int = 1920) -> None:
+                 fov_deg: float = 75.0, frame_width: int = 1920,
+                 cameras_on_bar: bool = True) -> None:
         cfg = config or {}
         self._camera = camera
         self._overlay = overlay          # EXISTING DetectionOverlay — Tier 2 source
@@ -72,6 +73,9 @@ class SurveyVisionPipeline:
         self._navigator = navigator      # optional Navigator — reactive avoidance
         self.fov_deg = float(cfg.get("fov_degrees", fov_deg))
         self._frame_width = int(frame_width)
+        # Do the cameras pan with the radar bar? If so every bbox bearing is
+        # relative to the bar, not the bow — see _avoidance_bearing.
+        self._cameras_on_bar = bool(cfg.get("cameras_on_bar", cameras_on_bar))
         self._frame_height = 0
 
         self.trigger_threshold = float(
@@ -502,8 +506,10 @@ class SurveyVisionPipeline:
             self._last_threat_t = now
             if not self._engaged or self._tracked_class != primary.class_name:
                 try:
-                    self._radar.set_track_class(primary.class_name)
-                    self._radar.set_mode("TRACK")
+                    # automatic=True: the operator's manual pin and TRACK-only
+                    # lock both outrank threat assessment.
+                    self._radar.set_track_class(primary.class_name, automatic=True)
+                    self._radar.set_mode("TRACK", automatic=True)
                 except Exception as e:  # noqa: BLE001
                     logger.debug("radar engage failed: %s", e)
                 self._engaged = True
@@ -513,8 +519,8 @@ class SurveyVisionPipeline:
                             primary.distance_m or -1.0)
         elif self._engaged and (now - self._last_threat_t) > self._clear_timeout_s:
             try:
-                self._radar.set_track_class("")   # back to auto priority
-                self._radar.set_mode("SCAN")
+                self._radar.set_track_class("", automatic=True)  # back to auto priority
+                self._radar.set_mode("SCAN", automatic=True)     # ignored if pinned
             except Exception as e:  # noqa: BLE001
                 logger.debug("radar disengage failed: %s", e)
             self._engaged = False
@@ -597,13 +603,36 @@ class SurveyVisionPipeline:
         return max(-100, min(100, left)), max(-100, min(100, right))
 
     def _avoidance_bearing(self, bbox) -> float:
-        """Threat bearing relative to the bow (deg, +starboard) from its position
-        in the forward camera frame. Assumes the detection camera looks ahead."""
+        """Threat bearing relative to the **bow** (deg, +starboard).
+
+        The pixel offset is relative to the camera's boresight, which is only the
+        bow when the camera points there. The cameras ride ON the radar bar
+        (builder, 2026-07-30), so the bar's angle has to be added back in —
+        otherwise a target held at bar +90° is reported dead ahead. That matters
+        three times over: geolocation would plant map markers 90° off, and
+        avoidance would steer away from the wrong side.
+
+        Set ``cameras_on_bar=False`` for a hull-mounted camera, where the
+        boresight *is* the bow and the pan angle is irrelevant.
+        """
         center = self._frame_width / 2.0
         if center <= 0:
             return 0.0
         cx = (bbox[0] + bbox[2]) / 2.0
-        return (cx - center) / center * (self.fov_deg / 2.0)
+        offset = (cx - center) / center * (self.fov_deg / 2.0)
+        return offset + self._boresight_deg()
+
+    def _boresight_deg(self) -> float:
+        """Where the cameras are pointing, relative to the bow (0 if hull-fixed)."""
+        if not self._cameras_on_bar or self._radar is None:
+            return 0.0
+        try:
+            stepper = self._radar.stepper
+            if stepper is None:
+                return 0.0
+            return stepper.get_position_degrees() - getattr(self._radar, "bow_deg", 0.0)
+        except Exception:  # noqa: BLE001 — a status read must not break steering
+            return 0.0
 
     def _fallback_distance(self, bbox) -> float | None:
         """Very rough monocular range from bbox height (assumes a ~3 m tall
@@ -718,16 +747,23 @@ class SurveyVisionPipeline:
         return out
 
     def _bearing_for(self, bbox) -> float | None:
-        """Absolute bar angle that points at a bbox centre (deg), or None if no
-        radar. Uses the live frame width + camera FOV + the bar's current angle."""
+        """Bar angle that points at a bbox centre (deg), or None if there's no
+        radar to express it against.
+
+        Measured about the bar's bow angle, NOT its current angle: the cameras
+        are fixed forward, so a bbox offset is already a bearing off the bow and
+        adding wherever the bar happens to be pointing made a stationary object's
+        reported bearing drift every time the bar moved. Same fix as
+        ``radar_tracker._bearing_for`` (2026-07-29); ``_avoidance_bearing``, which
+        feeds geolocation and steering, was always bow-relative and is unchanged.
+        """
         try:
-            cx = (bbox[0] + bbox[2]) / 2.0
-            center = self._frame_width / 2.0
-            offset = (cx - center) / center * (self.fov_deg / 2.0)
-            base = 0.0
-            if self._radar is not None and self._radar.stepper is not None:
-                base = self._radar.stepper.get_position_degrees()
-            return round(base + offset, 1)
+            if self._radar is None:
+                return None
+            # _avoidance_bearing is already bow-relative (it folds in the bar
+            # angle when the cameras ride it), so this is just a change of origin.
+            return round(getattr(self._radar, "bow_deg", 0.0)
+                         + self._avoidance_bearing(bbox), 1)
         except Exception:  # noqa: BLE001
             return None
 
