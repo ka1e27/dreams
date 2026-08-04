@@ -414,7 +414,4 @@ Architecture-of-record lives on **`main`**. Two other branches are active:
 ### Working conventions (from `CLAUDE.md`)
 - **Session journal:** read `docs/session_journal.md` at the start of a session; append a newest-first
   entry at the end. Locked decisions go in `changelog_and_decisions.md`, not the journal.
-- **Knowledge graph:** the repo has a `code-review-graph` MCP server — prefer its tools
-  (`semantic_search_nodes`, `query_graph`, `get_impact_radius`, `detect_changes`) over blind
-  Grep/Glob when exploring or reviewing.
 - **Tooling:** Ruff + pytest (`pyproject.toml`); firmware is MicroPython (compile-check on a laptop).
