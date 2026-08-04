@@ -9,6 +9,203 @@ entries, move the oldest one(s) here, at the top of this file's entry list (just
 
 ---
 
+## 2026-07-30 — Pull-ups fitted: **the bus is fixed.** The BNO085 module now fails on its own — it resets on every write
+
+**Worked on:** user power-cycled the Pico and asked to retest the IMU. Diagnosis only — no firmware,
+config or repo code changed. Two findings, one of which is more serious than the IMU.
+
+**⚠ FINDING 1 — the Pi could not send the Pico anything. The control link was one-way.**
+Before any I²C work: every write to `/dev/ttyACM0` blocked. `os.write()` accepted 8 bytes and
+`TIOCOUTQ` stayed pinned at 1280 indefinitely — the Pico was **NAKing its OUT endpoint**. Telemetry
+(`$TEL`/`$ENV`/`$ALERT`) streamed out fine the whole time, so the link *looked* healthy. Not DTR/RTS
+(both asserted, toggling changed nothing), not flow control (`CRTSCTS`/`IXON` clear), not
+enumeration (one clean `cdc_acm` attach at boot, no re-enumerate). **A `USBDEVFS_RESET` cleared it
+instantly** and writes worked again.
+This means `SET_THR`, `ESTOP` and the heartbeat could not reach the Pico — and the AM32 ESCs hold
+their last PWM. `task_serial_rx` → `read_usb()` cannot die (bare `except` inside its loop), so the
+wedge is below the firmware, in the CDC RX path. **Unexplained and not fixed — treat as a safety
+item.** Workaround: USB-reset the device before trusting the link.
+
+**FINDING 2 — the IMU is fine; the bus it lives on has no pull-ups, and that is the whole story.**
+Confirms and supersedes the "intermittent, cannot be solder" reasoning in the entry below.
+
+- **The BNO085 boots and talks properly.** After a bus recovery it ACKs at **0x4B** and its boot
+  queue drains cleanly in 28-byte chunks — `len=276 → 248 → 220 → … → 24` on ch0, then `len=5` on
+  **ch1 (executable = reset complete)**, then ch2. `SET_FEATURE(RotationVector)` returns **True**.
+- **The bus wedges with SCL held low.** Caught it directly: `SDA(GP14)=1, SCL(GP15)=0`, still low a
+  second later — a slave stretching the clock, exactly as predicted. **The standard 9-clock recovery
+  sequence frees it every time** (SCL→1), and the rescan then found **`0x44`** — the SHT41 on the
+  same pins, which is why *both* devices vanish together.
+- **Speed-dependent, and that is the tell.** With a `~RST` pulse the device answered **8/8 at 50k,
+  100k and 400k**; long reads are what corrupt (`OSError(110)` ETIMEDOUT mid-body on a 276-byte
+  read), short ones survive. Slow rise time on an unpulled bus, nothing else.
+- **The earlier "GP14/GP15/GP17 short migrates between pins" mystery is resolved** — those were
+  snapshots of a wedged bus, not shorts. `map` now reads GP14/GP15 **both idle-high**.
+- **Still no heading.** Channel census after a successful `SET_FEATURE`: `{ch0: 82, ch1: 6, ch2: 6}`
+  and **zero packets on ch3 (reports)**. The reports channel never opens, so `compass.read()` gets
+  nothing — consistent with the part re-announcing rather than streaming on a bus that keeps hanging.
+
+**Unchanged and re-confirmed:** GP9 and GP10 still `*** SHORTED LOW ***` every run. Firmware boot
+banner still prints `IMU: I2C0 GP8/GP9 addr=0x4A FAIL` — the wrong-bus + wrong-address pair from the
+entry below is still there, untouched.
+
+**Changed:** nothing in the repo. `pi5/scripts/pico_i2c_probe.py` was used as-is; all new probes were
+throwaway scratchpad scripts. The Pico firmware was left **running** (verified `$TEL` after a soft
+reset) — the probe stops it, so it must be restarted or it sits dead at the REPL.
+
+**Decisions / open questions:**
+- The probe's docstring claims hw I²C1 @400 kHz is the reliable config. **Partly wrong** — 400 kHz
+  works for short transactions but the failure is transaction *length*, not clock rate. Chunked
+  ≤28-byte reads at 100 kHz drained the advertisement that 400 kHz could not.
+- Why the CDC RX endpoint wedges is unknown. It survived a firmware restart and only a USB reset
+  cleared it. Worth reproducing deliberately.
+
+---
+
+### ⟶ SAME SESSION, AFTER THE USER FITTED 2× 2.2 kΩ TO 3V3 ON GP14/GP15
+
+**The pull-ups worked. The bus is fixed — this is measured, not inferred:**
+
+- **SHT41 (0x44) CRC integrity: 120/120 clean** measurements, **0 bad-CRC, 0 I²C errors**, at *both*
+  100 kHz and 400 kHz. The SHT41 ships a CRC-8 with every reading, so this is a real data-integrity
+  test of the wire, not a presence check. It used to vanish from the bus constantly.
+- **The 276-byte boot advertisement now reads in ONE full-length 400 kHz transaction** and decodes to
+  real ASCII (`SHTP`, `1.0.0`). That exact read previously returned all-nonprintable or `ETIMEDOUT`.
+- `0x44` and `0x4B` now enumerate together, every scan.
+- No more SCL-low wedges under normal traffic.
+
+**Two earlier conclusions were wrong and are corrected here:**
+1. **There is no reboot loop.** The "1.4 reboots/s" in the entry above was an artifact of *chunked*
+   reads never fully consuming the advertisement. With full-length reads the queue drains to
+   genuinely empty (`ch0 len=276` → `ch1 len=5` → NAK) and stays quiet.
+2. **Most "errors" were plain NAKs.** A BNO08x NAKs reads when its queue is empty; MicroPython
+   surfaces that as `OSError`, identical to a real fault. Earlier passes treated normal idle as a bus
+   hang and thrashed the recovery routine against nothing.
+
+**⚠ The remaining fault is the IMU module itself — it resets on every write.** Isolated with a
+read-only control arm:
+
+| | result |
+|---|---|
+| address ACK | **30/30** |
+| reads (incl. 276-byte) | clean, correct ASCII |
+| **1st write** | lands, and the chip immediately emits `ch0 len=276` + `ch1 len=5` → **it reboots** |
+| **writes 2–5** | **NAK'd, 20 retries each, all fail** |
+| control: reads only, no writes | **0 resets, 0 packets** — quiet and stable |
+
+So `SET_FEATURE` can never take effect, `GET_FEATURE_REQUEST` never returns a response, **channel 3
+(reports) never opens**, and there is no heading. `INT` (GP18) never asserts, consistent with the
+chip never having data to announce.
+
+**GP17 is NOT the IMU's reset.** An A/B test (GP17 driven push-pull high vs left high-Z) produced
+*byte-identical* results. Correct conclusion, wrong reason — see the RST/INT section below: GP17 is
+the **interrupt**, so pulsing it was always a no-op. GP9/GP10 remain shorted as always.
+
+**Changed:** still nothing in repo code — diagnosis only. Journal only. Firmware verified running
+again afterwards (`$TEL` streaming); the probe stops it, so it must be restarted or it sits dead at
+the REPL. Firmware boot banner unchanged: `IMU: I2C0 GP8/GP9 addr=0x4A FAIL`.
+
+**⚠⚠ THE RST AND INT WIRES ARE SWAPPED — and GP17 was never a short.** The user reported having only
+power / SDA / SCL / RST / INT connected, which contradicted the measurements, so the two lines were
+located empirically:
+
+- **RST is on GP18** (pin map says GP18 = `~INT`, J5.8). Driving GP18 low makes 0x4B stop ACKing;
+  releasing it brings the device straight back. No other candidate pin does this.
+- **INT is on GP17** (pin map says GP17 = `~RST`, J5.7). During a guaranteed post-reset data-pending
+  window GP17 read low **500/500 samples**, while GP12/13/16/19/20/22 stayed high throughout.
+
+**This retires the "GP17 is SHORTED LOW" finding that has been in the docs and in
+`pico_i2c_probe.py`'s `map` output all along.** GP17 is a correctly-functioning **active-low
+interrupt** that has been asserted continuously because the boot advertisement was never drained.
+`map` reports any asserted active-low signal as a short — it cannot tell the two apart. GP9/GP10
+remain genuinely shorted; **GP17 does not, and `docs/pin_map.md` needs correcting.**
+
+Consequence: every "reset pulse" in this session and the one before it was applied to GP17, which is
+the interrupt line — i.e. **the module was never actually being reset**. With real reset control on
+GP18 the chip resets cleanly and re-emits a 280-byte advertisement + ch1.
+
+**Writes are INT-gated.** Writes land only while INT (GP17) is asserted and are NAK'd when the queue
+is empty — which explains the earlier 4/5-then-0/10 write pattern exactly. Gating writes on INT low
+made `SET_FEATURE` land reliably. **But the chip still answers it with `ch0` + `ch1` — a reset — and
+channel 3 still never opens.** A correctly framed, correctly timed command still reboots the part.
+
+**The chip is running its full application firmware — not a bootloader.** The advertisement decodes
+completely: `SHTP / control / executable / device / sensorhub / control / inputNormal / inputWake /
+inputGyroRv`, SHTP `1.0.0`, app `1.1.0`, followed by ch1 payload `01` = reset complete. So the part
+boots correctly and its sensor app is alive.
+
+**⚠ THE ACTUAL BLOCKER: the part ACKs its address but NAKs every data write once idle.**
+- `bus.scan()` — an address-only write — succeeds **30/30**, and both `0x44` and `0x4B` enumerate.
+- A write *with payload* only ever lands inside the post-reset INT-low window, and when it does land
+  the chip **ignores it**: no ch2 response, no ch3 reports.
+- Once the boot queue drains, **INT (GP17) never asserts again** and writes fail 100 %:
+  0/52 tries, then 0/26 at each of four post-reset delays (60/150/300/600 ms).
+- Tried both transports: **hardware I2C1** (strict on clock stretching, which the BNO08x does during
+  writes) *and* **SoftI2C** (tolerant). Neither changes it.
+- `Product ID Request (0xF9)` — the canonical liveness command — **cannot be delivered at all**, and
+  a commanded reset on the executable channel likewise never lands.
+
+This is the classic signature of a BNO08x that is **not ready / asleep** rather than a broken bus or
+a broken part: reads are flawless, the address ACKs, only payload writes are refused. On a BNO08x
+that state is governed by strap/interface pins that are **not connected**.
+
+**⇒ ROOT CAUSE (very likely): the module's unused host-interface inputs are left FLOATING.** The user
+confirmed: **MOSI/ADDR is not connected, CS is not connected**, and BOOT is an on-board plated hole,
+not a header pin (so BOOT is already strapped — consistent with the app-firmware advertisement we
+read). Floating CMOS inputs on a BNO08x host interface produce exactly the observed behaviour: the
+address decodes and ACKs, then the interface state machine refuses payload writes.
+
+This also probably explains the **0x4B vs 0x4A address mismatch** that the docs have treated as an
+inherent property of the module: **MOSI doubles as ADDR on this breakout** (the user's own labelling),
+and a floating ADDR reads high → 0x4B. Grounding it should yield **0x4A**, which is what
+`compass.py` already hardcodes.
+
+Note also: an earlier decoder bug meant report payloads were parsed without stripping the 4-byte
+SHTP header that the part repeats on every read. Fixed — but no ch3 packet ever arrived, so it
+changed no conclusion.
+
+---
+
+## 🚩 FLAGGED — PARKED 2026-07-30, PICK UP HERE
+
+**The bench is left working:** pull-ups fitted and proven, bus clean, Pico firmware running and
+verified (`$TEL` streaming). No repo code was changed in this session — diagnosis only.
+
+**Step 1 — wire the four floating pins (physical, blocks everything else):**
+
+| module pin | tie to | why |
+|---|---|---|
+| **MOSI / ADDR** | **GND** | address select; floating reads high → 0x4B. Grounded → **0x4A** |
+| **CS** | **3V3** | SPI chip-select, unused in I²C — park it deasserted, not floating |
+| **PS0** | **GND** | I²C mode |
+| **PS1** | **GND** | I²C mode |
+| VIN | **3V3, not 5 V** | `docs/pin_map.md` flags J5/J7/J11/J13 as 5 V; a bare BNO085 is 3.6 V max |
+
+`PS1=0 / PS0=0 = I²C` is solid. Leave BOOT alone. **Scan for both 0x4A and 0x4B afterwards** — the
+address is expected to move.
+
+**Step 2 — re-run the bring-up.** Scratch scripts are gone (they were in the session scratchpad);
+the reusable tool is `pi5/scripts/pico_i2c_probe.py`. The sequence that works: 9-clock bus recovery →
+reset via **GP18** → wait for INT low on **GP17** → drain the advertisement with full-length reads →
+`SET_FEATURE` → read ch3. Success = packets on **channel 3**; that is the one thing never yet seen.
+
+**Step 3 — only if writes still NAK:** swap in a known-good module. Reads flawless + address ACK
+30/30 + every payload write refused is narrow enough that a substitution settles it fastest.
+
+**Then the code work (all still pending, none of it done):**
+1. **Correct `docs/pin_map.md`:** at the Pico, **reset behaves as GP18 and interrupt as GP17** — the
+   reverse of what the map says. User confirmed their wiring follows the connector labels, so the
+   swap is **board-side**, same class of defect as the documented J3 odd/even row transposition.
+2. **Retract the GP17 short from the docs.** There is no GP17 short — it is an asserted active-low
+   interrupt. Also fix the `map` verdict in `pico_i2c_probe.py`, which cannot tell an asserted
+   active-low signal from a solder bridge and has been reporting it as `*** SHORTED LOW ***`.
+   GP9/GP10 *are* genuinely shorted; leave those.
+3. **`compass.py`:** bus → GP14/GP15 **sharing `sensors.py`'s bus object** (not a second one), the
+   address per whatever Step 1 lands on, plus 9-clock bus recovery and INT-gated reads on GP17.
+4. **Pi→Pico CDC write wedge** — independent of the IMU and a safety issue: the Pi could not send
+   `SET_THR`/`ESTOP`/heartbeat while telemetry still streamed out, looking healthy. Seen **twice**
+   this session; `USBDEVFS_RESET` clears it each time. Cause unknown.
+
 ## 2026-07-30 — IMU test: **the BNO085 works.** The bus it lives on hangs, and `compass.py` looks at the wrong one
 
 **Worked on:** user plugged an IMU in and asked me to test it. Diagnosis only, one new tool, no

@@ -151,3 +151,4 @@ Don't restate these here — edit them, and keep the firmware docstrings in sync
 | `docs/esc_setup.md` · `docs/esc_am32_conversion.md` | ESC config; AM32 conversion is planned, not started |
 | `docs/object_memory.md` | GPS-anchored buoy/landmark memory |
 | `docs/changelog_and_decisions.md` | Architecture of record |
+| `docs/v3/` | **V3 planning only** — a Teensy 4.1 / XIAO ESP32-S3 board that does not exist yet. Authoritative for *nothing* on the bench; it contradicts V2 on drive, MCU and sensors by design. Don't reconcile it with the above. |
