@@ -50,9 +50,13 @@ summary.
 
 ## Status of the V3 KiCad files
 
-`Boat_PCB/Boat_PCB_V3/` exists on disk (`.kicad_pcb` + `.kicad_sch`) but is **not tracked by git**,
-and neither is `Boat_PCB/Boat_PCB_V2.kicad_*`. Committing the layout is a separate decision from
-committing this planning text.
+`Boat_PCB/Boat_PCB_V3/` is **tracked**: schematic, layout, project settings, the custom design
+rules (`.kicad_dru`) and the project symbol/footprint libraries. KiCad backups (`*.bak`,
+`*.prestack`), fabrication exports and DRC reports are gitignored — regenerate them from the
+design files.
+
+`Boat_PCB/Boat_PCB_V2.kicad_*` is still **not tracked**. Committing the V2 board remains a
+separate decision.
 
 ## What adding these files changed
 
