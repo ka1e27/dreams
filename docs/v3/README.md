@@ -46,10 +46,13 @@ is not solved by anything in the V3 mux design.
 
 - **`V3_DESIGN_BRIEF.md` — start here.** Locked decisions, the current budget, part choices with
   their reasons, and the layout mistakes the first attempt made.
-- `v3_review_2026-08-05.md` — the full 18-section review log the brief was distilled from.
 - `V3_PCB_SESSION_CONTEXT.md` — the decisions and the "why," plus what is still open (Teensy
   concurrency model, CAN splice point, GPS footprint, tether voltage).
 - `DREAMS_V3_parts_footprints.md` — the BOM, with KiCad library availability and sourcing links.
+
+Removed from the tree, still in git history: `v3_review_2026-08-05.md` (the 18-section log of
+the first V3 attempt, distilled into the brief) and `kicad_library_status.md` (a 2026-08-04
+survey of what ships with KiCad, now that the library is built and committed).
 
 Both were written outside this repo and are stored **verbatim**, with only a scope banner prepended.
 They refer to a `DREAMS_MASTER_CONTEXT.md`, which is this repo's **`docs/PROJECT_CONTEXT.md`**. Note

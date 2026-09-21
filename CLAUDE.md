@@ -20,7 +20,7 @@ removed from this branch only, and every commit is still on `main`.
 |---|---|
 | `Boat_PCB/Boat_PCB_V3/` | The V3 carrier board — schematic, layout, project-local symbol/footprint library |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Start here.** Locked decisions, current budget, part choices, and the layout mistakes the first attempt made |
-| `docs/v3/` | The rest of the V3 planning material, including the full 18-section review log |
+| `docs/v3/` | The rest of the V3 planning material — original design intent, BOM, the V2/V3 fence |
 | `docs/battery_architecture.md` | Carried over from V2 — pack topology and the current figures the brief cites |
 | `docs/changelog_and_decisions.md` | Carried over from V2 — architecture of record |
 

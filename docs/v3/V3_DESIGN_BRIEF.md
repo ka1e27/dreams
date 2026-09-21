@@ -154,5 +154,5 @@ both.**
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Original design intent and the open questions |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | BOM with sourcing links |
 | [`../battery_architecture.md`](../battery_architecture.md) | Pack topology, fusing, thresholds |
-| [`v3_review_2026-08-05.md`](v3_review_2026-08-05.md) | The full 18-section log this brief distils |
+| git history | `v3_review_2026-08-05.md`, the full 18-section log this brief distils |
 | `main` | Everything V2 — the Pi stack, the firmware, the pin map, the old board |

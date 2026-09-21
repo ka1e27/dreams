@@ -3,21 +3,19 @@
 Self-contained symbol + footprint library for the V3 board, so a fresh clone resolves every part with
 no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 
-- `dreams_v3.kicad_sym` — **21 symbols**
-- `dreams_v3.pretty/` — **24 footprints**
+- `dreams_v3.kicad_sym` — **13 symbols**
+- `dreams_v3.pretty/` — **34 footprints**
 - `dreams_v3.3dshapes/` — 2 STEP models
 
-**42 components are placed in `Boat_PCB_V3.kicad_sch`** (unwired, grouped by role on an A1 sheet):
-U1–U12, A1–A2, J1–J11, R1–R10, C1–C7. Verified: `kicad-cli sch export netlist` resolves all 42 with a
-footprint on every one and no unresolved libsource, the sheet renders to PDF, and a pairwise
-bounding-box check finds no overlaps and nothing off-sheet.
+The board is **fully placed and routed**: 108 footprints on a 132 × 108.4 mm 4-layer board.
 
-See [`../../../docs/v3/kicad_library_status.md`](../../../docs/v3/kicad_library_status.md) for the V2
-audit that drove the part list, the divider maths, and the open questions.
+See [`../../../docs/v3/V3_DESIGN_BRIEF.md`](../../../docs/v3/V3_DESIGN_BRIEF.md) for the decisions,
+the current budget and the layout traps found the hard way on the first attempt.
 
-**The PCB is still empty.** `Boat_PCB_V3.kicad_pcb` is 79 bytes. Populating a board from a schematic
-is a GUI action — open the project and run **Tools → Update PCB from Schematic** (F8). `kicad-cli`
-does not expose it.
+⚠ **The contents table below is as-assembled on 2026-08-04 and has drifted.** The library has since
+lost the `TJA1051T` and `Conn_JST_XH_*` symbols (they resolve from stock KiCad now) and gained
+`Crystal`, `MountingHole` and `Polyfuse`. The per-part warnings under "Read these before laying
+out" are all still current — those are the part worth keeping.
 
 Registered via project-local `sym-lib-table` / `fp-lib-table` beside `Boat_PCB_V3.kicad_pro`, using
 `${KIPRJMOD}`-relative paths so the library travels with the repo.
