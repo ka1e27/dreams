@@ -45,6 +45,14 @@ pgdata/
 .history/
 fp-info-cache
 *-backups/
+*.bak
+*.prestack
+*.prefix_*
+*.rpt
+
+# KiCad fabrication exports (regenerable from the design files)
+Boat_PCB/*.zip
+Boat_PCB/Boat_PCB V2/
 
 # ML training pipeline — datasets/runs are too large for git
 ml/data/raw/
