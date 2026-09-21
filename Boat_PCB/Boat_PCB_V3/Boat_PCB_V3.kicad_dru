@@ -1,0 +1,48 @@
+(version 1)
+
+# Boat_PCB_V3 custom design rules.
+#
+# Netclass clearances are all 0.15mm because the 0.5mm-pitch packages (INA228 MSOP-10,
+# TCA9548A TSSOP-24, BNO085 LGA-28) have 0.15mm between their own pads by construction -
+# a larger netclass clearance is unsatisfiable inside those footprints.
+#
+# The wider clearances the power nets actually want are applied here, scoped to tracks
+# and zones so they never fight a package's internal pad pitch.
+
+(rule "winch power copper clearance"
+	(constraint clearance (min 0.4mm))
+	(condition "A.NetClass == 'WINCH_PWR' && B.NetClass != 'WINCH_PWR' && A.Type != 'Pad' && B.Type != 'Pad'"))
+
+(rule "pack power copper clearance"
+	(constraint clearance (min 0.3mm))
+	(condition "A.NetClass == 'ELEC_PWR' && B.NetClass != 'ELEC_PWR' && A.Type != 'Pad' && B.Type != 'Pad'"))
+
+(rule "5V copper clearance"
+	(constraint clearance (min 0.25mm))
+	(condition "A.NetClass == '5V' && B.NetClass != '5V' && A.Type != 'Pad' && B.Type != 'Pad'"))
+
+# 12S drive tap runs at 50.4V max. IPC-2221 wants ~0.2mm for 50-100V on an uncoated
+# external layer; 0.6mm is deliberate margin for a humid marine enclosure.
+(rule "12S HV creepage"
+	(constraint clearance (min 0.6mm))
+	(condition "A.NetClass == 'HV_12S' && B.NetClass != 'HV_12S' && A.Type != 'Pad' && B.Type != 'Pad'"))
+
+# Winch return must not be pushed through the 0.5oz inner plane.
+(rule "winch track width floor"
+	(constraint track_width (min 3.0mm))
+	(condition "A.NetClass == 'WINCH_PWR'"))
+
+# 2026-08-30 — scope note on the rule above.
+#
+# WINCH_PWR carries three things that are electrically one node but have very different
+# jobs: the 20 A power path, the INA228 Kelvin taps at R33, and the R5 divider tap.
+# The taps are supposed to be thin, so this rule fires on them and cannot tell them
+# apart from a genuinely under-width power track. Expect ~21 of the ~29 hits to be taps.
+#
+# The 20 A path is no longer carried by tracks at all — SH_WINCH_P, +VWINCH and WINCH_SW
+# are poured on the outer layers and via-stitched, so the surviving thin tracks run in
+# parallel with copper that is orders of magnitude wider.
+#
+# Permanent fix is in the schematic, not here: give the Kelvin and divider taps their own
+# nets (e.g. WINCH_SH_SENSE_P/N, WINCH_DIV_TAP) tied at the shunt's sense pads. Then this
+# rule can stay strict and its output becomes actionable again.
