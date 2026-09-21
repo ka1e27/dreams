@@ -541,7 +541,7 @@
 	)
 	(fp_text user "DVJ6A"
 		(at -2.54 -0.18 270)
-		(layer "F.SilkS")
+		(layer "F.Fab")
 		(uuid "17c1a4a8-309b-4506-b1a1-51a3796d8118")
 		(effects
 			(font
@@ -552,7 +552,7 @@
 	)
 	(fp_text user "MIMXRT1062"
 		(at -1.27 0 270)
-		(layer "F.SilkS")
+		(layer "F.Fab")
 		(uuid "fdbc3198-93d0-46bf-b635-375c04d4bcce")
 		(effects
 			(font

@@ -3,7 +3,7 @@
 	(generator "pcbnew")
 	(generator_version "10.0")
 	(layer "F.Cu")
-	(descr "Raspberry Pi 5 40-pin GPIO socket (female 2x20, 2.54mm) plus 4 non-plated M3 mounting holes 49 x 58 mm apart, the Pi mounting pattern. MOUNTING: Pi sits ABOVE the carrier, upside down, fan/header side facing the PCB, so its male pins come down into this socket. FIXED 2026-08-05: the V2 board this came from had the odd/even columns transposed (pad N landed on Pi pin N-+1), which caused repeated wiring problems. Columns are now swapped so pad N = Pi pin N. VERIFY pin 1 against the physical Pi before fab. A PIN1 silkscreen marker sits beside pad 1.")
+	(descr "Raspberry Pi 5 40-pin GPIO socket (female 2x20, 2.54mm) plus 4 non-plated M3 mounting holes 49 x 58 mm apart. MOUNTING: Pi sits ABOVE the carrier, upside down, so its male pins come down into this socket. COLUMN ORDER 2026-08-05: the EVEN row (2,4,...40, which carries both 5V pins) is the OUTBOARD column, away from the Pi body; the ODD row (1,3,...39, pin 1 = 3V3) is INBOARD. Set from the physical board by the builder - the two rows straddle the mounting-hole line, so this is order only, not position. This footprint has had a column transposition once before on V2. **CONTINUITY-CHECK pad 2 and pad 4 against 5V on a real Pi BEFORE applying power** - getting this backwards puts 5V onto Pi pin 1 (the 3V3 rail) and pin 3 (a GPIO) and destroys the Pi.")
 	(tags "Through hole socket strip THT 2x20 2.54mm double row")
 	(property "Reference" "J3"
 		(at -1.27 -2.77 0)
@@ -246,8 +246,8 @@
 		(uuid "c39faf37-cf63-4ac6-a209-1423df641356")
 	)
 	(fp_text user "PIN1"
-		(at -53.44 4.91 0)
-		(layer "Rescue")
+		(at -44.5 4.91 0)
+		(layer "F.SilkS")
 		(uuid "2c3b2fc8-0308-4875-89ac-f3a6c5cd4d4f")
 		(effects
 			(font
@@ -285,7 +285,7 @@
 		(uuid "5989c4b9-cafd-4239-bb94-fef8fbdc5e18")
 	)
 	(pad "1" thru_hole rect
-		(at -50.24 4.91 180)
+		(at -47.7 4.91 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -293,7 +293,7 @@
 		(uuid "00080f0c-419f-4b14-a1fb-5e3c0a1f87b8")
 	)
 	(pad "2" thru_hole circle
-		(at -47.7 4.91 180)
+		(at -50.24 4.91 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -301,7 +301,7 @@
 		(uuid "78242701-fe5a-467d-85f0-6b7b8317299f")
 	)
 	(pad "3" thru_hole circle
-		(at -50.24 7.45 180)
+		(at -47.7 7.45 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -309,7 +309,7 @@
 		(uuid "2079cbbe-098f-4ab1-9089-757618481505")
 	)
 	(pad "4" thru_hole circle
-		(at -47.7 7.45 180)
+		(at -50.24 7.45 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -317,7 +317,7 @@
 		(uuid "8e5e90c5-c2e0-40c3-bcf0-2d00a927fdf1")
 	)
 	(pad "5" thru_hole circle
-		(at -50.24 9.99 180)
+		(at -47.7 9.99 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -325,7 +325,7 @@
 		(uuid "e8a013d7-ea37-4431-8fa1-0dca1271f07d")
 	)
 	(pad "6" thru_hole circle
-		(at -47.7 9.99 180)
+		(at -50.24 9.99 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -333,7 +333,7 @@
 		(uuid "ebffe326-7f0c-42ea-bed3-95b213db7b60")
 	)
 	(pad "7" thru_hole circle
-		(at -50.24 12.53 180)
+		(at -47.7 12.53 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -341,7 +341,7 @@
 		(uuid "68a13562-9cc5-4483-b8ca-084037c6db57")
 	)
 	(pad "8" thru_hole circle
-		(at -47.7 12.53 180)
+		(at -50.24 12.53 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -349,7 +349,7 @@
 		(uuid "9bcdcfbf-6161-4d77-8782-044d386ca706")
 	)
 	(pad "9" thru_hole circle
-		(at -50.24 15.07 180)
+		(at -47.7 15.07 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -357,7 +357,7 @@
 		(uuid "13c172ba-bcf9-4715-9250-37c739cc1d7a")
 	)
 	(pad "10" thru_hole circle
-		(at -47.7 15.07 180)
+		(at -50.24 15.07 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -365,7 +365,7 @@
 		(uuid "4b9313c5-b5ec-4bdd-ba14-ff278e2fe6d1")
 	)
 	(pad "11" thru_hole circle
-		(at -50.24 17.61 180)
+		(at -47.7 17.61 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -373,7 +373,7 @@
 		(uuid "47f736d7-774f-43dd-8ec1-66da0e869592")
 	)
 	(pad "12" thru_hole circle
-		(at -47.7 17.61 180)
+		(at -50.24 17.61 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -381,7 +381,7 @@
 		(uuid "e0cf6f09-e1df-4b04-8061-a0e1ef7f97bd")
 	)
 	(pad "13" thru_hole circle
-		(at -50.24 20.15 180)
+		(at -47.7 20.15 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -389,7 +389,7 @@
 		(uuid "38e301c7-2e4e-4681-8b57-1d7e4774e1aa")
 	)
 	(pad "14" thru_hole circle
-		(at -47.7 20.15 180)
+		(at -50.24 20.15 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -397,7 +397,7 @@
 		(uuid "38208fef-f8eb-40f7-ad9f-05a3e4138bff")
 	)
 	(pad "15" thru_hole circle
-		(at -50.24 22.69 180)
+		(at -47.7 22.69 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -405,7 +405,7 @@
 		(uuid "b981a667-6cbf-4dbc-b691-ae89c259598c")
 	)
 	(pad "16" thru_hole circle
-		(at -47.7 22.69 180)
+		(at -50.24 22.69 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -413,7 +413,7 @@
 		(uuid "b78c55e1-8d4e-4452-99e9-e7c5d6e97daa")
 	)
 	(pad "17" thru_hole circle
-		(at -50.24 25.23 180)
+		(at -47.7 25.23 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -421,7 +421,7 @@
 		(uuid "8ec2ef31-e7f5-4545-aa45-6a8f556313be")
 	)
 	(pad "18" thru_hole circle
-		(at -47.7 25.23 180)
+		(at -50.24 25.23 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -429,7 +429,7 @@
 		(uuid "383fad1f-c228-462b-b1c1-e48eea321d44")
 	)
 	(pad "19" thru_hole circle
-		(at -50.24 27.77 180)
+		(at -47.7 27.77 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -437,7 +437,7 @@
 		(uuid "6a15db19-be20-491a-bd2d-954f7133a0b6")
 	)
 	(pad "20" thru_hole circle
-		(at -47.7 27.77 180)
+		(at -50.24 27.77 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -445,7 +445,7 @@
 		(uuid "a2b3e2e0-41d3-4de7-b3a6-32ccde43d78d")
 	)
 	(pad "21" thru_hole circle
-		(at -50.24 30.31 180)
+		(at -47.7 30.31 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -453,7 +453,7 @@
 		(uuid "05d5bd8a-5b8e-40ce-890d-29cd6ec4e8d5")
 	)
 	(pad "22" thru_hole circle
-		(at -47.7 30.31 180)
+		(at -50.24 30.31 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -461,7 +461,7 @@
 		(uuid "e270c4c9-d516-4462-9219-dbf5971bc14e")
 	)
 	(pad "23" thru_hole circle
-		(at -50.24 32.85 180)
+		(at -47.7 32.85 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -469,7 +469,7 @@
 		(uuid "7eec864d-2aeb-4a97-ab2e-3ba1b6980668")
 	)
 	(pad "24" thru_hole circle
-		(at -47.7 32.85 180)
+		(at -50.24 32.85 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -477,7 +477,7 @@
 		(uuid "53c1c594-210c-44d2-bf58-13493b2c8548")
 	)
 	(pad "25" thru_hole circle
-		(at -50.24 35.39 180)
+		(at -47.7 35.39 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -485,7 +485,7 @@
 		(uuid "44314b9f-e4e1-45a3-bdf3-c60f62c386e9")
 	)
 	(pad "26" thru_hole circle
-		(at -47.7 35.39 180)
+		(at -50.24 35.39 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -493,7 +493,7 @@
 		(uuid "fad86afb-762f-4c87-8a53-62912bd56633")
 	)
 	(pad "27" thru_hole circle
-		(at -50.24 37.93 180)
+		(at -47.7 37.93 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -501,7 +501,7 @@
 		(uuid "57984e4f-b1b2-4df0-95fc-57efdf75aa8c")
 	)
 	(pad "28" thru_hole circle
-		(at -47.7 37.93 180)
+		(at -50.24 37.93 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -509,7 +509,7 @@
 		(uuid "0fbd0ff5-9799-4944-a059-f581a286a930")
 	)
 	(pad "29" thru_hole circle
-		(at -50.24 40.47 180)
+		(at -47.7 40.47 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -517,7 +517,7 @@
 		(uuid "95834c43-897c-46d9-842f-8c63a21db2c5")
 	)
 	(pad "30" thru_hole circle
-		(at -47.7 40.47 180)
+		(at -50.24 40.47 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -525,7 +525,7 @@
 		(uuid "21d1c766-c034-4a77-9fa6-c4d3159ddd44")
 	)
 	(pad "31" thru_hole circle
-		(at -50.24 43.01 180)
+		(at -47.7 43.01 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -533,7 +533,7 @@
 		(uuid "a9d4ff73-360c-4273-a747-3a87a71265e7")
 	)
 	(pad "32" thru_hole circle
-		(at -47.7 43.01 180)
+		(at -50.24 43.01 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -541,7 +541,7 @@
 		(uuid "3e072bed-ba96-4be8-937d-28159dd3a0fc")
 	)
 	(pad "33" thru_hole circle
-		(at -50.24 45.55 180)
+		(at -47.7 45.55 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -549,7 +549,7 @@
 		(uuid "0e5a49d0-3ddf-4071-9588-bf5051463e97")
 	)
 	(pad "34" thru_hole circle
-		(at -47.7 45.55 180)
+		(at -50.24 45.55 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -557,7 +557,7 @@
 		(uuid "35304d23-d866-4b85-a44f-2b8c3e6acedf")
 	)
 	(pad "35" thru_hole circle
-		(at -50.24 48.09 180)
+		(at -47.7 48.09 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -565,7 +565,7 @@
 		(uuid "859e16dd-d48e-4f8c-981f-c6334f1ed9aa")
 	)
 	(pad "36" thru_hole circle
-		(at -47.7 48.09 180)
+		(at -50.24 48.09 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -573,7 +573,7 @@
 		(uuid "35887838-5616-4421-8ed5-297168f9938d")
 	)
 	(pad "37" thru_hole circle
-		(at -50.24 50.63 180)
+		(at -47.7 50.63 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -581,7 +581,7 @@
 		(uuid "e3a513ee-fd97-4082-a6f4-44ecb7ecc8db")
 	)
 	(pad "38" thru_hole circle
-		(at -47.7 50.63 180)
+		(at -50.24 50.63 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -589,7 +589,7 @@
 		(uuid "31ff4926-be97-426e-bca0-4ab3fe3fa022")
 	)
 	(pad "39" thru_hole circle
-		(at -50.24 53.17 180)
+		(at -47.7 53.17 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -597,7 +597,7 @@
 		(uuid "9984ff4d-7cea-4cfc-99f8-8c3c9eb3c879")
 	)
 	(pad "40" thru_hole circle
-		(at -47.7 53.17 180)
+		(at -50.24 53.17 180)
 		(size 1.7 1.7)
 		(drill 1)
 		(layers "*.Cu" "*.Mask")
@@ -607,7 +607,7 @@
 	(embedded_fonts no)
 	(model "${KICAD10_3DMODEL_DIR}/Connector_PinSocket_2.54mm.3dshapes/PinSocket_2x20_P2.54mm_Vertical.step"
 		(offset
-			(xyz 0 0 0)
+			(xyz -50.24 -4.91 0)
 		)
 		(scale
 			(xyz 1 1 1)
