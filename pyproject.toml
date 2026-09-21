@@ -5,9 +5,3 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]  # Line length handled by formatter
-
-[tool.pytest.ini_options]
-testpaths = ["pi5/tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]

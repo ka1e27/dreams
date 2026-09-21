@@ -4,16 +4,22 @@ Everything in this directory describes **Boat_PCB V3**, a board that **does not 
 yet**. It is a clean-sheet redesign, not a revision of the board under test.
 
 **The boat on the bench is V2 / RP2040 Pico.** If you are debugging, flashing, measuring, or
-spinning a motor, nothing in this directory applies to you. Close it and use the V2 authorities:
+spinning a motor, nothing in this directory applies to you — and none of it is on this branch.
+The V2 authorities live on `main`:
 
-| For | Read |
+| For | Read on `main` |
 |---|---|
 | As-built hardware facts, gotchas, power | `CLAUDE.md` (root) |
 | Pin assignments (both Picos + Pi) | `docs/pin_map.md` |
 | Pi ↔ Pico framing, commands, alerts | `docs/serial-protocol.md` |
-| Battery thresholds | `firmware/boat-pico/sensors.py`, `docs/battery_architecture.md` |
+| Battery thresholds | `firmware/boat-pico/sensors.py` |
 | ESC config + the bi-directional gate | `docs/esc_setup.md` |
 | What happened recently | `docs/session_journal.md` |
+
+```bash
+git show main:docs/pin_map.md          # read one
+git checkout main -- docs/pin_map.md   # bring one back
+```
 
 ## Why this needs a fence
 
@@ -38,6 +44,9 @@ is not solved by anything in the V3 mux design.
 
 ## Files here
 
+- **`V3_DESIGN_BRIEF.md` — start here.** Locked decisions, the current budget, part choices with
+  their reasons, and the layout mistakes the first attempt made.
+- `v3_review_2026-08-05.md` — the full 18-section review log the brief was distilled from.
 - `V3_PCB_SESSION_CONTEXT.md` — the decisions and the "why," plus what is still open (Teensy
   concurrency model, CAN splice point, GPS footprint, tether voltage).
 - `DREAMS_V3_parts_footprints.md` — the BOM, with KiCad library availability and sourcing links.

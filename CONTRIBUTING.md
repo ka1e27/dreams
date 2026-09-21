@@ -35,7 +35,7 @@ main (protected, always deployable)
 3. Run tests locally:
    ```bash
    # Pi 5 code
-   pytest pi5/tests/ -v
+   kicad-cli pcb drc --severity-all Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
    
    # Dashboard
    cd dashboard && npm run build

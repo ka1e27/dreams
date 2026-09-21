@@ -1,5 +1,9 @@
 # D.R.E.A.M.S — Battery Architecture
 
+> **Carried onto the V3 branch for its numbers.** This describes the **V2** boat. Any
+> `pi5/`, `firmware/` or other code path it names is on `main`, not here. Re-derive
+> anything before using it in a V3 design — see [`v3/V3_DESIGN_BRIEF.md`](v3/V3_DESIGN_BRIEF.md).
+
 ## Milwaukee M18 Three-Domain System
 
 **Authoritative battery reference. Supersedes all previous battery documentation

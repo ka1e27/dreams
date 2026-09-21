@@ -1,5 +1,9 @@
 # D.R.E.A.M.S — Changelog & Locked Decisions
 
+> **Carried onto the V3 branch for its numbers.** This describes the **V2** boat. Any
+> `pi5/`, `firmware/` or other code path it names is on `main`, not here. Re-derive
+> anything before using it in a V3 design — see [`v3/V3_DESIGN_BRIEF.md`](v3/V3_DESIGN_BRIEF.md).
+
 Quick reference for Claude Code agents picking up mid-project.
 Grounded in `Boat_PCB/Boat_PCB.kicad_sch` and the `firmware/` + `pi5/` source files.
 

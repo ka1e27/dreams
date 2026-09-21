@@ -1,178 +1,55 @@
-# D.R.E.A.M.S
-# GitHub Short Description (paste into the "About" section)
+# D.R.E.A.M.S — V3
 
-Autonomous catamaran survey boat with edge computing (Pi 5), computer vision obstacle avoidance, cellular IoT connectivity, multi-microcontroller architecture, custom PCB, and cloud-based environmental data mapping.
+Autonomous survey catamaran: CV-based obstacle avoidance, environmental sensing, cellular telemetry
+to a web dashboard.
 
----
+**This branch is the V3 clean slate.** It holds the V3 carrier PCB and the design knowledge behind
+it. There is no application code here yet — V3 is a from-scratch rebuild, and the V2 stack it
+replaces lives on [`main`](../../tree/main).
 
-# README.md
+## Layout
 
-# Survey Boat — Autonomous Environmental Survey Platform
+```
+Boat_PCB/Boat_PCB_V3/     KiCad 10 project — schematic, layout, project-local library
+docs/v3/                  design brief, planning material, full review log
+docs/                     two V2 docs carried over for their numbers
+```
 
-An autonomous catamaran that navigates rivers and lakes, avoids obstacles using real-time computer vision, collects environmental sensor data, and streams everything to the cloud over 4G cellular. Missions are planned, uploaded, and monitored remotely from anywhere through a live web dashboard.
+**Start with [`docs/v3/V3_DESIGN_BRIEF.md`](docs/v3/V3_DESIGN_BRIEF.md)** — locked decisions, the
+current budget, part choices with their reasons, and the layout traps the first attempt hit.
+
+## The board
+
+132 × 108.4 mm, 4 layers (JLC04161H-7628, 1 oz outer / 0.5 oz inner, ENIG). 108 footprints, fully
+routed. A Teensy 4.1 carrier: VESC drive over CAN, eight sensors behind a TCA9548A I²C mux, three
+isolated power domains, a fail-safe-off winch kill, and a Raspberry Pi 5 on the GPIO header.
+
+Open the project in KiCad 10, or check it from the command line:
+
+```bash
+kicad-cli pcb drc --severity-all Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
+```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    CLOUD                             │
-│   PostGIS Database ← FastAPI ← Sensor Readings      │
-│   Map Viewer (heatmaps, mission playback)            │
-└──────────────────────┬──────────────────────────────┘
-                       │ HTTPS
-┌──────────────────────┴──────────────────────────────┐
-│               RASPBERRY PI 5                         │
-│                                                      │
-│  Navigation Engine ── Mission Manager                │
-│        │                                             │
-│  CV Pipeline ──── Stereo Depth ── Boat Avoidance    │
-│  (Dual USB cameras / OpenCV SGBM / YOLOv8-nano)      │
-│        │                                             │
-│  FastAPI Server ── WebSocket Telemetry + Camera      │
-│        │                                             │
-│  Data Uploader ── Local Buffer ── Cloud POST         │
-│        │                                             │
-│  SIM7600 4G Modem    HC-12 Radio (backup)            │
-└──────────┬──────────────────────────────────────────┘
-           │ USB Serial
-┌──────────┴──────────────────────────────────────────┐
-│              BOAT PICO (MicroPython)                 │
-│                                                      │
-│  VESC UART (master + CAN-forwarded slave)            │
-│        │     SBUS RC override (PIO)                  │
-│  Winch ESC PWM ── M10Q GPS ── BNO085 IMU             │
-│  Triple battery monitor (M18 drive/elec/winch)       │
-│  Watchdog ── Pod UART Bridge                         │
-└──────────┬──────────────────────────────────────────┘
-           │ UART (through slip ring)
-┌──────────┴──────────────────────────────────────────┐
-│              POD PICO (MicroPython)                   │
-│                                                      │
-│  EC Salinity Probe ── NTC Thermistor                 │
-│  Light Sensor ── Bottom Contact ── Pressure/Depth    │
-│  Leak Detection                                      │
-└─────────────────────────────────────────────────────┘
+Raspberry Pi 5 ─ navigation, mission FSM, CV, cloud pipeline
+  │ USB CDC
+  └─ Teensy 4.1 ─ motors, IMU, winch, RC, sensors
+       ├─ CAN ──► VESC ×2
+       ├─ I²C mux ──► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×3
+       └─ UART ×2 ──► pod board (XIAO ESP32-S3, submerged)
 ```
 
-## Features
+## What changed from V2
 
-- **Autonomous navigation** — u-blox M10Q GPS waypoint following with BNO085 9-axis fused heading
-- **Stereo computer vision** — Two USB cameras + StereoSGBM disparity for distance-aware obstacle avoidance; YOLOv8-nano detects nearby boats and steers away when they get within configurable distance
-- **VESC propulsion** — Twin VESC drives (master on UART, slave over CAN) replace hobby ESCs, with current-controlled torque, regen, and motor-temperature telemetry
-- **Triple-domain M18 batteries** — three fully isolated Milwaukee M18 domains (3× M18 in series for drive, 1× M18 for electronics, 1× M18 for the winch), all monitored on-Pico. See `docs/battery_architecture.md`
-- **Real RC override** — SBUS receiver decoded by Pico PIO drives motors directly when the override switch is flipped; SBUS link loss triggers ESTOP
-- **Repurposable winch** — Standard PWM ESC on a swappable spool; survey mode for the underwater pod, fishing mode by swapping the spool mechanically
-- **Remote operation** — Upload missions, monitor telemetry, and watch the live camera feed from anywhere; choose 4G cellular for autonomous missions or WiFi when the boat is at the dock / on the bench (configurable, with auto-fallback)
-- **Environmental mapping** — Georeferenced salinity, temperature, and depth data uploaded to a PostGIS database with heatmap visualization
-- **Multi-MCU architecture** — Pi 5 handles compute, Picos handle real-time motor control and sensor acquisition
-- **Failsafe systems** — Motor watchdog, HC-12 backup radio, leak detection with auto pod retraction, local data buffering on cellular dropout
+| | V2 (on `main`) | V3 |
+|---|---|---|
+| Boat MCU | RP2040 Pico, MicroPython | Teensy 4.1, C++/Teensyduino |
+| Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes via TJA1051 |
+| Drive pack | 3× M18 | 12S LiPo, voltage sense only |
+| Pod | RP2040 Pico | XIAO ESP32-S3 on its own board |
+| Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×3, behind a mux |
 
-## Project Structure
-
-```
-survey-boat/
-├── pi5/                  # Raspberry Pi 5 software (Python)
-│   ├── navigation/       # Waypoint following, obstacle avoidance, mission management
-│   ├── cv/               # Dual-camera capture, stereo depth, YOLO detection, avoidance
-│   ├── comms/            # Pico serial interface, cellular, HC-12 fallback
-│   ├── server/           # FastAPI telemetry server + WebSocket endpoints
-│   ├── scripts/          # Utility scripts (stereo calibration, pico deploy)
-│   ├── data/             # Cloud data uploader with offline buffering
-│   ├── services/         # systemd unit files for auto-start
-│   └── tests/            # pytest unit tests
-├── firmware/             # Pico firmware (MicroPython)
-│   ├── boat-pico/        # VESC drive, GPS, BNO085 IMU, SBUS, serial command handler
-│   └── pod-pico/         # Pod sensors, leak detection, UART responder
-├── dashboard/            # React web dashboard (Vite + Leaflet + Recharts)
-├── cloud/                # Cloud backend
-│   ├── api/              # FastAPI + PostGIS sensor data API
-│   └── map-viewer/       # Public heatmap visualization app
-└── docs/                 # Architecture docs, serial protocol spec, ADRs
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Edge compute | Raspberry Pi 5 (Linux) |
-| Real-time control | Raspberry Pi Pico (MicroPython) |
-| Propulsion | VESC (UART + CAN daisy-chain) |
-| Computer vision | OpenCV StereoSGBM, YOLOv8-nano (ultralytics) |
-| Inertial | BNO085 (sensor-fused quaternion over I2C) |
-| Positioning | u-blox M10Q (NMEA over UART) |
-| RC override | SBUS receiver decoded by Pico PIO |
-| Connectivity | SIM7600 4G LTE, Pi 5 built-in WiFi (selectable / auto-fallback), HC-12 433MHz (emergency backup) |
-| Remote access | Tailscale VPN |
-| Boat server | FastAPI, WebSocket, asyncio |
-| Dashboard | React, Vite, Leaflet, Recharts |
-| Cloud API | FastAPI, SQLAlchemy, PostGIS |
-| Cloud hosting | Docker, Railway / Fly.io |
-| Database | PostgreSQL + PostGIS |
-| CI/CD | GitHub Actions |
-
-## Getting Started
-
-### Simulation (no hardware needed)
-
-```bash
-# Clone the repo
-git clone git@github.com:yourusername/survey-boat.git
-cd survey-boat
-
-# Start the Pi 5 server in simulator mode
-cd pi5
-pip install -r requirements.txt
-python -m server.app
-
-# In another terminal — start the dashboard
-cd dashboard
-npm install
-npm run dev
-
-# In another terminal — start the cloud database
-cd cloud
-docker compose up -d
-cd api
-python -m app
-```
-
-Open `http://localhost:5173` to access the dashboard. Click the map to place waypoints, upload a mission, and watch the simulated boat navigate in real time.
-
-### Hardware Deployment
-
-1. Flash Raspberry Pi OS to the Pi 5
-2. Clone the repo and install dependencies
-3. Set `mode: hardware` in `pi5/config.yaml`
-4. Flash Pico firmware via `pi5/scripts/deploy_pico.sh`
-5. Pick a network transport in `pi5/config.yaml`:
-   - `network.mode: wifi` for shore / development work
-   - `network.mode: cellular` for autonomous missions (configure SIM7600 + APN)
-   - `network.mode: auto` to prefer WiFi when associated and fall back to cellular
-   - For WiFi, set `network.wifi.ssid` and `network.wifi.password` to have the
-     boot helper configure NetworkManager via `nmcli`, or leave them empty if
-     the OS already has WiFi configured
-6. Set up Tailscale for remote SSH access
-7. Enable systemd services for auto-start on boot
-
-See `docs/` for detailed setup guides.
-
-## Hardware
-
-- Raspberry Pi 5 (4GB or 8GB)
-- 2x Raspberry Pi Pico
-- 2x VESC (one per propulsion motor; daisy-chained over CAN)
-- Standard hobby ESC for the winch (swappable spool — survey pod or fishing reel)
-- Waveshare SIM7600G-H 4G HAT + IoT data SIM
-- 2x USB wide-angle cameras (stereo pair) for distance-aware obstacle avoidance
-- BNO085 9-axis IMU (I2C) — sensor-fused heading + tilt
-- u-blox M10Q GPS module (NMEA on UART)
-- SBUS-compatible RC receiver (e.g. FrSky / Radiomaster) for manual override
-- HC-12 433MHz radio (backup link)
-- EC salinity probe, DHT11, NTC thermistor (water), submersible pressure transducer
-- 3D-printed PLA catamaran hull (sealed with marine epoxy)
-- 3× Milwaukee M18 (drive, series) + 1× M18 (electronics) + 1× M18 (winch), three isolated domains, monitored independently
-- 4-conductor slip ring for underwater pod tether
-
-## License
-
-MIT
+V3 contradicts V2 deliberately. Do not reconcile them — see
+[`docs/v3/README.md`](docs/v3/README.md).
