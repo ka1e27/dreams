@@ -72,8 +72,9 @@ threshold into V3 without re-deriving it. That is the mistake to avoid.
 s-expressions; the `.kicad_pcb` alone is 2.5 MB.
 
 ```bash
-kicad-cli sch erc --severity-all --format json -o erc.json Boat_PCB_V3.kicad_sch
-kicad-cli pcb drc --severity-all --schematic-parity --format json -o drc.json Boat_PCB_V3.kicad_pcb
+KC="/c/Program Files/KiCad/10.0/bin/kicad-cli.exe"   # not on PATH
+"$KC" sch erc --severity-all --format json -o erc.json Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_sch
+"$KC" pcb drc --severity-all --schematic-parity --format json -o drc.json Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
 ```
 
 Baseline as of 2026-09-23. When a commit touches the board, put the change against these numbers
@@ -90,8 +91,9 @@ in the commit message.
 - **ERC: 70.**
   - 58 are unused pins with no no-connect flag: 30 on the Pi header, 24 on the Teensy, 4 on the buck
     and the BMP390.
-  - The other 12 are power-pin typing on those symbols, plus three undriven inputs: Teensy PROGRAM
-    and ON_OFF, and the buck's EN.
+  - 8 are pin-type conflicts: the Teensy's tied 3V3 pins, the buck's tied VOUT pins, and BMP390 and
+    ADXL375 pins on power nets.
+  - 4 are undriven: Teensy PROGRAM, ON_OFF and VBAT, and the buck's EN.
 
 **Python:** ruff config lives in `pyproject.toml`.
 
