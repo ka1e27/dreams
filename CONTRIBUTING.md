@@ -1,88 +1,31 @@
 # Contributing
 
-## Branching Strategy
+V3 is being written from scratch on `main`. The V2 stack is frozen at the tag `v2-final`. Read it
+and port ideas from it, but never commit on top of it.
 
-We use **GitHub Flow** — simple feature branches off `main`.
+## Branches
 
-```
-main (protected, always deployable)
-  ├── feature/pi5-cv-obstacle       → PR → merge to main
-  ├── fix/gps-stale-timeout         → PR → merge to main
-  └── firmware/pod-leak-threshold   → PR → merge to main
-```
-
-### Rules
-
-- `main` is protected — direct pushes are blocked
-- All changes go through Pull Requests
-- CI must pass before merging
-- At least one review is recommended for non-trivial changes
-
-### Branch naming
+Work on a short-lived branch off `main`, then merge it back.
 
 | Prefix | Use |
-|--------|-----|
+|---|---|
 | `feature/` | New functionality |
 | `fix/` | Bug fixes |
-| `firmware/` | Pico firmware changes |
+| `pcb/` | Board changes: schematic, layout, library |
 | `docs/` | Documentation only |
-| `cloud/` | Cloud API or map viewer changes |
 
-## Pull Request Process
+## Commits
 
-1. Create a branch from `main`
-2. Make your changes
-3. Run tests locally:
-   ```bash
-   # Pi 5 code
-   kicad-cli pcb drc --severity-all Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
-   
-   # Dashboard
-   cd dashboard && npm run build
-   
-   # Cloud API (requires PostGIS)
-   cd cloud && docker compose up -d
-   # then test against localhost:8000
-   ```
-4. Open a PR with:
-   - A clear title (under 70 characters)
-   - Description of what changed and why
-   - Test plan
-5. Wait for CI to pass
-6. Merge when approved
+Use conventional-commit prefixes, as the history already does: `feat(scope): …`, `fix(scope): …`,
+`docs(scope): …`, `chore: …`. Use the body to explain why, not just what.
 
-## Project Structure
+## Before you push
 
-```
-firmware/
-  boat-pico/        MicroPython — Boat Pico real-time controller
-  pod-pico/         MicroPython — Underwater sensor pod
-pi5/
-  comms/            Serial protocol and Pico communication
-  navigation/       Navigator, mission manager, simulator
-  server/           FastAPI dashboard API
-  data/             Cloud data uploader
-  tests/            pytest test suite
-dashboard/          React + Vite — real-time boat dashboard
-cloud/
-  api/              FastAPI + PostGIS — cloud data storage
-  map-viewer/       React — historical data heatmap viewer
-deploy/             Caddy config, deployment guides
-docs/
-  adr/              Architecture Decision Records
-  serial-protocol.md  Pi 5 ↔ Pico serial protocol spec
-reference/          Original single-file MicroPython firmware
-```
+- **Board changes:** run ERC and DRC and put the before → after counts in the commit message.
+  `CLAUDE.md` has the commands and the current baseline. If a change adds violations, say why.
+- **Code:** there isn't any yet. The first code to land should bring its own test command. Add that
+  command here, along with a CI workflow that runs it.
 
-## Testing
+## Style
 
-- **Pi 5 code**: `pytest pi5/tests/ -v`
-- **Firmware**: Flash to Pico and test manually (no desktop Python tests for MicroPython)
-- **Dashboard**: `cd dashboard && npm run build` (build-time checks)
-- **Cloud API**: Run against PostGIS via `docker compose up -d`
-
-## Code Style
-
-- **Python (Pi 5)**: Type hints, docstrings, `ruff` for linting
-- **MicroPython**: No type hints (not supported), keep it compact, docstrings on modules and public functions
-- **JavaScript/React**: Functional components, hooks, no class components
+- **Python:** type hints, and `ruff` for linting (config in `pyproject.toml`).

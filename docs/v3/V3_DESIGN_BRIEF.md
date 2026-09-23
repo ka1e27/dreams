@@ -1,14 +1,13 @@
 # V3 design brief — carry-forward for the redesign
 
 Everything the V3 redesign needs to start from, distilled from the 18-section review log that
-tracked the first attempt. That log is **not** in the working tree any more; it is in git history
-at `docs/v3/v3_review_2026-08-05.md` if you need the blow-by-blow.
+tracked the first attempt. That log is **not** in the working tree any more. If you need the
+blow-by-blow, run `git show v2-final:docs/v3/v3_review_2026-08-05.md`.
 
-> **The fence still applies.** The boat on the bench is **V2 / RP2040**. V3 disagrees with it on
-> MCU, drive and sensors *by design*. Never reconcile V3 against the V2 pin map, protocol docs or
-> firmware — copying a V2 value into V3 without re-deriving it is the specific error this
-> separation exists to catch. Those documents are not on this branch; they are on `main`. See
-> [`README.md`](README.md).
+> **The fence still applies.** V2, the RP2040 boat archived at tag `v2-final`, disagrees with V3
+> on MCU, drive and sensors *by design*. Never reconcile V3 against the V2 pin map, protocol docs
+> or firmware. Copying a V2 value into V3 without re-deriving it is the specific error this
+> separation exists to catch. See [`README.md`](README.md).
 
 ---
 
@@ -20,7 +19,7 @@ at `docs/v3/v3_review_2026-08-05.md` if you need the blow-by-blow.
 | Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051** | No MCP2515 — the Teensy has native CAN |
 | Drive pack | **12S LiPo**, voltage sense only | No shunt, no current sensing on this rail (see §3) |
 | Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is 2× UART + 2× power |
-| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 3× INA228 | All behind a **TCA9548A** mux on one Teensy I²C bus |
+| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on one Teensy I²C bus |
 | Power | **3 isolated domains** — drive / electronics / winch | Per-pack BMS protection; fusing is off-board |
 | Winch kill | **High-side P-FET, fail-safe OFF** | Gate pulled to source by R34; de-energised = open |
 | Passives | **THT** | Reworkability, by builder preference |
@@ -41,7 +40,7 @@ k = 0.048 external, **0.024 internal**.
 
 | Rail | Current | Source of the number |
 |---|---|---|
-| Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (`docs/battery_architecture.md`) |
+| Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
 | Electronics pack | 15 A fuse; real load ≈ **2 A** | Pololu D36V50F5 buck + A4988 stepper |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
 | Pod branch (F1) | **0.75 A hold** | Bel Fuse 0ZRE PTC |
@@ -68,7 +67,8 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 ## 3. Part choices worth preserving
 
 - **INA228, not INA226.** A correctness fix, not an upgrade: INA226 is rated to 36 V common-mode
-  and the drive domain exceeds that. Three of them, one per domain.
+  and the drive domain exceeds that. Two are fitted, on electronics and winch. The drive one went
+  out with the drive shunt chain (next point).
 - **Drive rail is voltage-only.** No shunt, no INA228 on 12S. An INA228 with nothing across
   Vin+/Vin− measures nothing, so the whole chain came out — 7 components and a 4-wire harness.
   The 12S rail has exactly one sense path: the ADC divider.
@@ -84,8 +84,8 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 - **Specify passives properly in Value:** `100nF 50V X7R`, `22pF 50V C0G`, `1 %`. A generic disc
   could be Y5V and lose 80 % of its capacitance over temperature and DC bias.
 
-**Library.** `Boat_PCB/Boat_PCB_V3/lib/` already holds a built `dreams_v3` symbol library, 29
-footprints and the 3D models — reuse it. Most parts come from stock KiCad libraries; the ones that
+**Library.** `Boat_PCB/Boat_PCB_V3/lib/` already holds a built `dreams_v3` symbol library, 34
+footprints and the 3D models. Reuse it. Most parts come from stock KiCad libraries; the ones that
 needed downloading were **TCA9548A, BNO085 and INA228**.
 
 ---
@@ -153,6 +153,6 @@ both.**
 | [`README.md`](README.md) | The V2/V3 fence — read before touching anything |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Original design intent and the open questions |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | BOM with sourcing links |
-| [`../battery_architecture.md`](../battery_architecture.md) | Pack topology, fusing, thresholds |
-| git history | `v3_review_2026-08-05.md`, the full 18-section log this brief distils |
-| `main` | Everything V2 — the Pi stack, the firmware, the pin map, the old board |
+| `v2-final:docs/battery_architecture.md` | V2's pack topology, fusing and M18 thresholds. These are V2 numbers, so re-derive them |
+| `v2-final:docs/v3/v3_review_2026-08-05.md` | The full 18-section log this brief distils |
+| tag `v2-final` | Everything V2: the Pi stack, the firmware, the pin map, the old board |

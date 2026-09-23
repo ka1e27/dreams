@@ -1,15 +1,20 @@
-> ## ⚠ SCOPE — V3 PLANNING. THIS IS NOT THE BOAT ON THE BENCH.
+> **Planning record, stored verbatim.** This was written outside this repo during the August 2026
+> V3 PCB-planning session, before the board was laid out. The text below the rule is unmodified. If
+> it disagrees with [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) or the KiCad files, those win.
 >
-> This describes **Boat_PCB V3** (Teensy 4.1 carrier + XIAO ESP32-S3 pod), which **does not exist as
-> hardware**. The boat under test is **V2 / RP2040 Pico** running `firmware/boat-pico/*.py`.
-> Nothing here can be tested, flashed, or verified today. Do **not** use it to diagnose, re-pin, or
-> "correct" bench code, firmware, or the pin map — `CLAUDE.md`, `docs/pin_map.md`, and
-> `docs/serial-protocol.md` remain authoritative for anything you can actually power on.
-> See [`README.md`](README.md) for the full boundary.
+> It was written in the V2 era, so some names need translating:
 >
-> Added verbatim from a PCB-planning session — **the text below is unmodified**. Two naming notes:
-> `DREAMS_MASTER_CONTEXT.md` is this repo's `docs/PROJECT_CONTEXT.md`, and
-> `DREAMS_V3_parts_footprints.md` sits beside this file in `docs/v3/`.
+> - `DREAMS_MASTER_CONTEXT.md` ("the master doc") is V2's `docs/PROJECT_CONTEXT.md`.
+> - "Boat Pico", `firmware/boat-pico/*.py` and `vesc.py` are V2 code.
+>
+> All of that is archived at tag `v2-final`. For example, run
+> `git show v2-final:docs/PROJECT_CONTEXT.md`. `DREAMS_V3_parts_footprints.md` sits beside this file.
+>
+> On its open items:
+>
+> - **The GPS footprint (3) is closed.** The module connects by cable to a JST-XH connector, J1.
+> - **The Teensy concurrency model (1) is still undecided.** It is the first call the firmware has
+>   to make.
 
 ---
 

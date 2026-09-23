@@ -1,15 +1,13 @@
-> ## ⚠ SCOPE — V3 PLANNING. THIS IS NOT THE BOAT ON THE BENCH.
+> **Planning record, stored verbatim.** This is the BOM as written during the August 2026 V3
+> PCB-planning session, before the library was built. The text below the rule is unmodified.
 >
-> This describes **Boat_PCB V3** (Teensy 4.1 carrier + XIAO ESP32-S3 pod), which **does not exist as
-> hardware**. The boat under test is **V2 / RP2040 Pico** running `firmware/boat-pico/*.py`.
-> Nothing here can be tested, flashed, or verified today. Do **not** use it to diagnose, re-pin, or
-> "correct" bench code, firmware, or the pin map — `CLAUDE.md`, `docs/pin_map.md`, and
-> `docs/serial-protocol.md` remain authoritative for anything you can actually power on.
-> See [`README.md`](README.md) for the full boundary.
+> The "KiCad?" and "Link" columns are now history. Every part resolves from the project library or
+> from stock KiCad; see
+> [`Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md).
 >
-> Added verbatim from a PCB-planning session — **the text below is unmodified**. One naming note:
-> `DREAMS_MASTER_CONTEXT.md`, referenced by the companion file, is this repo's
-> `docs/PROJECT_CONTEXT.md`.
+> If this disagrees with [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) or the KiCad files, those win.
+> For example, the board fits **two** INA228s, not three, and the GPS lands on a JST-XH cable
+> connector.
 
 ---
 

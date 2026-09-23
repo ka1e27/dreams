@@ -2,16 +2,36 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
 .venv/
 venv/
-*.egg
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# Node
+# Build output (Python, Node, firmware)
+dist/
+build/
 node_modules/
-dashboard/dist/
-cloud/map-viewer/dist/
+.pio/
+*.elf
+*.hex
+*.uf2
+
+# Model weights — binary and large; copy them to the Pi, don't commit them
+*.pt
+*.onnx
+*_ncnn_model/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code — personal settings and notes
+.claude/settings.local.json
+CLAUDE.local.md
 
 # IDE
 .vscode/
@@ -22,64 +42,24 @@ cloud/map-viewer/dist/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Environment
-.env
-.env.local
-.env.production
-
-# Claude Code local settings
-.claude/settings.local.json
-
-# Data files (generated at runtime)
-*.csv
-upload_buffer.json
-
-# Docker
-pgdata/
-
-# KiCad (local/temp artifacts)
-*.lck
-~*.lck
+# KiCad — local state, backups, lock files
 *.kicad_prl
-.history/
+*.lck
 fp-info-cache
+.history/
 *-backups/
 *.bak
-*.prestack
-*.prefix_*
+
+# KiCad — reports and fabrication exports (regenerable from the design files)
 *.rpt
-
-# KiCad fabrication exports (regenerable from the design files)
-Boat_PCB/*.zip
-Boat_PCB/Boat_PCB V2/
-
-# ML training pipeline — datasets/runs are too large for git
-ml/data/raw/
-ml/data/unified/
-ml/runs/
-ml/validation_samples/
-
-# Model weights are binary — copy to the Pi manually (or use git LFS).
-# Keep the model-card JSON so the class list/metrics are tracked.
-pi5/cv/models/*.onnx
-pi5/cv/models/*.pt
-pi5/cv/models/*_ncnn_model/
-!pi5/cv/models/*.json
-/yolov8n.pt
-
-# On-Pi throwaway build venvs (torch/ultralytics for model export/training —
-# multi-GB, regenerable). Never commit these.
-/.train_build/
-/.export_build/
-
-# Stereo calibration is rig-specific (baseline, camera intrinsics) — regenerate
-# per-boat with pi5/scripts/calibrate_stereo.py, don't commit someone's laptop
-# webcam calibration.
-pi5/cv/calibration.npz
-# Added by code-review-graph
-.code-review-graph/
-pi5/server/saved_paths.json
-pi5/server/camera_devices.json
-# Recorded camera clips (manual + sentry) live on the Pi, not in git.
-pi5/server/recordings/
+drc*.json
+erc*.json
+Boat_PCB/**/*.zip
+Boat_PCB/**/*.gbr
+Boat_PCB/**/*.gbrjob
+Boat_PCB/**/*.drl
+Boat_PCB/**/fab/
+Boat_PCB/**/gerbers/
+Boat_PCB/**/production/

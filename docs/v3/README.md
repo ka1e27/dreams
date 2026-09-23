@@ -1,78 +1,51 @@
-# `docs/v3/` — V3 hardware planning. Fenced off from the bench on purpose.
+# `docs/v3/`: V3 hardware design knowledge
 
-Everything in this directory describes **Boat_PCB V3**, a board that **does not exist as hardware
-yet**. It is a clean-sheet redesign, not a revision of the board under test.
+This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/` and the reasons it is built the
+way it is.
 
-**The boat on the bench is V2 / RP2040 Pico.** If you are debugging, flashing, measuring, or
-spinning a motor, nothing in this directory applies to you — and none of it is on this branch.
-The V2 authorities live on `main`:
-
-| For | Read on `main` |
+| File | What it is |
 |---|---|
-| As-built hardware facts, gotchas, power | `CLAUDE.md` (root) |
-| Pin assignments (both Picos + Pi) | `docs/pin_map.md` |
-| Pi ↔ Pico framing, commands, alerts | `docs/serial-protocol.md` |
-| Battery thresholds | `firmware/boat-pico/sensors.py` |
-| ESC config + the bi-directional gate | `docs/esc_setup.md` |
-| What happened recently | `docs/session_journal.md` |
+| **[`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md)** | **Start here.** Locked decisions, the current budget, part choices with their reasons, and the layout mistakes the first attempt made |
+| [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
+| [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
+| [`../../Boat_PCB/Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
+
+The two planning files were written outside this repo. They are stored verbatim under a scope note.
+If they disagree with the brief or the KiCad files, the brief and the KiCad files win.
+
+## V2 is archived, not deleted
+
+The V2 boat is frozen at tag `v2-final`: RP2040 Picos, MicroPython firmware, the Pi 5 stack,
+dashboards, the V2 board and every V2 doc.
 
 ```bash
-git show main:docs/pin_map.md          # read one
-git checkout main -- docs/pin_map.md   # bring one back
+git show v2-final:docs/pin_map.md          # read a V2 file
+git checkout v2-final -- docs/pin_map.md   # bring one back into the tree
+git worktree add ../dreams-v2 v2-final     # full V2 checkout beside this one
 ```
 
-## Why this needs a fence
+Also there: `docs/v3/v3_review_2026-08-05.md`, the 18-section log of the first V3 attempt that the
+brief distils, and `docs/v3/kicad_library_status.md`, a 2026-08-04 survey of which parts ship with
+KiCad.
 
-V3 and V2 disagree on the things most likely to get someone hurt. These are **not** discrepancies to
-reconcile — they are two different boards:
+## Do not reconcile V3 against V2
 
-| | V2 — on the bench, live | V3 — planned, no hardware |
+V3 contradicts V2 on purpose, and the contradictions are in the places most likely to hurt
+someone. These are two different boats, not discrepancies to fix.
+
+| | V2 (`v2-final`) | V3 |
 |---|---|---|
-| Boat MCU | RP2040 Pico, MicroPython (`firmware/boat-pico/*.py`) | Teensy 4.1, C++/Teensyduino — full rewrite |
-| Drive | **Direct servo PWM, GP19/GP20** — AM32 left, BLHeli-32 right, throttle held at zero by `escs.BIDIR_CONFIRMED` | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
-| Pod MCU | RP2040 Pod Pico | Seeed XIAO ESP32-S3, from-scratch board |
-| Pod tether | UART through slip ring | 2× UART + 2× power, schottky into the XIAO's 5V pin |
-| Sensors | SHT41 ×2 (one dead), BNO085 with floating strap pins | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 3× INA228, all behind a TCA9548A mux |
+| Boat MCU | RP2040 Pico, MicroPython | Teensy 4.1, C++/Teensyduino, a full rewrite |
+| Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
+| Drive pack | Milwaukee M18 | 12S LiPo, voltage sense only |
+| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board; the tether is one UART plus power |
+| Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
+| Pack dividers | 56k/10k (×6.6) into the Pico's ADC | 68k/10k, 1 %, into the Teensy's ADC |
+| Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V only; the stepper moved to the Teensy |
 
-The trap: V3 assumes **VESC-over-CAN propulsion**, which the bench does not have and has never had on
-this branch. A "fix" that moves bench throttle toward CAN, or that treats the V3 sensor set as
-present, would break a working test bench and walk straight through the ESC safety gate that exists
-because a mis-configured ESC already ran away once (see `docs/session_journal.md`, 2026-07-31).
+Copying a V2 pin number, divider ratio, protocol field or threshold into V3 without re-deriving it
+is exactly the mistake this separation exists to catch.
 
-Likewise, the bench BNO085's problem is **four floating strap pins on the module** — a wiring job. It
-is not solved by anything in the V3 mux design.
-
-## Files here
-
-- **`V3_DESIGN_BRIEF.md` — start here.** Locked decisions, the current budget, part choices with
-  their reasons, and the layout mistakes the first attempt made.
-- `V3_PCB_SESSION_CONTEXT.md` — the decisions and the "why," plus what is still open (Teensy
-  concurrency model, CAN splice point, GPS footprint, tether voltage).
-- `DREAMS_V3_parts_footprints.md` — the BOM, with KiCad library availability and sourcing links.
-
-Removed from the tree, still in git history: `v3_review_2026-08-05.md` (the 18-section log of
-the first V3 attempt, distilled into the brief) and `kicad_library_status.md` (a 2026-08-04
-survey of what ships with KiCad, now that the library is built and committed).
-
-Both were written outside this repo and are stored **verbatim**, with only a scope banner prepended.
-They refer to a `DREAMS_MASTER_CONTEXT.md`, which is this repo's **`docs/PROJECT_CONTEXT.md`**. Note
-that `PROJECT_CONTEXT.md` is itself partly stale for the bench — it still describes VESC propulsion
-and GPS on the Pico, both of which changed in late July 2026. `CLAUDE.md` is the more current V2
-summary.
-
-## Status of the V3 KiCad files
-
-`Boat_PCB/Boat_PCB_V3/` is **tracked**: schematic, layout, project settings, the custom design
-rules (`.kicad_dru`) and the project symbol/footprint libraries. KiCad backups (`*.bak`,
-`*.prestack`), fabrication exports and DRC reports are gitignored — regenerate them from the
-design files.
-
-`Boat_PCB/Boat_PCB_V2.kicad_*` is still **not tracked**. Committing the V2 board remains a
-separate decision.
-
-## What adding these files changed
-
-Nothing outside this directory except one scoping row in `CLAUDE.md`'s "Where truth lives" table. No
-V2 doc, firmware module, or test was edited. CI (`.github/workflows/ci.yml`) builds and tests only
-`pi5/`, `cloud/api/`, `dashboard/`, and `cloud/map-viewer/` — no job or test reads `docs/`, so these
-files cannot affect the suite.
+V2's firmware held throttle at zero until both ESCs were confirmed bi-directional. That gate went
+in after a misconfigured ESC ran away on the bench on 2026-07-31. V3 doesn't inherit any of it,
+because the drive hardware is different. Its safety interlocks have to be designed again.
