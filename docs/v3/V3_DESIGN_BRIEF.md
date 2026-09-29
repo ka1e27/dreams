@@ -151,11 +151,11 @@ both.**
 
 ## 5. The pod (test phase)
 
-Schematic and rev A layout: `Boat_PCB/Pod_PCB_V3/`. It shares the carrier's `lib/`. The pod
+Schematic and rev B layout: `Boat_PCB/Pod_PCB_V3/`. It shares the carrier's `lib/`. The pod
 rides the winch tether and profiles the water column to about 20 m. This round is for testing in
 freshwater, so it uses cheap hobby sensors rather than lab-grade ones.
 
-**Board (rev A, 2026-09-26).** 48 × 63 mm, 2 layers, GND poured on both sides. It's built for hand
+**Board (rev B, 2026-09-29).** 48 × 63 mm, 2 layers, GND poured on both sides. It's built for hand
 assembly. The resistors lie flat on the 10.16 mm footprint the carrier uses, the caps are 5 mm discs,
 and the XIAO and the Pololu buck sit on headers. No parts sit under either module, so each can be
 soldered straight down or socketed.
@@ -167,6 +167,11 @@ soldered straight down or socketed.
 - **Where things are.** Tether pads J1 on the top edge. The XIAO's USB-C faces the left edge. The
   right edge, top to bottom: AUX, PRESS, DO, TDS, pH (J10, J6, J4, J3, J2). The bottom edge: TURB,
   TEMP, LEAK, BOTTOM (J5, J7, J8, J9). The AIN assignment below is unchanged.
+- **Rev B is a re-placement of rev A, not a redesign.** Same 54 footprints, outline and netlist.
+  The right-edge groups sit on one 8.47 mm pitch, the bottom groups on equal gaps, and the twelve
+  upright resistors and caps stand in one row on a 3.4 mm pitch. The AP2112's caps are now within
+  3 mm of its pins (rev A had them about 10 mm away), and the back legend is on a grid, with a
+  label at every pad.
 - **No test points.** Probe GND and 5V on any sensor pad group, 3V3 on TEMP or AUX, and the tether
   voltage on J1.
 

@@ -8,7 +8,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | | |
 |---|---|
 | `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
-| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
+| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev B layout. Uses the carrier's `lib/` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
 
@@ -110,10 +110,10 @@ change against that board's numbers in the commit message.
 - **ERC: 0.** Unused pins carry no-connect flags. The tied-pin and power-pin conflicts were fixed
   with pin types in the project library.
 
-Pod baseline as of 2026-09-26 (rev A, 48 × 63 mm), same commands on
+Pod baseline as of 2026-09-29 (rev B, 48 × 63 mm), same commands on
 `Boat_PCB/Pod_PCB_V3/Pod_PCB_V3.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** One per-pad edit:
-C3's GND pad connects solid to the pour, because the neighbouring traces starve its thermal spokes.
-Re-apply it after a footprint update.
+U5's GND pad 3 connects solid to the pour, because the neighbouring traces starve its thermal
+spokes. Re-apply it after a footprint update.
 
 **Python:** ruff config lives in `pyproject.toml`.
 
