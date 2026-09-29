@@ -35,22 +35,23 @@ Raspberry Pi 5 ─ navigation, mission logic, CV, cloud link        Python (not 
        ├─ UART ─────────────► GPS (M10-25Q) · pod tether · SBUS RC receiver
        ├─ PWM ──────────────► winch ESC, behind a fail-safe-OFF high-side P-FET kill
        ├─ STEP/DIR ─────────► A4988 radar-bar stepper
-       └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · pack voltage dividers
+       └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 12S pack divider
 ```
 
-The pod is a Seeed XIAO ESP32-S3 on its own board (not in this repo yet). It hangs off the tether,
-which carries one UART and 5 V.
+The pod is a Seeed XIAO ESP32-S3 on its own board, in `Boat_PCB/Pod_PCB_V3/`. It hangs off the
+tether, which carries one RS-485 pair and the electronics pack voltage; the pod makes its own 5 V.
 
 ## The board
 
-132 × 108.4 mm, 4 layers (JLC04161H-7628, 1 oz outer / 0.5 oz inner, ENIG), 108 footprints, fully
-routed. There are three isolated power domains:
+130.6 × 101.5 mm, 4 layers (JLC04161H-7628, 1 oz outer / 0.5 oz inner, ENIG), 126 footprints, fully
+routed (rev D). There are three isolated power domains:
 
 - **Drive:** 12S LiPo, voltage sense only.
-- **Electronics:** M18 → 5 V buck → Pi, Teensy and pod.
+- **Electronics:** M18 → 5 V buck → Pi and Teensy. The pod takes the pack voltage through F1.
 - **Winch:** M18 → P-FET kill → ESC.
 
-Fusing is off-board.
+Pack fusing is off-board. On the board, PTCs guard the pod feed (F1) and the LED and SBUS 5 V
+outputs (F2, F3).
 
 Open the project in KiCad 10, or check it from the command line:
 

@@ -13,6 +13,12 @@
 > On its open items:
 >
 > - **The GPS footprint (3) is closed.** The module connects by cable to a JST-XH connector, J1.
+> - **The pod tether voltage (4) is closed, and the pod plan below is superseded (2026-09-25).**
+>   - The tether carries the electronics pack voltage (15–21 V), and the pod makes its own 5 V with
+>     a buck.
+>   - The link is one RS-485 pair, not a raw UART.
+>   - The sensor set is a DFRobot test-phase list.
+>   - See [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) §5 and `Boat_PCB/Pod_PCB_V3/`.
 > - **The Teensy concurrency model (1) is still undecided.** It is the first call the firmware has
 >   to make.
 

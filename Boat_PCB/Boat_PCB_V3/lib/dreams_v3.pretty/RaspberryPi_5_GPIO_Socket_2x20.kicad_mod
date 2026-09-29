@@ -247,7 +247,7 @@
 	)
 	(fp_text user "PIN1"
 		(at -44.5 4.91 0)
-		(layer "F.SilkS")
+		(layer "F.Fab")
 		(uuid "2c3b2fc8-0308-4875-89ac-f3a6c5cd4d4f")
 		(effects
 			(font

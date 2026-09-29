@@ -32,17 +32,15 @@
 	(constraint track_width (min 3.0mm))
 	(condition "A.NetClass == 'WINCH_PWR'"))
 
-# 2026-08-30 — scope note on the rule above.
+# 2026-09-24 rev C - scope note on the rule above.
 #
-# WINCH_PWR carries three things that are electrically one node but have very different
-# jobs: the 20 A power path, the INA228 Kelvin taps at R33, and the R5 divider tap.
-# The taps are supposed to be thin, so this rule fires on them and cannot tell them
-# apart from a genuinely under-width power track. Expect ~21 of the ~29 hits to be taps.
+# The whole 20 A path is poured, not tracked: SH_WINCH_P (J14 -> R33), +VWINCH (R33 -> Q1
+# source) and WINCH_SW (Q1 drain -> J16) are each one filled island on BOTH F.Cu and B.Cu,
+# and the winch return runs J14 GND -> J16 GND on both outer layers. Only the pours beside
+# R33 are via-stitched: R33 is a top-side SMD shunt, while J14, J16 and Q1 are through-hole,
+# so their pads already join the two layers.
 #
-# The 20 A path is no longer carried by tracks at all — SH_WINCH_P, +VWINCH and WINCH_SW
-# are poured on the outer layers and via-stitched, so the surviving thin tracks run in
-# parallel with copper that is orders of magnitude wider.
-#
-# Permanent fix is in the schematic, not here: give the Kelvin and divider taps their own
-# nets (e.g. WINCH_SH_SENSE_P/N, WINCH_DIV_TAP) tied at the shunt's sense pads. Then this
-# rule can stay strict and its output becomes actionable again.
+# Since rev C the shunt sense pins have their own nets (ELEC_SHUNT_P/N, WINCH_SHUNT_P/N, in
+# the Default class), each INA228's VBUS is tied to its IN- sense net, and the old 0.2 mm
+# Kelvin bridges are gone. No WINCH_PWR track remains on the board, so this rule should
+# report zero hits; any hit is a real under-width power track.

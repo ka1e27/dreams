@@ -741,12 +741,8 @@
         "pattern": "+5V"
       },
       {
-        "netclass": "5V_FUSED",
-        "pattern": "/POD_5V"
-      },
-      {
-        "netclass": "5V_FUSED",
-        "pattern": "/POD_5V_F"
+        "netclass": "ELEC_PWR",
+        "pattern": "/POD_VPACK"
       },
       {
         "netclass": "5V_FUSED",
@@ -803,10 +799,6 @@
       {
         "netclass": "HV_12S",
         "pattern": "/12S_RAW"
-      },
-      {
-        "netclass": "HV_12S",
-        "pattern": "/S12_SENSE"
       }
     ]
   },
