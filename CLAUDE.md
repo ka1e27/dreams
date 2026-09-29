@@ -8,6 +8,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | | |
 |---|---|
 | `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
+| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
 
@@ -19,10 +20,18 @@ Raspberry Pi 5 ─ navigation, mission logic, CV, cloud link      Python (not ye
   └─ Teensy 4.1 ─ real-time I/O                                 C++/Teensyduino (not yet written)
        ├─ CAN via TJA1051 ──► VESC ×2, node IDs 1 and 2
        ├─ I²C via TCA9548A ─► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
-       ├─ UART ─────────────► GPS (M10-25Q) · pod tether (XIAO ESP32-S3, own board) · SBUS receiver
+       ├─ UART ─────────────► GPS (M10-25Q) · SBUS receiver
+       ├─ RS-485 (Serial8) ─► pod tether (XIAO ESP32-S3, own board), through U13
        ├─ PWM ──────────────► winch ESC, behind the P-FET kill
        ├─ STEP/DIR ─────────► A4988 radar-bar stepper
-       └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · pack voltage dividers
+       └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 12S pack divider
+
+Pod ─ XIAO ESP32-S3 on the winch tether, Boat_PCB/Pod_PCB_V3 (test phase, freshwater)
+  ├─ RS-485 (UART0, D6/D7, DE on D3) ─► back up the tether to the Teensy
+  ├─ I²C via ADS1115 (0x48) ─► pH · TDS (isolated) · dissolved O2 (fit later) · depth (pressure)
+  ├─ ADC (D0) ───────────────► turbidity, relative only
+  ├─ 1-Wire (D1) ────────────► DS18B20 water temperature
+  └─ GPIO ───────────────────► leak probe (D2) · bottom contact (D8) · status LED (D9) · aux (D10)
 ```
 
 These are still open. Ask the user before building on an assumption about any of them:
@@ -45,9 +54,21 @@ These are still open. Ask the user before building on an assumption about any of
   10k holds the P-FET gate at its source.
 - **The carrier senses voltage only on the 12S drive rail:** one ADC divider, no shunt, no INA228.
   If you want drive current, get it from the VESCs over CAN.
-- **Pack dividers are 68k/10k at 1 %**, not V2's 56k/10k (brief §3).
+- **Electronics and winch pack voltages come from the INA228s** (VBUS, on each shunt's load side):
+  U10 at 0x41 and U11 at 0x44, both on mux channel 6. There are no ADC dividers on those packs any
+  more. The 12S divider (220k/13k) reads on pin 17 (A3); pins 14 and 15 are free (brief §3).
 - **SBUS is the manual override.** Its 5 V branch is fused loosely on purpose so it can't
   nuisance-trip.
+- **The pod tether carries pack voltage, not 5 V.** J2 pin 2 is the electronics pack (15–21 V)
+  through F1, and the pod regulates its own 5 V. A pod board built for 5 V in will be destroyed by it.
+- **The pod link is half-duplex RS-485, not a UART.** Serial8 (TX8 pin 35, RX8 pin 34) runs through
+  a THVD2410 (U13) onto J2 pins 3/4 (A/B). Call `Serial8.transmitterEnable(37)` so pin 37 drives the
+  transceiver's DE and ~RE; left alone, a 10k holds it in receive. The carrier end is terminated
+  (120 Ω), so the pod end needs its own transceiver and a 120 Ω terminator too.
+- **The hull leak probes are excited, not biased.** Pins 40 and 41 (A16/A17) read the probes
+  through 100k pull-ups that hang off pin 39 (`LEAK_EXC`). Drive pin 39 high only while sampling,
+  then back low: a probe held at DC corrodes. A dry probe reads near 3.3 V; water pulls it toward
+  ground.
 
 ## V2 is archived at `v2-final`
 
@@ -77,23 +98,22 @@ KC="/c/Program Files/KiCad/10.0/bin/kicad-cli.exe"   # not on PATH
 "$KC" pcb drc --severity-all --schematic-parity --format json -o drc.json Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
 ```
 
-Baseline as of 2026-09-23. When a commit touches the board, put the change against these numbers
-in the commit message.
+Carrier baseline as of 2026-09-28 (rev D, 130.6 × 101.5 mm). When a commit touches a board, put the
+change against that board's numbers in the commit message.
 
-- **DRC: 107 violations, 0 unconnected.**
-  - 29 `track_width` errors. About 21 of them are the winch width rule firing on Kelvin and divider
-    taps that are meant to be thin (brief §4).
-  - 60 `silk_overlap` and 18 `silk_over_copper` warnings.
-- **Schematic parity: 154.** None of the 108 footprints carry the `dreams_v3:` library prefix the
-  schematic uses, and some Datasheet/Description fields aren't synced. Before you run *Update PCB
-  from Schematic* to clear them, check whether it would replace footprints: that would reset any
-  per-pad edits, such as solid zone connections on the power pads.
-- **ERC: 70.**
-  - 58 are unused pins with no no-connect flag: 30 on the Pi header, 24 on the Teensy, 4 on the buck
-    and the BMP390.
-  - 8 are pin-type conflicts: the Teensy's tied 3V3 pins, the buck's tied VOUT pins, and BMP390 and
-    ADXL375 pins on power nets.
-  - 4 are undriven: Teensy PROGRAM, ON_OFF and VBAT, and the buck's EN.
+- **DRC: 0 violations, 0 unconnected.** Rev C's one warning (A2's bottom-side outline on C28's GND
+  pad) went away with the rev D placement.
+- **Schematic parity: 0.** Every footprint carries its `dreams_v3:` library ID. *Update footprints
+  from library* still resets per-pad edits, and 10 footprints have them. There are solid zone
+  connections on the XT60s, Q1, C2, C26, R33, D4 and J12's GND pads 25 and 30, and leftover
+  overrides on the U11 sense pins. Re-apply them after any footprint update.
+- **ERC: 0.** Unused pins carry no-connect flags. The tied-pin and power-pin conflicts were fixed
+  with pin types in the project library.
+
+Pod baseline as of 2026-09-26 (rev A, 48 × 63 mm), same commands on
+`Boat_PCB/Pod_PCB_V3/Pod_PCB_V3.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** One per-pad edit:
+C3's GND pad connects solid to the pour, because the neighbouring traces starve its thermal spokes.
+Re-apply it after a footprint update.
 
 **Python:** ruff config lives in `pyproject.toml`.
 

@@ -1,7 +1,7 @@
 # `docs/v3/`: V3 hardware design knowledge
 
-This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/` and the reasons it is built the
-way it is.
+This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/`, the pod board in
+`Boat_PCB/Pod_PCB_V3/` (brief §5), and the reasons they are built the way they are.
 
 | File | What it is |
 |---|---|
@@ -38,9 +38,9 @@ someone. These are two different boats, not discrepancies to fix.
 | Boat MCU | RP2040 Pico, MicroPython | Teensy 4.1, C++/Teensyduino, a full rewrite |
 | Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
 | Drive pack | Milwaukee M18 | 12S LiPo, voltage sense only |
-| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board; the tether is one UART plus power |
+| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus pack-voltage power |
 | Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
-| Pack dividers | 56k/10k (×6.6) into the Pico's ADC | 68k/10k, 1 %, into the Teensy's ADC |
+| Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch through the INA228s; the 12S rail through one 220k/13k, 1 % divider into the Teensy's ADC |
 | Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V only; the stepper moved to the Teensy |
 
 Copying a V2 pin number, divider ratio, protocol field or threshold into V3 without re-deriving it

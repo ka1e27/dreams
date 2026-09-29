@@ -8,6 +8,11 @@
 > If this disagrees with [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) or the KiCad files, those win.
 > For example, the board fits **two** INA228s, not three, and the GPS lands on a JST-XH cable
 > connector.
+>
+> **The POD PCB section is superseded (2026-09-25).** The tether carries pack voltage, so the pod
+> has a Pololu buck and a 3.3 V LDO rather than "no external LDO". The link is RS-485 through a
+> THVD2410, and the sensors are a DFRobot test-phase set. See
+> [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) §5 and `Boat_PCB/Pod_PCB_V3/`.
 
 ---
 

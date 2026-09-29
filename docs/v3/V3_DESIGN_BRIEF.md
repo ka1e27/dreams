@@ -18,7 +18,7 @@ blow-by-blow, run `git show v2-final:docs/v3/v3_review_2026-08-05.md`.
 | Boat MCU | **Teensy 4.1**, C++/Teensyduino | Pin count and the concurrency model; full rewrite from MicroPython |
 | Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051** | No MCP2515 — the Teensy has native CAN |
 | Drive pack | **12S LiPo**, voltage sense only | No shunt, no current sensing on this rail (see §3) |
-| Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is 2× UART + 2× power |
+| Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is one **RS-485 pair** + 2× power. The link runs half duplex through a ±70 V fault-protected THVD2410 (U13). The power pair carries the **electronics pack voltage** (15–21 V), and the pod makes its own 5 V |
 | Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on one Teensy I²C bus |
 | Power | **3 isolated domains** — drive / electronics / winch | Per-pack BMS protection; fusing is off-board |
 | Winch kill | **High-side P-FET, fail-safe OFF** | Gate pulled to source by R34; de-energised = open |
@@ -43,7 +43,7 @@ k = 0.048 external, **0.024 internal**.
 | Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
 | Electronics pack | 15 A fuse; real load ≈ **2 A** | Pololu D36V50F5 buck + A4988 stepper |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
-| Pod branch (F1) | **0.75 A hold** | Bel Fuse 0ZRE PTC |
+| Pod branch (F1) | **0.40 A hold**, fed from `+VELEC` | Bel Fuse 0ZRE0040FF1A PTC. At pack voltage the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short |
 | LED branch (F2) | **1.25 A hold** | " |
 | SBUS branch (F3) | **0.75 A hold** | Deliberately loose — the RC link is the manual override and must never nuisance-trip |
 | Drive | 100 A main / 80 A per ESC | **Off-board**, ANL fuses |
@@ -75,9 +75,12 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 - **Shunts:** electronics **10 mΩ** (R32), winch **2 mΩ** (R33). Both 4-terminal — Kelvin sense
   pads tap the *small* pads, never the current pads.
 - **SHT45, not SHT41.** V2 fed an SHT41 5 V against a 3.6 V absolute max. Do not repeat that.
-- **Dividers 68k/10k, not 56k/10k.** 56k/10k gives 3.18 V nominal at a 21 V pack but **3.46 V at
-  5 % worst case — over a 3.3 V ADC rail.** 68k/10k gives 2.69 V nominal, 2.74 V at 1 % worst case,
-  17 % headroom. Specify **1 %** parts.
+- **Pack voltages.** The electronics and winch packs are read by their INA228s: VBUS is tied to the
+  load side of each shunt, so the chip reports voltage and current at 20 bits. The 68k/10k ADC
+  dividers that duplicated those readings came out in the 2026-09-28 parts review, along with their
+  1 k series resistors and filter caps. The 12S rail keeps its divider, 220k/13k, 2.81 V at 50.4 V,
+  with C4 at the ADC pin. Size any new divider the same way, for the worst case at 1 %: V2's
+  56k/10k gave 3.46 V at 5 % worst case on a 21 V pack, over a 3.3 V ADC rail.
 - **Series resistors on every net that leaves the board.** 330 Ω on WS2812 data, 1 k on each hull
   leak probe, 1 k on SBUS. Series, *not* a divider — a divider sized for a 5 V receiver drops a
   3.3 V receiver below V<sub>IH</sub>.
@@ -146,7 +149,65 @@ both.**
 
 ---
 
-## 5. Where the rest lives
+## 5. The pod (test phase)
+
+Schematic and rev A layout: `Boat_PCB/Pod_PCB_V3/`. It shares the carrier's `lib/`. The pod
+rides the winch tether and profiles the water column to about 20 m. This round is for testing in
+freshwater, so it uses cheap hobby sensors rather than lab-grade ones.
+
+**Board (rev A, 2026-09-26).** 48 × 63 mm, 2 layers, GND poured on both sides. It's built for hand
+assembly. The resistors lie flat on the 10.16 mm footprint the carrier uses, the caps are 5 mm discs,
+and the XIAO and the Pololu buck sit on headers. No parts sit under either module, so each can be
+soldered straight down or socketed.
+
+- **No connectors.** Every off-board wire solders straight into a 1.0 mm pad on a 2.54 mm pitch
+  (22–28 AWG). Cut the DFRobot Gravity cables and solder them in.
+- **Square pad = GND on every group.** The front is too dense to label every pad, so the pin legend
+  is on the back silkscreen, which is also the side you solder the wires on.
+- **Where things are.** Tether pads J1 on the top edge. The XIAO's USB-C faces the left edge. The
+  right edge, top to bottom: AUX, PRESS, DO, TDS, pH (J10, J6, J4, J3, J2). The bottom edge: TURB,
+  TEMP, LEAK, BOTTOM (J5, J7, J8, J9). The AIN assignment below is unchanged.
+- **No test points.** Probe GND and 5V on any sensor pad group, 3V3 on TEMP or AUX, and the tether
+  voltage on J1.
+
+**Bench bring-up.** USB powers only the XIAO: D3 stops USB from back-feeding the 5 V rail. The
+sensors, ADC and transceiver need 12–21 V on J1. Don't exceed 24 V, the SMBJ24A's standoff voltage.
+
+**Tether and power.**
+- **Power:** the carrier's J2 sends the electronics pack (15–21 V) through F1 (0.40 A PTC). At pack
+  voltage the pod draws about 0.1 A.
+- **Pod input:** a Schottky and an SMBJ24A protect it, then a Pololu D36V6F5 buck makes 5 V. An
+  AP2112K-3.3 feeds the ADC, transceiver and pull-ups. The XIAO keeps its own 3V3; the two 3.3 V
+  rails are never tied.
+- **Link:** half-duplex RS-485 through a THVD2410 at each end, 120 Ω at each end, and a 24 V TVS at
+  each connector.
+
+**Sensors.** Prices are as listed on 2026-09-25.
+
+| Measure | Part | Price | Read by |
+|---|---|---|---|
+| pH | DFRobot SEN0161-V2 | $39.50 | ADS1115 AIN0 |
+| Conductivity | DFRobot SEN0244 TDS, 0–1000 ppm, through a DFR0504 isolator ($19.90) | $11.80 | ADS1115 AIN1 |
+| Dissolved O₂ | DFRobot SEN0237-A: connector fitted, sensor bought later | $169 | ADS1115 AIN2 |
+| Depth | DFRobot SEN0257, 0–1 MPa, divided 4.5 → 3.0 V | $15.90 | ADS1115 AIN3 |
+| Turbidity | DFRobot SEN0189, relative only, divided | $9.90 | XIAO ADC (D0) |
+| Temperature | DS18B20 waterproof probe | $6.90 | 1-Wire (D1) |
+
+**Traps.**
+- The conductivity sensor's AC excitation corrupts the pH reading unless it's isolated. DFRobot says
+  so explicitly.
+- The SEN0189's top isn't waterproof, and DFRobot labels the SEN0257 "non-immersible". Both mount
+  through the end cap with only the tip or port wet.
+- None of the pH, TDS and temperature probes publish a depth rating. Test shallow first.
+- The galvanic DO probe needs water flow, so it reads low when parked at depth. It also needs fresh
+  electrolyte monthly.
+- Lab-grade upgrades, if the test data justify them: Atlas EZO pH/EC/DO/RTD on isolated carriers,
+  the Renke RS-ZD-N01 turbidity sensor ($116, RS-485, 0–50 NTU range, 20 m), and a Blue Robotics
+  Bar30 for depth ($90).
+
+---
+
+## 6. Where the rest lives
 
 | | |
 |---|---|

@@ -3,19 +3,69 @@
 Self-contained symbol + footprint library for the V3 board, so a fresh clone resolves every part with
 no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 
-- `dreams_v3.kicad_sym` — **13 symbols**
-- `dreams_v3.pretty/` — **34 footprints**
+- `dreams_v3.kicad_sym` — **51 symbols**
+- `dreams_v3.pretty/` — **51 footprints**
 - `dreams_v3.3dshapes/` — 2 STEP models
 
-The board is **fully placed and routed**: 108 footprints on a 132 × 108.4 mm 4-layer board.
+The pod project (`../../Pod_PCB_V3/`) uses this library too: its lib tables point here through
+`${KIPRJMOD}/../Boat_PCB_V3/lib/`.
+
+The board is **fully placed and routed**: 126 footprints on a 130.6 × 101.5 mm 4-layer board (rev D,
+2026-09-28).
 
 See [`../../../docs/v3/V3_DESIGN_BRIEF.md`](../../../docs/v3/V3_DESIGN_BRIEF.md) for the decisions,
 the current budget and the layout traps found the hard way on the first attempt.
 
-⚠ **The contents table below is as-assembled on 2026-08-04 and has drifted.** The library has since
+⚠ **The contents table below is as-assembled on 2026-08-04 and has drifted** (the counts above are
+current). The library has since
 lost the `TJA1051T` and `Conn_JST_XH_*` symbols (they resolve from stock KiCad now) and gained
 `Crystal`, `MountingHole` and `Polyfuse`. The per-part warnings under "Read these before laying
 out" are all still current — those are the part worth keeping.
+
+## Rev C changes (2026-09-24)
+
+- **`Pololu_D36V50F5` was redrawn** from Pololu's drill guide (`reg24d-drill.dxf`) and its labelled
+  top-view photo. The old footprint had the lone third M2 hole at the VOUT end (Pololu puts it at the
+  EN/PG end) and its header rows 0.48 mm off the hole line. Mounted the natural way, with all three
+  screws, that reversed the pinout end-for-end: VIN and VRP landed on GND and the pack drove backwards
+  through the regulator. The footprint is a top view; on the board it is flipped onto B.Cu for an
+  underside module fitted components-away.
+- **`Conn_XT60_M18` pin numbering follows the XT60 convention:** pin 1 is the notched (chamfered)
+  end, which is negative, and pin 2 is the flat end, which is positive. The molded + sits at the flat
+  end. The old symbol had + on pin 1, which put + on the notched end of KiCad's AMASS footprints.
+  J16, the switched winch output, is now an XT60-F (female).
+- **Added from the stock KiCad libraries:**
+  - symbols: `D_Zener`, `LED`, `TestPoint`, `Jumper_2_Open`, `74AHCT1G125` (flattened from
+    `74LVC1G125`), and a `D_Dual_CommonAnode_KKA` with pins 1/2 as cathodes and 3 as the anode
+    (the PESD5V0S2BT pinout);
+  - footprints: `D_SMB`, `D_DO-35`, `LED_D3.0mm`, `SOT-23-5`, a vertical DIN0207 resistor (no longer
+    used: rev D lays every resistor flat), `CP_Radial_D8.0mm`, `JST_VH_B2P-VH`, a 1×2 pin header,
+    `AMASS_XT60-F`, and a Keystone test point.
+- **Pod tether on RS-485 (2026-09-25):**
+  - `THVD2410D` was flattened from stock `Interface_UART:LTC2850xS8`, which has the same D-package
+    pinout: 1 R, 2 ~RE, 3 DE, 4 D, 5 GND, 6 A, 7 B, 8 VCC.
+  - `NUP2105L` (24 V dual bidirectional TVS) comes from stock `Power_Protection`, retargeted to
+    `dreams_v3:SOT-23`.
+  - `Conn_PodTether_1x04` pins are now GND / VPACK / A / B. Pin 2 carries the pack voltage.
+- **Pod parts (2026-09-25):**
+  - Flattened from stock: `ADS1115IDGS` (the existing `MSOP-10_3x3mm_P0.5mm` footprint) and
+    `AP2112K-3.3`.
+  - New: `Pololu_D36V6F5`, a symbol plus a footprint. The outline is approximate, since Pololu gives
+    the size (0.4 × 0.5 in) but no drill drawing; check it against a module before the pod layout.
+  - `Conn_Gravity_1x03`: the DFRobot sensor cable. Pin order is GND, VCC, signal; **check it against
+    the cable before soldering.**
+  - `Conn_DS18B20_1x03`, `Conn_Aux_1x03` and `Conn_Switch_1x02`.
+  - Footprint `JST_PH_B3B-PH-K_1x03_P2.00mm_Vertical` (no longer used: the pod went to wire pads).
+- **Pod wire pads (2026-09-26):**
+  - `SolderWire_1x02/1x03/1x04_P2.54mm_D1.0mm`: pads only, for wires soldered straight in (22-28 AWG).
+    Pad 1 is square and is GND on every pod group. No 3D model, since there is no part.
+  - `CP_Radial_D6.3mm_P2.50mm` from stock, for the pod's 47 µF 50 V input can.
+  - `D_Schottky`'s description no longer mentions the old 5 V tether.
+- **Silkscreen fixes, kept in the library so the board copies still match it:**
+  - `Pololu_D36V50F5` pin labels are 1.0 mm / 0.15 mm, the board's minimum text size (they were 0.8 mm).
+  - `RaspberryPi_5_GPIO_Socket_2x20`: the `PIN1` text moved to F.Fab, because it landed on neighbouring
+    pads. The square pad 1 still marks pin 1.
+  - `D_DO-35`: the silk `K` is gone. The cathode band marks polarity, and the letter collided with J14.
 
 Registered via project-local `sym-lib-table` / `fp-lib-table` beside `Boat_PCB_V3.kicad_pro`, using
 `${KIPRJMOD}`-relative paths so the library travels with the repo.
