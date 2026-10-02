@@ -1,4 +1,4 @@
-"""D.R.E.A.M.S V2 resistance, propeller and motor sizing.
+"""D.R.E.A.M.S resistance, propeller and motor sizing (rev D).
 
 Uses the hull and mass model in hull_sizing.py. Stdlib only:
     python mechanical/propulsion.py               # report
@@ -27,10 +27,10 @@ import math
 from dataclasses import dataclass
 
 from hull_sizing import (
-    G,
     NU_WATER,
     RHO_WATER,
     Boat,
+    G,
     Hull,
     conditions,
     draft_for,
@@ -258,7 +258,7 @@ M200_WEEDLESS = Propulsor("M200 + weedless prop (BlueBoat drive)", 0.112, 0.112,
                           0.50, 0.2 * 0.112, "$390-410")
 T200 = Propulsor("T200 ducted thruster", 0.076, 0.100, 5.25 * G, 390, 0.45, 0.015, "~$400")
 CANDIDATES = (BELT_OUTDRIVE, M200_WEEDLESS, T200)
-DRIVE_WH = 2 * 12 * 18 * 0.9  # 2x M18 HD12.0, one per VESC, 90 % usable
+DRIVE_WH = 12 * 3.7 * 10 * 0.9  # one 12S ~10 Ah pack (V3's drive rail) for both VESCs, 90 % usable
 
 
 DRIVE_FIXED_W = 3.0  # per drive: VESC idle + motor no-load losses
@@ -333,7 +333,7 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
                  "Hours @1.0 / 1.5", "Total draft mm"], rows))
     thrust3 = r30.total / 2 / (1 - THRUST_DEDUCTION)
     print(f"\nAt 3.0 m/s each drive must push {thrust3:.0f} N. Drive energy {DRIVE_WH:.0f} Wh "
-          f"(2x M18 HD12.0, one per VESC, 90 % usable); electronics run from their own pack.")
+          f"(one 12S ~10 Ah pack for both VESCs, 90 % usable); electronics run from their own pack.")
     for p in CANDIDATES:
         k_b = ideal_bollard_power(p.bollard_n, p.d) / p.bollard_w
         print(f"- {p.name}: bollard kappa = {k_b:.2f} (ideal / electrical at full throttle).")

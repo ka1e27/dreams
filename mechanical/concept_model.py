@@ -1,4 +1,4 @@
-"""3D concept model and renders of the D.R.E.A.M.S V2 boat.
+"""3D concept model and renders of the D.R.E.A.M.S boat (rev D; files keep the V2 names).
 
 Builds the boat as triangle meshes from the parameters in hull_sizing.py and writes:
     mechanical/render/DREAMS_V2_viewer.html   interactive 3D viewer, one self-contained file
@@ -24,8 +24,18 @@ import subprocess
 from pathlib import Path
 
 import toroidal_prop as tp
-from hull_sizing import (RHO_WATER, Boat, Hull, Outdrive, arm_path, arm_section, bezier, conditions,
-                         draft_for, section_points)
+from hull_sizing import (
+    RHO_WATER,
+    Boat,
+    Hull,
+    Outdrive,
+    arm_path,
+    arm_section,
+    bezier,
+    conditions,
+    draft_for,
+    section_points,
+)
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "render"
@@ -301,22 +311,29 @@ def prop_meshes(d: Outdrive, yc: float, zp: float, hand: str) -> list[Mesh]:
 
 
 def outdrive_meshes(boat: Boat, hull: Hull, yc: float, dwl: float, hand: str) -> list[Mesh]:
-    """V1-style belt outdrive on the lid's aft deck: tilt bracket and pin, motor cover over the
-    leg head, streamlined leg (the belt runs inside), lower pod and prop."""
+    """V1-style belt outdrive, fixed (rev D): the mount on the lid's aft deck and down its aft wall,
+    the head block that clamps the leg, the platform and motor cover, the thrust pad on the transom,
+    the streamlined leg (the belt runs inside), the lower pod and the prop."""
     d = boat.drive
-    px, pz = d.pivot
     zp = d.prop_z(dwl)
-    xb0, xb1 = d.bracket[0], px - 0.012
-    parts = [rounded_block("drive bracket", "bracket", (xb0 + xb1) / 2, yc, hull.depth - 0.001, pz + 0.010,
-                           (xb0 - xb1) / 2, d.bracket[1] / 2, e=6, top_round=0.3, top_scale=0.9),
-             cylinder("tilt pin", "steel", (px, yc - 0.041, pz), (px, yc + 0.041, pz), 0.004)]
-    # cover over the motor (axis fore-aft at motor_z) and the upper pulley at belt_x
-    lx = d.leg_le - d.leg_chord / 2
-    parts.append(rounded_block("motor cover", "black", lx, yc, pz, pz + d.cover[2], d.cover[0] / 2,
-                               d.cover[1] / 2, e=4, top_round=0.35, top_scale=0.82))
+    dk = hull.depth
+
+    def block(name, mat, x0, x1, y0, y1, z0, z1, e=8.0, top_round=0.0, top_scale=1.0):
+        return rounded_block(name, mat, (x0 + x1) / 2, yc + (y0 + y1) / 2, z0, z1, (x1 - x0) / 2, (y1 - y0) / 2,
+                             e=e, top_round=top_round, top_scale=top_scale)
+
+    bw, hw, bh = d.bracket[1] / 2, d.head_w / 2, d.body_w / 2
+    wt, wz = d.wall_flange
+    parts = [block("drive mount", "bracket", 0.0, d.bracket[0], -bw, bw, dk - 0.001, d.top_z),
+             block("mount wall flange", "bracket", -wt, 0.0, -bw, bw, wz, d.top_z),
+             block("mount head block", "bracket", d.head_x, -wt, -bh, bh, d.head_z, d.top_z),
+             block("mount platform", "bracket", d.platform_x, -wt, -hw, hw, d.top_z - d.platform_t, d.top_z),
+             block("motor cover", "black", d.cover[0], d.cover[1], -hw, hw, d.top_z, d.cover[2], e=4,
+                   top_round=0.35, top_scale=0.82),
+             block("thrust pad", "bracket", d.leg_le + d.pad[3], 0.0, -d.pad[2] / 2, d.pad[2] / 2, d.pad[0], d.pad[1])]
     leg = Mesh("leg", "bridge")
     sec = [(d.leg_le - u * d.leg_chord, yc + v * d.leg_chord) for u, v in naca00(d.leg_t / d.leg_chord)]
-    rows = [[(x, y, z) for x, y in sec] for z in (zp, pz + 0.015)]
+    rows = [[(x, y, z) for x, y in sec] for z in (zp, d.head_z + 0.002)]
     leg.grid(rows)
     leg.fan(list(reversed(rows[0])))
     leg.fan(rows[-1])
@@ -373,11 +390,17 @@ def build(hull: Hull, boat: Boat) -> tuple[list[Mesh], dict]:
         wz = hub_surface_z(boat, hx, wy)
         parts.append(cylinder("whip base", "black", (hx, wy, wz - 0.005), (hx, wy, wz + 0.03), 0.012))
         parts.append(cylinder("whip", "black", (hx, wy, wz + 0.03), (hx, wy, boat.mast_top), 0.007))
-    # pod stowed under the hub on its tether
-    pz1 = boat.hub_z[0] - 0.02
-    parts.append(rounded_block("pod", "pod", hx, 0.0, pz1 - 0.16, pz1, 0.055, 0.04, e=4, top_round=0.15,
-                               bottom_round=0.15, top_scale=0.8))
-    parts.append(cylinder("tether", "black", (hx, 0, pz1), (hx, 0, boat.hub_z[0] + 0.01), 0.003, n=8))
+    # the pod and its Van Dorn sampler, pulled up into the hub garage under the sheave
+    ox, _, _ = boat.garage_opening()
+    s0, s1 = boat.stowed()
+    pdx, pdy, pdz = boat.pod_env
+    span = pdy + 0.010 + boat.sampler[0]
+    parts.append(rounded_block("pod", "pod", ox, -span / 2 + pdy / 2, s1 - pdz, s1, pdx / 2, pdy / 2, e=4,
+                               top_round=0.15, bottom_round=0.15, top_scale=0.8))
+    sy, sz = span / 2 - boat.sampler[0] / 2, s1 - pdz / 2
+    parts.append(cylinder("Van Dorn sampler", "pod", (ox - boat.sampler[1] / 2, sy, sz),
+                          (ox + boat.sampler[1] / 2, sy, sz), boat.sampler[0] / 2))
+    parts.append(cylinder("tether", "black", (ox, -0.015, s1), (ox, -0.015, boat.sheave[0]), 0.003, n=8))
     rail = hull.lid.flange_w + hull.lid.lip_t
     params = {
         "dwl": dwl, "loa": hull.loa, "yc": yc, "beam": hull.beam, "depth": hull.depth,
@@ -577,9 +600,9 @@ if (STILL) {
 def viewer_html(data: str, params: dict) -> str:
     three = (VENDOR / "three.min.js").read_text(encoding="utf-8")
     orbit = (VENDOR / "OrbitControls.js").read_text(encoding="utf-8")
-    info = (f"D.R.E.A.M.S V2 concept: {params['loa'] * 1000:.0f} x {params['width'] * 1000:.0f} mm over the "
+    info = (f"D.R.E.A.M.S concept, rev D: {params['loa'] * 1000:.0f} x {params['width'] * 1000:.0f} mm over the "
             f"rails, {params['mass']:.1f} kg design, draft {params['dwl'] * 1000:.0f} mm. Drag to orbit, scroll to zoom.")
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>D.R.E.A.M.S V2 concept</title>
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>D.R.E.A.M.S concept, rev D</title>
 <style>body{{margin:0;overflow:hidden;font-family:Arial,sans-serif}}#ui{{position:absolute;top:10px;left:10px}}
 #ui button{{margin:0 4px 4px 0;padding:6px 10px;border:0;border-radius:4px;background:#20262ecc;color:#fff;cursor:pointer}}
 #info{{position:absolute;bottom:10px;left:10px;color:#20262e;font-size:13px;background:#ffffffb0;padding:4px 8px;border-radius:4px}}</style>
