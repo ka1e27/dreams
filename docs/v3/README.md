@@ -8,6 +8,7 @@ This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/`, the pod boar
 | **[`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md)** | **Start here.** Locked decisions, the current budget, part choices with their reasons, and the layout mistakes the first attempt made |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
+| [`session_journal.md`](session_journal.md) | Running log of recent work sessions: what changed, what's still open. Read it at session start |
 | [`../../Boat_PCB/Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
 
 The two planning files were written outside this repo. They are stored verbatim under a scope note.

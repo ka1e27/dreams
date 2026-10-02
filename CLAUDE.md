@@ -11,6 +11,15 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
+| `docs/v3/session_journal.md` | What recent sessions did and left open. **Read at session start** (below) |
+
+## Session journal: read at start, write at end
+
+`docs/v3/session_journal.md` logs what each Claude Code session worked on, newest first, so a new
+chat can pick up where the last one stopped. **Read it at the start of every session**, before
+changing anything. **Add an entry at the top** when you finish a meaningful chunk of work, using the
+template in the file. It holds the 5 newest entries; move older ones to
+`docs/v3/session_journal_archive.md`. Locked decisions belong in the design brief, not the journal.
 
 ## The system, as the board wires it
 
