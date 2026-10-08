@@ -164,3 +164,6 @@ emit("matthew-hong", cover(flatten(load(OLD / "team" / "matthew-hong-headshot.jp
 # Wide versions of the 2026-10-08 photos (team page workshop, contact page header)
 emit("room-workshop", flatten(load(OLD / "dreams-v1-room-workshop.jpg")), [1600, 1000], q=78)
 emit("showcase-demo", flatten(load(OLD / "dreams-v1-demo.jpg")), [1200, 800], q=80)
+# Build-log page header: V1 with the plush husky riding in a hull
+husky = flatten(load(PORT / "D.R.E.A.M.S with husky.jpg"))
+emit("husky-boat", husky.crop((0, round(husky.height * 0.17), husky.width, husky.height)), [1400, 900], q=78)  # drop the wall and socket
