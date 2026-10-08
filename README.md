@@ -1,6 +1,6 @@
 # D.R.E.A.M.S website
 
-**Data Recovery for Environmental And Marine Surveillance**: a modular autonomous survey boat, designed and built by Kyle Tran and Matthew Hong at Northeastern University.
+**Data Recovery for Environmental And Marine Surveillance**: a modular autonomous survey boat, founded by Kyle Tran and Matthew Hong and built with Nolan Ting and Caleb Kong at Northeastern University.
 
 Live site: https://ka1e27.github.io/dreams/
 
