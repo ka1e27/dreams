@@ -103,7 +103,7 @@
           <li><a href="${DEMO}" target="_blank" rel="noopener">V2 command center ↗</a></li>
           <li><a href="index.html#field">Field-test videos</a></li></ul></div>
         <div><h2>Contact</h2><ul>
-          ${CONTACTS.map(c => `<li><a href="mailto:${c.email}">${c.name} · ${c.email}</a></li>`).join('')}
+          ${CONTACTS.map(c => `<li><a href="mailto:${c.email}">${c.name}\u00a0· ${c.email}</a></li>`).join('')}
           ${CONTACTS.map(c => `<li><a href="${c.site}" target="_blank" rel="noopener">${c.name.split(' ')[0]}'s portfolio ↗</a></li>`).join('')}</ul></div>
       </div>
       <div class="foot-base"><span>© 2026 D.R.E.A.M.S</span><a href="#main">Back to top ↑</a></div>
@@ -160,6 +160,14 @@
     document.querySelectorAll('.pin button[aria-expanded="true"]').forEach(o => o.setAttribute('aria-expanded', 'false'));
     b.setAttribute('aria-expanded', open);
   }));
+  document.querySelectorAll('.board-layout').forEach(layout => {
+    const pins = [...layout.querySelectorAll('.pin')], rows = [...layout.querySelectorAll('.legend li')];
+    const hl = (i, on) => { if (pins[i]) pins[i].classList.toggle('hl', on); if (rows[i]) rows[i].classList.toggle('hl', on); };
+    [pins, rows].forEach(list => list.forEach((el, i) => {
+      el.addEventListener('pointerenter', () => hl(i, true));
+      el.addEventListener('pointerleave', () => hl(i, false));
+    }));
+  });
 
   /* ── Build-log filters ───────────────────────────────────────────────── */
   const grid = document.querySelector('[data-log-grid]');

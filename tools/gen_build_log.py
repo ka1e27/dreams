@@ -5,9 +5,12 @@ To add an entry: append a tuple to ENTRIES (image slug from img/, or None for a 
 and re-run. Status is one of: designed, built, tested, failed, shown, incad, planned, dev.
 The page around the grid is the TEMPLATE string at the bottom of this file.
 """
+import sys
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SITE / "tools"))
+from typo import tidy  # noqa: E402
 
 # Available widths per image slug (from tools/build_images.py output)
 WIDTHS = {
@@ -69,6 +72,6 @@ def card(e):
 
 cards = "\n".join(card(e) for e in ENTRIES)
 template = (SITE / "tools" / "build-log.template.html").read_text(encoding="utf-8")
-out = template.replace("<!--CARDS-->", cards).replace("<!--COUNT-->", str(len(ENTRIES)))
+out = tidy(template.replace("<!--CARDS-->", cards).replace("<!--COUNT-->", str(len(ENTRIES))))
 (SITE / "build-log.html").write_text(out, encoding="utf-8", newline="\n")
 print(f"build-log.html written with {len(ENTRIES)} entries")
