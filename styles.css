@@ -197,15 +197,9 @@ p, li, dd { text-wrap: pretty; }
 .subnav a:hover { border-color: var(--ink); color: var(--ink); }
 
 /* 7 ─ Home sections ───────────────────────────────────────────────────────── */
-.name-band { padding: 52px 0; background: var(--white); border-block: 1px solid var(--line); }
-.name-grid { display: grid; grid-template-columns: 1fr 1.3fr; gap: 64px; align-items: center; }
-.name-mark { font: 800 clamp(42px, 5.4vw, 78px)/1 var(--display); font-variation-settings: "opsz" 96, "wdth" 100; letter-spacing: .01em; color: var(--ink); }
-.name-sub { margin-top: 12px; }
-.name-list { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1.5px solid var(--ink); }
-.name-list div { display: grid; grid-template-columns: 38px 1fr; align-items: baseline; padding: 12px 0; border-bottom: 1px dashed var(--line-2); }
-.name-list div:nth-child(odd) { padding-right: 24px; }
-.name-list dt { font: 800 24px var(--display); color: var(--signal); }
-.name-list dd { margin: 0; font-size: 18px; color: var(--ink); font-weight: 600; }
+.name-band { padding: 40px 0 46px; background: var(--white); border-block: 1px solid var(--line); }
+.name-line { margin-top: 12px; font: 800 clamp(26px, 3.6vw, 52px)/1.08 var(--display); font-variation-settings: "opsz" 96, "wdth" 92; letter-spacing: -.025em; color: var(--ink); }
+.name-line b { font-weight: inherit; color: var(--coral); }
 
 .statement { font: 800 clamp(36px, 5vw, 80px)/1.04 var(--display); font-variation-settings: "opsz" 96, "wdth" 92; letter-spacing: -.035em; color: var(--ink); max-width: 18ch; }
 .statement .dim { color: #6E8796; }
@@ -553,7 +547,7 @@ p, li, dd { text-wrap: pretty; }
   .dd { position: static; min-width: 0; padding: 0 0 12px; border: 0; box-shadow: none; background: none; }
   .nav-cta { margin: 20px 0 0; border-bottom: 0 !important; }
   .nav-cta .btn { width: 100%; min-height: 54px; }
-  .head, .name-grid, .boat-grid, .field-grid, .partners-grid, .cta-band .wrap, .statement-foot, .hero-grid { grid-template-columns: 1fr; }
+  .head, .boat-grid, .field-grid, .partners-grid, .cta-band .wrap, .statement-foot, .hero-grid { grid-template-columns: 1fr; }
   .hero-grid { min-height: 0; }
   .hero-visual { height: 520px; max-width: 600px; }
   .page-head .bg { position: relative; right: auto; top: auto; bottom: auto; width: 100%; max-width: 420px; height: 300px; margin: 32px 0 0; z-index: 0; }
@@ -587,7 +581,6 @@ p, li, dd { text-wrap: pretty; }
   .hud > div { flex: 1 1 40%; }
   .hud > div:nth-child(3) { padding-left: 0; border-left: 0; }
   .hud dd { font-size: 22px; }
-  .name-list { grid-template-columns: 1fr 1fr; }
   .figures { grid-template-columns: 1fr 1fr; }
   .road, .steps, .mile { grid-template-columns: 1fr; }
   .specs { grid-template-columns: 1fr; }
