@@ -36,7 +36,7 @@ ENTRIES = [
     ("v1", "V1 · Winch", "tested", "Weight-testing the winch", "A load on the line, with the winch run from the RC transmitter.", "log-winch-test", "", "media/v1-winch-test.mp4"),
     ("v1", "V1 · Propulsion", "failed", "Jet drive", "An early jet-propulsion experiment. A dead end, but a useful one.", "log-jet", "Line drawing of an early jet-propulsion unit"),
     ("v1", "V1 · London", "tested", "Water test at St Katharine Docks", "Navigated to GPS waypoints on its own, with a radio link of about 1 km.", "log-field", "V1 at the edge of St Katharine Docks"),
-    ("v1", "V1 · Stand", "designed", "Sketching V1's stand", "A base and two cradles to hold the boat, winch and all.", "log-stand-sketch", "Sketch of V1 resting on a stand with a curved cradle and two triangular supports"),
+    ("v1", "V1 · Stand", "designed", "Sketching the display stand", "A stand to show V1 at the Creators' Showcase and in our class presentation.", "log-stand-sketch", "Sketch of the display stand for V1: a base with a curved cradle and two triangular supports"),
     ("v1", "V1 · NU London", "shown", "Creators' Showcase", "Shown at the inaugural Creators' Showcase, Northeastern University London.", "log-showcase", "Visitors gathered around V1 at the Creators' Showcase"),
     ("v1", "V1 · NU London", "shown", "Demoing V1", "Talking visitors through the boat and its radio controls.", "log-demo", "Talking visitors through V1 at the showcase, with a laptop and the RC transmitter on the table"),
     ("v2", "V2 · Summer 2026", "designed", "Hull CAD", "Hull geometry refined for stability and flow.", "log-v2-cad", "CAD model of the V2 twin hulls"),
