@@ -696,13 +696,12 @@ p, li, dd { text-wrap: pretty; }
 .workshop figcaption { margin-top: 14px; }
 @media (max-width: 680px) { .workshop img { aspect-ratio: 4 / 3; } }
 
-/* Page-head photos: a rounded frame with the photo's own proportions (--ar on the header), so nothing is cut off */
-.page-head { min-height: calc(var(--nav-h) + 64px + min(36vw, 520px) / var(--ar, 1.5) + 64px); }
-.page-head .bg { top: calc(50% + var(--nav-h) / 2); bottom: auto; translate: 0 -50%; width: min(36vw, 520px); height: auto; aspect-ratio: var(--ar, 1.5);
-  border: 6px solid var(--white); border-radius: 26px; }
+/* Page-head photos: the organic blob, sized to the photo's own proportions (--ar on the header) so the picture fits it */
+.page-head { min-height: calc(var(--nav-h) + 56px + min(38vw, 560px) / var(--ar, 1.5) + 56px); }
+.page-head .bg { top: calc(50% + var(--nav-h) / 2); bottom: auto; translate: 0 -50%; width: min(38vw, 560px); height: auto; aspect-ratio: var(--ar, 1.5); }
 .page-head .subnav { max-width: min(640px, 56%); }
 @media (max-width: 1020px) {
   .page-head { min-height: 0; }
-  .page-head .bg { position: relative; top: auto; translate: none; width: min(calc(100% - 2 * var(--gutter)), 560px); height: auto; aspect-ratio: var(--ar, 1.5); border-radius: 22px; }
+  .page-head .bg { position: relative; top: auto; translate: none; width: min(calc(100% - 2 * var(--gutter)), 600px); height: auto; aspect-ratio: var(--ar, 1.5); }
   .page-head .subnav { max-width: none; }
 }
