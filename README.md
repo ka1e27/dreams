@@ -16,4 +16,5 @@ Live site: https://ka1e27.github.io/dreams/
 - **Build log:** `build-log.html` is generated. Add or edit entries in `tools/gen_build_log.py`, then run `python tools/gen_build_log.py`.
 - **Board callouts:** edit `media/v3-carrier-callouts.json` (or the wording overrides in `tools/gen_callouts.py`), then run `python tools/gen_callouts.py`.
 - **Images:** `tools/build_images.py` regenerates `img/` from the high-res originals on the build machine.
+- **After editing `styles.css` or `site.js`:** run `python tools/stamp.py`. It versions their URLs in every page so browsers fetch the new files right after a deploy.
 - Pushing to `main` redeploys GitHub Pages.
