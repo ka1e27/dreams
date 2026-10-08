@@ -101,6 +101,8 @@ def contain(im, ratio, bg, pad=0.06):
 docks = load(PORT / "D.R.E.A.M.S v1 with lake background.jpg")
 emit("hero-docks", docks.crop((0, 950, 4284, 3627)), [2400, 1600, 1000], q=78)
 emit("docks-portrait", docks.crop((575, 1000, 2975, 4000)), [1200, 800, 600], q=80)
+# Home hero blob: a wider 4:5 window so the whole boat sits inside the blob's curve
+emit("hero-blob", docks.crop((130, 682, 3430, 4807)), [1200, 800], q=74)
 
 # --- Build log, 4:5 cards (photos cover-cropped; drawings contained) ---
 LOG = {
