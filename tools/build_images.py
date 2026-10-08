@@ -1,11 +1,13 @@
 """Build the site's optimized images into img/ (WebP + JPEG, EXIF-safe).
 
-Run from anywhere:  python -I tools/build_images.py
+Run from anywhere:  python -I tools/build_images.py            (everything)
+                    python -I tools/build_images.py log-dorm   (only the named slugs)
 Sources: the portfolio's high-res originals where they exist, else the copies in images/.
 Every output is named <slug>-<width>.<ext>; pages reference them with <picture>/srcset.
 """
+import sys
 from pathlib import Path
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
 SITE = Path(__file__).resolve().parents[1]
 PORT = Path(r"C:\Users\kyleg\Projects\Kyle_Tran_Portfolio_Website\images")
@@ -13,6 +15,7 @@ OLD = SITE / "images"
 OUT = SITE / "img"
 OUT.mkdir(exist_ok=True)
 DARK = (10, 26, 39)  # --deep-2, behind drawings that need padding
+ONLY = set(sys.argv[1:])  # optional slugs to rebuild
 
 
 def load(p):
@@ -33,6 +36,8 @@ def flatten(im, bg=(255, 255, 255)):
 
 
 def emit(slug, im, widths, alpha=False, q=80):
+    if ONLY and slug not in ONLY:
+        return
     sizes = []
     for w in widths:
         w = min(w, im.width)
@@ -59,6 +64,23 @@ def cover(im, ratio, center=(0.5, 0.5)):
     nh = round(w / ratio)
     y = round((h - nh) * center[1])
     return im.crop((0, y, w, y + nh))
+
+
+def trim(im, thresh=230, margin=24):
+    """Crop a drawing on white paper to its ink."""
+    box = im.convert("L").point(lambda v: 255 if v < thresh else 0).getbbox()
+    x0, y0, x1, y1 = box
+    return im.crop((max(0, x0 - margin), max(0, y0 - margin), min(im.width, x1 + margin), min(im.height, y1 + margin)))
+
+
+def fit_blur(im, ratio):
+    """Whole frame, centered on a blurred, darkened copy of itself (for tall video frames in 4:5 cards)."""
+    w, h = im.size
+    cw = round(h * ratio)
+    bg = cover(im, ratio).resize((cw, h), Image.LANCZOS).filter(ImageFilter.GaussianBlur(22))
+    bg = ImageEnhance.Brightness(bg).enhance(0.5)
+    bg.paste(im, ((cw - w) // 2, 0))
+    return bg
 
 
 def contain(im, ratio, bg, pad=0.06):
@@ -103,11 +125,26 @@ LOG = {
     "log-v3-carrier": (OLD / "v3-carrier.png", "dark"),
     "log-v3-pod": (OLD / "v3-pod.png", "dark"),
     "log-arm": (PORT / "web" / "arm-gearbox-assembly.png", "white"),
+    # Added 2026-10-08 from Kyle's photos and the winch test video (cover crops take an offset, 0-1)
+    "log-deck-figure": (OLD / "dreams-v1-deck-figure.jpg", "cover", (0.5, 0.5), (330, 195, 1330, 1445)),
+    "log-hull-coat": (OLD / "dreams-v1-hull-coat.jpg", "cover", (0.5, 0.3)),
+    "log-dorm": (OLD / "dreams-v1-room-workshop.jpg", "cover", (0.3, 0.5)),
+    "log-winch-test": (OLD / "dreams-v1-winch-test-frame.png", "fitblur"),
+    "log-stand-sketch": (OLD / "dreams-v1-stand-sketch.jpg", "sketch"),
+    "log-demo": (OLD / "dreams-v1-demo.jpg", "cover", (0.55, 0.5)),
 }
-for slug, (src, mode) in LOG.items():
+for slug, (src, mode, *opt) in LOG.items():
+    if ONLY and slug not in ONLY:
+        continue
     im = load(src)
+    if len(opt) > 1:
+        im = im.crop(opt[1])  # pre-crop box (x0, y0, x1, y1)
     if mode == "cover":
-        im = cover(flatten(im), 4 / 5)
+        im = cover(flatten(im), 4 / 5, opt[0] if opt else (0.5, 0.5))
+    elif mode == "fitblur":
+        im = fit_blur(flatten(im), 4 / 5)
+    elif mode == "sketch":
+        im = contain(trim(flatten(im)), 4 / 5, "white")
     else:
         im = contain(im, 4 / 5, "white" if mode == "white" else DARK)
     emit(slug, im, [720, 480])
@@ -122,4 +159,8 @@ emit("arm-gearbox", flatten(load(PORT / "web" / "arm-gearbox-assembly.png")), [1
 emit("arm-disc", flatten(load(PORT / "web" / "arm-cycloidal-disc.png")), [900, 600])
 emit("omar", flatten(load(OLD / "dreams-omar.jpg")), [1200, 800])
 emit("kyle-tran", cover(flatten(load(OLD / "team" / "kyle-tran.jpg")), 4 / 5, (0.5, 0.2)), [900, 600])
-emit("matthew-hong", flatten(load(OLD / "team" / "matthew-hong.jpg")), [560])
+emit("matthew-hong", cover(flatten(load(OLD / "team" / "matthew-hong-headshot.jpg")), 4 / 5, (0.5, 0.15)), [900, 600])
+
+# Wide versions of the 2026-10-08 photos (team page workshop, contact page header)
+emit("room-workshop", flatten(load(OLD / "dreams-v1-room-workshop.jpg")), [1600, 1000], q=78)
+emit("showcase-demo", flatten(load(OLD / "dreams-v1-demo.jpg")), [1200, 800], q=80)

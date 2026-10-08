@@ -15,7 +15,7 @@ from typo import tidy  # noqa: E402
 # Available widths per image slug (from tools/build_images.py output)
 WIDTHS = {
     "log-cad-pod": (480, 543), "log-pod-print": (363,), "log-assembly": (340,), "log-winch": (380,),
-    "log-jet": (480, 544), "log-showcase": (480, 682), "log-pcb-r1": (480, 559),
+    "log-jet": (480, 544), "log-showcase": (480, 682), "log-winch-test": (480, 512), "log-demo": (480, 666), "log-pcb-r1": (480, 559),
 }
 LABEL = {"designed": "Designed", "built": "Built", "tested": "Tested", "failed": "Failed", "shown": "Shown",
          "incad": "In CAD", "planned": "Planned", "dev": "In development"}
@@ -28,11 +28,17 @@ ENTRIES = [
     ("v1", "V1 · SolidWorks", "designed", "Sensor pod in CAD", "A sealed pod for the sensors, lowered on a tether.", "log-cad-pod", "CAD model of the V1 sensor pod"),
     ("v1", "V1 · Sensor pod", "built", "Printing the sensor pod", "3D-printed and wired.", "log-pod-print", "The 3D-printed V1 sensor pod with electronics inside"),
     ("v1", "V1 · Assembly", "built", "Wiring and assembly", "Putting the boat together outside.", "log-assembly", "Assembling and wiring V1 outdoors"),
+    ("v1", "V1 · Deck", "built", "Rocky on deck", "Our 3D print of the figure Rocky gives Grace in Project Hail Mary. Printed for fun.", "log-deck-figure", "A white 3D-printed Rocky figure from Project Hail Mary sitting on V1's clear acrylic deck"),
     ("v1", "V1 · Hull", "built", "Epoxy-sealing the printed hull", "PLA hulls sealed with marine epoxy.", "log-epoxy", "Brushing marine epoxy onto a printed hull"),
+    ("v1", "V1 · Hull", "built", "The sealed hull", "Glossy after its epoxy coat, black at the bow and red behind.", "log-hull-coat", "A printed V1 hull section held up after its epoxy coat, black at the bow and red behind"),
+    ("v1", "V1 · London", "built", "A workshop in our room", "A hull section cures over a drop sheet while the build takes over the desk.", "log-dorm", "Our room in London set up as a workshop, with a hull section hanging over a taped-down drop sheet"),
     ("v1", "V1 · Winch", "built", "The sensor-deployment winch", "Lowers the pod to the bottom to sample.", "log-winch", "The V1 winch that lowers the sensor pod"),
+    ("v1", "V1 · Winch", "tested", "Weight-testing the winch", "A load on the line, with the winch run from the RC transmitter.", "log-winch-test", "", "media/v1-winch-test.mp4"),
     ("v1", "V1 · Propulsion", "failed", "Jet drive", "An early jet-propulsion experiment. A dead end, but a useful one.", "log-jet", "Line drawing of an early jet-propulsion unit"),
     ("v1", "V1 · London", "tested", "Water test at St Katharine Docks", "Navigated to GPS waypoints on its own, with a radio link of about 1 km.", "log-field", "V1 at the edge of St Katharine Docks"),
+    ("v1", "V1 · Stand", "designed", "Sketching V1's stand", "A base and two cradles to hold the boat, winch and all.", "log-stand-sketch", "Sketch of V1 resting on a stand with a curved cradle and two triangular supports"),
     ("v1", "V1 · NU London", "shown", "Creators' Showcase", "Shown at the inaugural Creators' Showcase, Northeastern University London.", "log-showcase", "Visitors gathered around V1 at the Creators' Showcase"),
+    ("v1", "V1 · NU London", "shown", "Demoing V1", "Talking visitors through the boat and its radio controls.", "log-demo", "Talking visitors through V1 at the showcase, with a laptop and the RC transmitter on the table"),
     ("v2", "V2 · Summer 2026", "designed", "Hull CAD", "Hull geometry refined for stability and flow.", "log-v2-cad", "CAD model of the V2 twin hulls"),
     ("v2", "V2 · Hull", "built", "First printed hull section", "The V2 hull, printed in sections.", "log-hull-print", "A printed section of the V2 hull"),
     ("v2", "V2 · Hull", "built", "Fiberglass over the print", "Wetted out with epoxy for stiffness and water resistance.", "log-fiberglass", "Fiberglass cloth wetted out with epoxy over a printed hull"),
@@ -60,10 +66,19 @@ def picture(slug, alt):
             f'<img src="img/{slug}-{ws[0]}.jpg" alt="{alt}" width="{ws[0]}" height="{h(ws[0])}" loading="lazy"></picture>')
 
 
+PLAY = '<span class="play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z"/></svg></span>'
+
+
 def card(e):
-    v, when, s, title, desc, slug, alt = e
-    ph = (f'<div class="ph">{picture(slug, alt)}</div>' if slug
-          else f'<div class="ph blank" aria-hidden="true"><span>{alt}</span></div>')
+    """An entry is (version, when, status, title, description, image slug or None, alt[, video path])."""
+    v, when, s, title, desc, slug, alt, *video = e
+    if video:  # poster button; site.js plays the video over it
+        ph = (f'<div class="ph" data-video="{video[0]}" data-title="{title}">'
+              f'<button type="button" aria-label="Play video: {title}">{picture(slug, "")}{PLAY}</button></div>')
+    elif slug:
+        ph = f'<div class="ph">{picture(slug, alt)}</div>'
+    else:
+        ph = f'<div class="ph blank" aria-hidden="true"><span>{alt}</span></div>'
     cls = "log-card failed" if s == "failed" else "log-card"
     return (f'        <article class="{cls}" data-v="{v}" data-s="{GROUP.get(s, s)}">{ph}<div class="meta">'
             f'<div class="row"><span>{when}</span><span class="chip {s}">{LABEL[s]}</span></div>'

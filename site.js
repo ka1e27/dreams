@@ -135,6 +135,24 @@
     f.focus();
   }));
 
+  /* ── Our own videos: the poster stays as a backdrop and the video plays over it ── */
+  document.querySelectorAll('[data-video] > button').forEach(btn => btn.addEventListener('click', () => {
+    const box = btn.parentElement;
+    const v = document.createElement('video');
+    v.src = box.dataset.video;
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = box.clientWidth >= 240;  // small tiles: phones play it full screen
+    v.setAttribute('aria-label', box.dataset.title || 'Video');
+    box.classList.add('playing');
+    btn.tabIndex = -1;
+    btn.setAttribute('aria-hidden', 'true');
+    box.appendChild(v);
+    const started = v.play();
+    if (started) started.catch(() => {});
+    v.focus();
+  }));
+
   /* ── Build-log strip: buttons + drag to scroll ───────────────────────── */
   document.querySelectorAll('[data-strip]').forEach(strip => {
     const id = strip.id;

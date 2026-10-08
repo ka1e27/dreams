@@ -678,3 +678,20 @@ p, li, dd { text-wrap: pretty; }
   .yt .cap span:last-child { display: none; }
   .yt .play { width: 56px; height: 56px; margin: -28px 0 0 -28px; }
 }
+
+/* Our own videos (data-video): a poster button, then a <video> on top of it */
+[data-video] video { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: contain; }
+[data-video].playing .play, [data-video].playing .cap { display: none; }
+[data-video].playing > button { pointer-events: none; }
+.ph[data-video] > button { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; background: var(--ink); }
+.ph[data-video] img { width: 100%; height: 100%; object-fit: cover; }
+.ph[data-video] .play { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: var(--coral); display: grid; place-items: center; box-shadow: 0 0 0 8px rgba(255,255,255,.35), 0 10px 24px rgba(13,46,68,.35); transition: transform .2s; }
+.ph[data-video] > button:hover .play { transform: scale(1.06); }
+.ph[data-video] .play svg { width: 22px; height: 22px; margin-left: 3px; fill: #fff; }
+.ph[data-video] > button:focus-visible { outline: 3px solid #fff; outline-offset: -6px; }
+.yt.short { aspect-ratio: 4 / 5; }
+/* Team page: the room we built V1 in */
+.workshop { margin: 36px 0 0; }
+.workshop img { width: 100%; height: auto; aspect-ratio: 2 / 1; object-fit: cover; object-position: 50% 58%; border-radius: var(--r); box-shadow: var(--shadow); }
+.workshop figcaption { margin-top: 14px; }
+@media (max-width: 680px) { .workshop img { aspect-ratio: 4 / 3; } }

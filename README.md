@@ -9,7 +9,7 @@ Live site: https://ka1e27.github.io/dreams/
 - `styles.css`: the whole design system (light "Fresh Water + Blueprint" theme)
 - `site.js`: the shared nav, contact band and footer, plus small behaviours. **Edit `NAV` and `CONTACTS` here** and every page updates.
 - `img/`: optimized images (WebP + JPEG), made by `tools/build_images.py`
-- `media/`: the interactive 3D board (`v3-carrier.glb`) and the annotated top-view render
+- `media/`: the interactive 3D board (`v3-carrier.glb`), the annotated top-view render and the V1 winch test video
 - `demo/v2-dashboard/`: the V2 command center, running on simulated data
 
 ## Editing
