@@ -178,9 +178,6 @@ p, li, dd { text-wrap: pretty; }
 .badge .ring { transform-origin: 50% 50%; }
 .place { position: absolute; right: 40px; bottom: 26px; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px; background: var(--white); box-shadow: 0 10px 24px rgba(13, 46, 68, .14); font: 600 14.5px var(--body); color: var(--ink); }
 .place::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); }
-.detail { position: absolute; width: 112px; height: 112px; border: 3px solid var(--red-pen); border-radius: 50%; transform: rotate(-6deg); pointer-events: none; }
-.detail-label { position: absolute; padding: 5px 10px; background: var(--white); border: 1.5px solid var(--red-pen); border-radius: 8px; font: 600 12.5px var(--mono); letter-spacing: .04em; color: var(--signal); white-space: nowrap; box-shadow: 0 6px 14px rgba(13, 46, 68, .1); }
-.leader { position: absolute; overflow: visible; pointer-events: none; }
 
 .page-head { position: relative; isolation: isolate; overflow: hidden; padding: calc(var(--nav-h) + 72px) 0 72px; border-bottom: 1px solid var(--line); }
 .page-head::before { content: ""; position: absolute; inset: 0; z-index: -2; background: url(img/contours.svg) 70% 40% / cover no-repeat; opacity: .8; pointer-events: none; }
@@ -576,7 +573,6 @@ p, li, dd { text-wrap: pretty; }
   .bubble.a { width: 104px; height: 104px; top: 26px; }
   .bubble.b { width: 86px; height: 86px; left: 6px; bottom: 30px; }
   .badge { width: 112px; height: 112px; }
-  .detail, .detail-label, .leader { display: none; }
   .place { right: 14px; bottom: 12px; font-size: 13.5px; }
   .hud > div { flex: 1 1 40%; }
   .hud > div:nth-child(3) { padding-left: 0; border-left: 0; }
