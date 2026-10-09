@@ -28,7 +28,7 @@ ENTRIES = [
     ("v1", "V1 · SolidWorks", "designed", "Sensor pod in CAD", "A sealed pod for the sensors, lowered on a tether.", "log-cad-pod", "CAD model of the V1 sensor pod"),
     ("v1", "V1 · Sensor pod", "built", "Printing the sensor pod", "3D-printed and wired.", "log-pod-print", "The 3D-printed V1 sensor pod with electronics inside"),
     ("v1", "V1 · Assembly", "built", "Wiring and assembly", "Putting the boat together outside.", "log-assembly", "Assembling and wiring V1 outdoors"),
-    ("v1", "V1 · Deck", "built", "Rocky on deck", "Our 3D print of the figure Rocky gives Grace in Project Hail Mary. Printed for fun.", "log-deck-figure", "A white 3D-printed Rocky figure from Project Hail Mary sitting on V1's clear acrylic deck"),
+    ("v1", "V1 · Deck", "built", "Grace on deck", "Our 3D print of the Grace figure that Rocky makes in Project Hail Mary. Printed for fun.", "log-deck-figure", "A white 3D-printed figure of Grace from Project Hail Mary sitting on V1's clear acrylic deck"),
     ("v1", "V1 · Hull", "built", "Epoxy-sealing the printed hull", "PLA hulls sealed with marine epoxy.", "log-epoxy", "Brushing marine epoxy onto a printed hull"),
     ("v1", "V1 · Hull", "built", "The sealed hull", "Glossy after its epoxy coat, black at the bow and red behind.", "log-hull-coat", "A printed V1 hull section held up after its epoxy coat, black at the bow and red behind"),
     ("v1", "V1 · London", "built", "A workshop in our room", "A hull section cures over a drop sheet while the build takes over the desk.", "log-dorm", "Our room in London set up as a workshop, with a hull section hanging over a taped-down drop sheet"),
