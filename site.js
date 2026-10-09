@@ -192,12 +192,16 @@
   if (grid) {
     const cards = [...grid.querySelectorAll('.log-card')];
     const count = document.querySelector('[data-log-count]');
-    const state = { v: 'all', s: 'all' };
+    const more = document.querySelector('[data-log-more]');
+    const LIMIT = 10;  // the rest open with "Show all"
+    const state = { v: 'all', s: 'all', all: false };
     const apply = () => {
       let n = 0;
-      cards.forEach(c => { const show = (state.v === 'all' || c.dataset.v === state.v) && (state.s === 'all' || c.dataset.s === state.s); c.hidden = !show; if (show) n++; });
+      cards.forEach(c => { const match = (state.v === 'all' || c.dataset.v === state.v) && (state.s === 'all' || c.dataset.s === state.s); c.hidden = !match || (!state.all && n >= LIMIT); if (match) n++; });
       if (count) count.textContent = `${n} of ${cards.length} entries`;
+      if (more) { more.hidden = n <= LIMIT; more.textContent = state.all ? 'Show fewer' : `Show all ${n} entries`; more.setAttribute('aria-expanded', state.all); }
     };
+    if (more) more.addEventListener('click', () => { state.all = !state.all; apply(); if (!state.all) grid.scrollIntoView({ block: 'start' }); });
     document.querySelectorAll('[data-filter]').forEach(btn => btn.addEventListener('click', () => {
       const [k, v] = btn.dataset.filter.split(':');
       state[k] = v;
