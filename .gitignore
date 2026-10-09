@@ -2,6 +2,5 @@
 _directions/
 media/hero-v1-*
 images/*
-!images/logo.svg
 __pycache__/
 *.pyc

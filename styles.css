@@ -125,7 +125,8 @@ p, li, dd { text-wrap: pretty; }
 .nav.solid, .nav.open { background: rgba(255, 255, 255, .94); -webkit-backdrop-filter: saturate(160%) blur(12px); backdrop-filter: saturate(160%) blur(12px); box-shadow: 0 1px 0 var(--line), 0 10px 30px rgba(13, 46, 68, .06); }
 .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 100%; }
 .brand { display: inline-flex; align-items: center; gap: 12px; font: 800 20px var(--display); letter-spacing: .02em; color: var(--ink); text-decoration: none; }
-.brand img { width: 34px; height: 34px; }
+.brand img { width: auto; height: 44px; }  /* wordmark from tools/make_logo.py */
+.footer .brand img { height: 48px; }
 .nav-list { display: flex; align-items: center; gap: 28px; }
 .nav-list > li > a:not(.btn), .dd-btn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 0; border: 0; background: none; cursor: pointer;
   font: 600 16px var(--body); color: var(--ink-2); text-decoration: none; white-space: nowrap; }
@@ -565,6 +566,7 @@ p, li, dd { text-wrap: pretty; }
 }
 @media (max-width: 680px) {
   :root { --sec: 76px; --gutter: 18px; --nav-h: 68px; }
+  .brand img { height: 38px; }
   body { font-size: 17px; }
   .lead { font-size: 18px; }
   .hero { padding-top: calc(var(--nav-h) + 20px); }

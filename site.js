@@ -50,7 +50,7 @@
       </li>`;
     }).join('');
     header.innerHTML = `<div class="wrap">
-      <a class="brand" href="index.html" aria-label="D.R.E.A.M.S home"><img src="images/logo.svg" alt="" width="30" height="30"><span>D.R.E.A.M.S</span></a>
+      <a class="brand" href="index.html" aria-label="D.R.E.A.M.S home"><img src="img/logo.svg" alt="" width="118" height="44"></a>
       <button class="burger" type="button" aria-expanded="false" aria-controls="nav-list" aria-label="Open menu"><span></span></button>
       <nav aria-label="Primary"><ul class="nav-list" id="nav-list">${items}<li class="nav-cta"><a class="btn btn-signal" href="contact.html"${page === 'contact' ? ' aria-current="page"' : ''}>Contact →</a></li></ul></nav>
     </div>`;
@@ -93,7 +93,7 @@
     </div></section>`;
     foot.outerHTML = `${cta}<footer class="footer"><div class="wrap">
       <div class="foot-grid">
-        <div class="foot-about"><a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="30" height="30"><span>D.R.E.A.M.S</span></a>
+        <div class="foot-about"><a class="brand" href="index.html"><img src="img/logo-light.svg" alt="D.R.E.A.M.S" width="129" height="48"></a>
           <p>Data Recovery for Environmental And Marine Surveillance. A modular autonomous survey boat, designed and built by students at Northeastern University.</p></div>
         <div><h2>Explore</h2><ul>
           <li><a href="index.html">Home</a></li><li><a href="boat.html">The Boat</a></li><li><a href="build-log.html">Build Log</a></li>
