@@ -24,4 +24,4 @@ The Updates page (`updates.html`) shows `UPDATES.md`, so anyone on the team can 
 - **Images:** `tools/build_images.py` regenerates `img/` from the high-res originals on the build machine.
 - **Logo:** `tools/make_logo.py` builds `img/logo*.svg` and `img/favicon.svg` from Kyle's drawing (redrawn as strokes). The 32 px and 180 px PNG icons are renders of `img/favicon.svg`.
 - **After editing `styles.css` or `site.js`:** run `python tools/stamp.py`. It versions their URLs in every page so browsers fetch the new files right after a deploy.
-- Pushing to `main` redeploys GitHub Pages.
+- Pushing changes under `website/` to `main` redeploys GitHub Pages (the "Deploy website" Actions workflow). The tools can be run from anywhere; they find `website/` themselves.

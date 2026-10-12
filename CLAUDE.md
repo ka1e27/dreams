@@ -166,20 +166,19 @@ Branching, commit style and pre-push checks are in [`CONTRIBUTING.md`](CONTRIBUT
 
 ## Weekly updates: document your work
 
-The team posts weekly updates on the website: https://ka1e27.github.io/dreams/updates.html. They live in `UPDATES.md` in the website repo, **ka1e27/dreams**, which is cloned locally at `C:\Users\kyleg\Projects\dreams-website`. The page reads that file live.
+The team posts weekly updates on the website: https://ka1e27.github.io/dreams/updates.html. They live in `website/UPDATES.md` in this repo, and the page reads that file live.
 
-After meaningful work here (PCBs, firmware, CAD, tests), add to it before finishing:
+After meaningful work here (PCBs, firmware, CAD, tests, the site), add to it before finishing:
 
-1. `git pull` in the website repo.
-2. Under the current week's `## Week of <Mon> <day>, <year>` heading (the Monday; add it at the top if missing), add one short bullet per change: `- **Name:** what was built, tested, decided or broken.`
-3. Write for the public: true and specific. Follow "Keep damaging information out of the repo" below. Don't say who wrote the code or mention AI tools.
-4. Only add, never rewrite teammates' bullets. Commit and push the website repo's `main`.
+1. Under the current week's `## Week of <Mon> <day>, <year>` heading in `website/UPDATES.md` (the Monday; add it at the top if missing), add one short bullet per change: `- **Name:** what was built, tested, decided or broken.`
+2. Write for the public: true and specific. Follow "Keep damaging information out of the repo" below. Don't say who wrote the code or mention AI tools.
+3. Only add, never rewrite teammates' bullets. Commit it with your other changes; pushing `main` publishes it.
 
-The website repo's CLAUDE.md has the full format.
+`website/CLAUDE.md` has the full format and the site's own notes.
 
 ## Keep damaging information out of the repo
 
-This repo may be made public, and git keeps everything: a file deleted later is still in the history and in old pull requests. Treat every commit as public. Before committing, read the diff and keep all of the following out of code, docs, journals, commit messages and PR text:
+This repo is public, and git keeps everything: a file deleted later is still in the history and in old pull requests. Treat every commit as public. Before committing, read the diff and keep all of the following out of code, docs, journals, commit messages and PR text:
 
 - **Secrets:** API keys, tokens, passwords, private or SSH keys, Wi-Fi credentials, Tailscale keys, hostnames or IPs, and real server URLs with credentials. Use placeholders in committed config, and put real values in `.env` (git-ignored) or on the device.
 - **Personal info:** phone numbers, home or shipping addresses, personal emails other than the team's public Northeastern ones, student IDs.

@@ -191,7 +191,7 @@
   /* ── Weekly updates: rendered live from UPDATES.md (the team edits it on GitHub) ── */
   const upd = document.querySelector('[data-updates]');
   if (upd) {
-    const GH = 'https://github.com/ka1e27/dreams/blob/main/UPDATES.md';
+    const GH = 'https://github.com/ka1e27/dreams/blob/main/website/UPDATES.md';
     const fail = () => { upd.innerHTML = `<p class="lead">The updates didn't load. Read them <a href="${GH}">on GitHub</a>.</p>`; };
     fetch(upd.dataset.src, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(md => {
       if (!window.marked) return fail();
