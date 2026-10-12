@@ -3,6 +3,8 @@
 Autonomous survey catamaran: CV-based obstacle avoidance, environmental sensing, and cellular
 telemetry to a web dashboard.
 
+**Website:** https://ka1e27.github.io/dreams/ (the boat, the build log and weekly updates).
+
 ## Status: V3, starting from scratch
 
 V3 is a ground-up rebuild on new hardware. The carrier PCB is designed and fully routed. **None of

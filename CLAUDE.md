@@ -164,6 +164,19 @@ and locked: the +5V feed round the socket's left end (1.3 mm, both layers), the 
 
 Branching, commit style and pre-push checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## Weekly updates: document your work
+
+The team posts weekly updates on the website: https://ka1e27.github.io/dreams/updates.html. They live in `UPDATES.md` in the website repo, **ka1e27/dreams**, which is cloned locally at `C:\Users\kyleg\Projects\dreams-website`. The page reads that file live.
+
+After meaningful work here (PCBs, firmware, CAD, tests), add to it before finishing:
+
+1. `git pull` in the website repo.
+2. Under the current week's `## Week of <Mon> <day>, <year>` heading (the Monday; add it at the top if missing), add one short bullet per change: `- **Name:** what was built, tested, decided or broken.`
+3. Write for the public: true and specific. Follow "Keep damaging information out of the repo" below. Don't say who wrote the code or mention AI tools.
+4. Only add, never rewrite teammates' bullets. Commit and push the website repo's `main`.
+
+The website repo's CLAUDE.md has the full format.
+
 ## Keep damaging information out of the repo
 
 This repo may be made public, and git keeps everything: a file deleted later is still in the history and in old pull requests. Treat every commit as public. Before committing, read the diff and keep all of the following out of code, docs, journals, commit messages and PR text:
