@@ -701,6 +701,13 @@ p, li, dd { text-wrap: pretty; }
   .page-head .bg { position: relative; top: auto; translate: none; width: min(calc(100% - 2 * var(--gutter)), 600px); height: auto; aspect-ratio: var(--ar, 1.5); }
   .page-head .subnav { max-width: none; }
 }
+/* A portrait head photo (the Updates page): a narrower blob, so the header doesn't get too tall */
+.page-head.portrait { min-height: calc(var(--nav-h) + 56px + min(30vw, 420px) / var(--ar, 1.5) + 56px); }
+.page-head.portrait .bg { width: min(30vw, 420px); }
+@media (max-width: 1020px) {
+  .page-head.portrait { min-height: 0; }
+  .page-head.portrait .bg { width: min(calc(100% - 2 * var(--gutter)), 360px); }
+}
 /* hero stats: two by two while the hero is still two columns but narrow */
 @media (min-width: 1021px) and (max-width: 1180px) {
   .hud > div { flex: 1 1 40%; }

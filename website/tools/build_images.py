@@ -111,7 +111,7 @@ LOG = {
     "log-cad-bridge": (PORT / "picture of cad of catamaran bridge and winch on dreams v1.png", "white"),
     "log-cad-pod": (PORT / "picture of cad of sensor pod for dreams v1.png", "white"),
     "log-pod-print": (PORT / "dreams v1 sensor pod.png", "cover"),
-    "log-assembly": (PORT / "working on dreams v1 outside.png", "cover"),
+    "log-assembly": (OLD / "dreams-v1-assembly-full.jpg", "cover"),        # Kyle's full-size original (the portfolio copy is 340 px)
     "log-epoxy": (PORT / "Epoxying D.R.E.A.M.S v1.jpg", "cover"),
     "log-winch": (PORT / "dreams v1 winch.png", "cover"),
     "log-jet": (PORT / "attempts at jet propulsion on dreams v1.png", "white"),
@@ -169,6 +169,9 @@ emit("showcase-demo", flatten(load(OLD / "dreams-v1-demo.jpg")), [1200, 800], q=
 # Build-log page header: V1 with the plush husky riding in a hull
 husky = flatten(load(PORT / "D.R.E.A.M.S with husky.jpg"))
 emit("husky-boat", husky.crop((0, round(husky.height * 0.17), husky.width, husky.height)), [1400, 900], q=78)  # drop the wall and socket
+
+# Updates page header: V1 being put together outside (Kyle's original, IMG_5312.HEIC, converted to JPEG without its metadata)
+emit("v1-assembly", load(OLD / "dreams-v1-assembly-full.jpg"), [1000, 700], q=70)  # grass is busy: smaller and lower q keep it near the other headers
 
 # --- Weekly-update photos: sources in images/updates/ (at least 1600 px wide), shown on week.html.
 #     updates/<week>.md links the -1600.jpg; the gallery uses the -900 copy as its thumbnail.

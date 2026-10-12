@@ -14,7 +14,7 @@ from typo import tidy  # noqa: E402
 
 # Available widths per image slug (from tools/build_images.py output)
 WIDTHS = {
-    "log-cad-pod": (480, 543), "log-pod-print": (363,), "log-assembly": (340,), "log-winch": (380,),
+    "log-cad-pod": (480, 543), "log-pod-print": (363,), "log-winch": (380,),
     "log-jet": (480, 544), "log-showcase": (480, 682), "log-winch-test": (480, 512), "log-demo": (480, 666), "log-pcb-r1": (480, 559),
 }
 LABEL = {"designed": "Designed", "built": "Built", "tested": "Tested", "failed": "Failed", "shown": "Shown",
