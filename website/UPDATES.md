@@ -16,11 +16,11 @@ HOW TO ADD AN UPDATE (anyone on the team, or a Claude Code session)
 
 ## Week of Oct 5, 2026
 
-- **Kyle:** Launched the D.R.E.A.M.S website, with the build log, the V3 board in 3D and the V2 command-center demo.
-- **Nolan:** Drew the new D.R.E.A.M.S logo: the word is the hull, and the D is the bow.
+- **Kyle:** Launched the D.R.E.A.M.S website with a build log.
+- **Nolan:** Drew the new D.R.E.A.M.S logo.
 - **Kyle:** Nolan Ting and Caleb Kong joined the team.
-- **Kyle:** Sized V3's drive. A 3 ft catamaran needs about 200–300 W per side at survey speed, so we're planning belt-driven 5065-size motors mounted on deck.
-- **Kyle:** Started reaching out to sponsors for parts, PCB fabrication and machining.
+- **Kyle:** Sized V3's drive at about 200–300 W per side, with belt-driven motors on deck.
+- **Kyle:** Started reaching out to sponsors.
 
 ## Week of Sep 28, 2026
 
