@@ -9,6 +9,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 |---|---|
 | `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
 | `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
+| `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Uses the carrier's `lib/`; notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
 
@@ -70,6 +71,30 @@ These are still open. Ask the user before building on an assumption about any of
   then back low: a probe held at DC corrodes. A dry probe reads near 3.3 V; water pulls it toward
   ground.
 
+## V3.1 starter carrier (interim board)
+
+`Boat_PCB/Boat_PCB_V3_1/` gets the boat moving before the full V3 carrier: the Pi 5 and the
+D36V50F5 stay, and one Raspberry Pi Pico 2 replaces the Teensy. The full V3 is planned around two
+Picos instead of the Teensy (user, 2026-10-10); that redesign hasn't been started. Pin map,
+connectors and bring-up checks are in `docs/v3/V3_1_STARTER_CARRIER.md`. What the firmware has to
+respect:
+
+- **One 10S Li-ion pack (30–42 V) powers everything** through J1. The pack voltage reads on ADC0
+  (GP26) through 100k/7.5k: V_pack = V_adc × 14.33.
+- **The pod gets 15 V from J5, never the pack.** GP19 high switches it off; low (the default) is on.
+- **Pico firmware is C++** (Arduino-Pico or the Pico SDK). CAN runs on the PIO with can2040: RX GP10,
+  TX GP11, through a TJA1051T/3.
+- **RS-485 to the pod:** UART0 (GP0 TX, GP1 RX), DE and ~RE on GP2. Drive GP2 high to transmit.
+- **RC on UART1** (GP8 TX, GP9 RX). For SBUS, invert RX on GP9 in the GPIO block.
+- **GPS on a PIO UART** (GP6 TX, GP7 RX). Its compass shares I²C0 (GP4/GP5) with the SHT41 module on
+  the underside (0x44, 3.3 V only: it has no regulator) and the Qwiic TMP119 (0x48).
+- **Leak probes are excited from GP18**, as on V3: drive it high only while sampling ADC1 (GP27) and
+  ADC2 (GP28).
+- **ESC PWM:** winch on GP16, drive L/R on GP14/GP15. The headers' middle pin is open, so an ESC's
+  BEC can't back-feed the 5 V rail.
+- **The Pi header carries power only**, and the Pi reaches the Pico over USB. Never power the Pi from
+  the board and from its USB-C at the same time.
+
 ## V2 is archived at `v2-final`
 
 The V2 boat is frozen at the tag `v2-final`: RP2040 Picos on MicroPython, the Pi 5 stack (navigation,
@@ -114,6 +139,15 @@ Pod baseline as of 2026-09-26 (rev A, 48 × 63 mm), same commands on
 `Boat_PCB/Pod_PCB_V3/Pod_PCB_V3.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** One per-pad edit:
 C3's GND pad connects solid to the pour, because the neighbouring traces starve its thermal spokes.
 Re-apply it after a footprint update.
+
+V3.1 baseline as of 2026-10-12 (rev A, 98 × 67 mm, 2 layers, 75 footprints, 21 on the underside), same commands on
+`Boat_PCB/Boat_PCB_V3_1/Boat_PCB_V3_1.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** No per-pad
+edits. One board-copy tweak: U1 sits underneath, which leaves its pin-name texts upside down, so they're
+turned to 0° with left/right justification swapped and keep-upright off (keep-upright moves them onto
+the pads). Re-apply it after a footprint update. Three runs of copper are hand-routed
+and locked: the +5V feed round the socket's left end (1.3 mm, both layers), the pack input
+(XT60 → F1 → Q1), and a 0.35 mm GND link from Pico pin 23 round the antenna keep-out to pin 18
+(signals otherwise wall pin 23 in). Keep them if you re-route.
 
 **Python:** ruff config lives in `pyproject.toml`.
 

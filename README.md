@@ -15,10 +15,18 @@ dashboards, the cloud pipeline, and the V2 board with its docs.
 ## Layout
 
 ```
-Boat_PCB/Boat_PCB_V3/   KiCad 10 project: schematic, layout, project-local library
-docs/v3/                design brief, planning record, BOM
-CLAUDE.md               working notes for Claude Code
+Boat_PCB/Boat_PCB_V3/     KiCad 10 project: schematic, layout, project-local library
+Boat_PCB/Pod_PCB_V3/      the pod board (XIAO ESP32-S3 on the winch tether)
+Boat_PCB/Boat_PCB_V3_1/   V3.1 starter carrier: Pi 5 + one Pico 2, an interim board
+docs/v3/                  design brief, planning record, BOM, V3.1 notes
+CLAUDE.md                 working notes for Claude Code
 ```
+
+**V3.1 starter carrier (2026-10-10):** an interim board to get the boat moving before the full V3
+carrier. It keeps the Pi 5 and the 5 V buck, uses one Raspberry Pi Pico 2 instead of the Teensy, and
+runs from one 10S Li-ion pack. It has a CAN chain for the VESCs, RC input, GPS, an on-board SHT41,
+a Qwiic port for the TMP119, hull leak probes, ESC headers and the pod tether, on a 98 × 67 mm 2-layer
+board. See [`docs/v3/V3_1_STARTER_CARRIER.md`](docs/v3/V3_1_STARTER_CARRIER.md).
 
 **Start with [`docs/v3/V3_DESIGN_BRIEF.md`](docs/v3/V3_DESIGN_BRIEF.md)** for the locked
 decisions, the current budget, part choices with their reasons, and the layout traps the first
