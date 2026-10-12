@@ -129,3 +129,16 @@ Re-apply it after a footprint update.
 ## Conventions
 
 Branching, commit style and pre-push checks are in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Keep damaging information out of the repo
+
+This repo may be made public, and git keeps everything: a file deleted later is still in the history and in old pull requests. Treat every commit as public. Before committing, read the diff and keep all of the following out of code, docs, journals, commit messages and PR text:
+
+- **Secrets:** API keys, tokens, passwords, private or SSH keys, Wi-Fi credentials, Tailscale keys, hostnames or IPs, and real server URLs with credentials. Use placeholders in committed config, and put real values in `.env` (git-ignored) or on the device.
+- **Personal info:** phone numbers, home or shipping addresses, personal emails other than the team's public Northeastern ones, student IDs.
+- **Partners and sponsors:** never write a contact's name or what they told us in meetings (CRWA, the Port of Oakland, sponsors). Say "our CRWA contact". Their documents, decks and meeting notes stay out of the repo; `docs/presentations/` is git-ignored for that reason. No sponsor discounts, quotes or deal terms.
+- **Money:** no budgets, spending or what anything cost us. Public catalog prices for parts are fine.
+- **Photos:** strip location (EXIF/GPS) data before committing a phone photo.
+- **Third-party files:** only add datasheets, vendor CAD models or libraries if their license allows sharing.
+
+If something on this list turns up in a change, or seems to be needed, stop and ask Kyle before committing.
