@@ -3,12 +3,36 @@
 Self-contained symbol + footprint library for the V3 board, so a fresh clone resolves every part with
 no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 
-- `dreams_v3.kicad_sym` — **51 symbols**
-- `dreams_v3.pretty/` — **51 footprints**
+- `dreams_v3.kicad_sym` — **59 symbols**
+- `dreams_v3.pretty/` — **59 footprints**
 - `dreams_v3.3dshapes/` — 2 STEP models
 
-The pod project (`../../Pod_PCB_V3/`) uses this library too: its lib tables point here through
-`${KIPRJMOD}/../Boat_PCB_V3/lib/`.
+The pod project (`../../Pod_PCB_V3/`) and the V3.1 starter carrier (`../../Boat_PCB_V3_1/`) use this
+library too: their lib tables point here through `${KIPRJMOD}/../Boat_PCB_V3/lib/`.
+
+## V3.1 starter carrier additions (2026-10-10)
+
+- **Flattened from stock:**
+  - symbols: `RaspberryPi_Pico` (from `MCU_Module`, footprint retargeted, AGND made passive so pin 3
+    is the only GND power output), `SW_Push` and `Fuse`;
+  - footprints: `RaspberryPi_Pico_Common_THT`, `JST_SH_SM04B-SRSS-TB` (Qwiic), 1×3 and 2×7 pin
+    headers, `SW_PUSH_6mm` and `Fuse_Littelfuse_372_D8.50mm` (TR5).
+- **New footprint, `RaspberryPi_Pico_Socketed_THT`:** the common THT footprint with the courtyard
+  cut down to the two 1×20 socket rows and the USB end, so flat parts can sit under a socketed Pico.
+  Keep them under about 7 mm tall (8.5 mm sockets). The Pico W antenna keep-out is unchanged. The
+  micro-USB receptacle outline is on F.Fab only, so pads can sit under it. Its 3D view shows the stock
+  8.5 mm pin sockets with a Pico H seated in them.
+- **New symbols:**
+  - `Conn_Qwiic_1x04`: 1 GND, 2 3V3, 3 SDA, 4 SCL, the SparkFun / Adafruit order.
+  - `Conn_RC_1x04`: 1 GND, 2 5V, 3 RX into the board, 4 TX out of it.
+  - `Conn_ESC_1x03`: 1 signal, 2 not connected so an ESC's BEC can't back-feed, 3 GND.
+  - `Conn_PicoLink_2x07`: the 2nd-Pico header.
+  - `Conn_GY-SHT41_1x04`: the GY-SHT41-D SHT41 module (Teyleten Robot): 1 VIN, 2 GND, 3 SCL, 4 SDA.
+- **New footprint, `SHT41_Module_GY-SHT41-D_1x04_P2.54mm`:** the 13.2 × 10.4 mm module on its 4-pin header,
+  pins down one short edge. The V3.1 board puts it on the bottom side, hanging sensor-side down. The hole
+  and sensor marks on the fab layer are estimates from product photos.
+- `Pololu_D36V50F5`'s pin-name texts are keep-upright. At 270° that flips them onto the pads, so the
+  V3.1 board turns keep-upright off on its own copy; the library is unchanged.
 
 The board is **fully placed and routed**: 126 footprints on a 130.6 × 101.5 mm 4-layer board (rev D,
 2026-09-28).
