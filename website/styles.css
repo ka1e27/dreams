@@ -532,7 +532,7 @@ p, li, dd { text-wrap: pretty; }
 }
 @media (max-width: 1020px) {
   :root { --sec: 96px; --gutter: 32px; }
-  .burger { display: grid; }
+  .burger { display: grid; order: 2; margin-left: auto; }   /* after the (hidden) link list, so it sits at the right edge */
   .nav.open, .nav.solid { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .nav.solid { background: rgba(255, 255, 255, .98); }
   .nav.open { background: var(--white); }
