@@ -12,10 +12,7 @@ HOW TO ADD AN UPDATE (anyone on the team, or a Claude Code session)
 
 ## Week of Oct 12, 2026
 
-- **Kyle:** Designed V3.1, an interim starter carrier board to get the boat on the water before the full V3. It pairs the Raspberry Pi 5 with one Raspberry Pi Pico 2 instead of the Teensy, runs from one 10S Li-ion pack, and has a CAN chain for the VESCs, RC control, GPS, hull leak sensors and the pod tether.
-- **Kyle:** Shrank V3.1 to 98 × 67 mm by tucking the Pico and the 5 V converter under the Pi, which mounts face down on standoffs, and moving the small surface-mount parts and the SHT41 hull-air sensor to the underside. Design-rule and schematic checks all pass.
-- **Kyle:** Moved V3.1's Pico, 5 V converter, second-Pico header and every capacitor to the underside, so nothing under the Pi is taller than about 9 mm and there's room for a heatsink. The Pico's USB port now faces the Pi's USB ports for a short cable. Design-rule and schematic checks still pass.
-- **Kyle:** Cleared the space under V3.1's Pico, which now sits on 8.5 mm sockets with only a 1 mm diode beneath it, and moved the pod's 15 V regulator to the underside as well.
+- **Kyle:** Designed a new PCB, V3.1, to get the boat on the water before the full V3 board and to try out the Pico-based electronics planned for it. It pairs the Raspberry Pi 5 with a Raspberry Pi Pico 2 in place of the Teensy, runs from one 10S Li-ion pack, and has CAN for the motor controllers, RC control, GPS and hull leak sensors.
 
 ## Week of Oct 5, 2026
 
