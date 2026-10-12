@@ -22,6 +22,6 @@ The Updates page (`updates.html`) shows `UPDATES.md`, so anyone on the team can 
 - **Build log:** `build-log.html` is generated. Add or edit entries in `tools/gen_build_log.py`, then run `python tools/gen_build_log.py`.
 - **Board callouts:** edit `media/v3-carrier-callouts.json` (or the wording overrides in `tools/gen_callouts.py`), then run `python tools/gen_callouts.py`.
 - **Images:** `tools/build_images.py` regenerates `img/` from the high-res originals on the build machine.
-- **Logo:** `tools/make_logo.py` builds `img/logo*.svg` and `img/favicon.svg` from Kyle's drawing (redrawn as strokes). The 32 px and 180 px PNG icons are renders of `img/favicon.svg`.
+- **Logo:** `tools/make_logo.py` builds `img/logo*.svg` and `img/favicon.svg` from Nolan's drawing (redrawn as strokes). The 32 px and 180 px PNG icons are renders of `img/favicon.svg`.
 - **After editing `styles.css` or `site.js`:** run `python tools/stamp.py`. It versions their URLs in every page so browsers fetch the new files right after a deploy.
 - Pushing changes under `website/` to `main` redeploys GitHub Pages (the "Deploy website" Actions workflow). The tools can be run from anywhere; they find `website/` themselves.

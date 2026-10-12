@@ -1,4 +1,4 @@
-"""Build the D.R.E.A.M.S logo files in img/ from Kyle's hand-drawn logo.
+"""Build the D.R.E.A.M.S logo files in img/ from Nolan's hand-drawn logo.
 
 Run:  python -I tools/make_logo.py
 The drawing is redrawn as strokes: coordinates are stroke centrelines measured from the original
