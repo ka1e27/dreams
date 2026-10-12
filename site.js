@@ -24,12 +24,13 @@
       { href: 'build-log.html#broke', t: 'What broke', s: 'The dead ends that shaped V3' },
       { href: 'build-log.html#roadmap', t: 'Roadmap', s: 'From V1 to sample collection' }
     ]},
-    { id: 'try', n: '03', label: 'Try It', items: [
+    { id: 'updates', n: '03', label: 'Updates', href: 'updates.html' },
+    { id: 'try', n: '04', label: 'Try It', items: [
       { href: PLANNER, t: 'V1 waypoint planner', s: 'Plan a survey route on a map', ext: true },
       { href: DEMO, t: 'V2 command center', s: 'A simulated survey in your browser', ext: true }
     ]},
-    { id: 'partners', n: '04', label: 'Partners', href: 'partners.html' },
-    { id: 'team', n: '05', label: 'Team', href: 'team.html' }
+    { id: 'partners', n: '05', label: 'Partners', href: 'partners.html' },
+    { id: 'team', n: '06', label: 'Team', href: 'team.html' }
   ];
 
   const page = document.body.dataset.page || '';
@@ -96,7 +97,7 @@
         <div class="foot-about"><a class="brand" href="index.html"><img src="img/logo-light.svg" alt="D.R.E.A.M.S" width="129" height="48"></a>
           <p>Data Recovery for Environmental And Marine Surveillance. A modular autonomous survey boat, designed and built by students at Northeastern University.</p></div>
         <div><h2>Explore</h2><ul>
-          <li><a href="index.html">Home</a></li><li><a href="boat.html">The Boat</a></li><li><a href="build-log.html">Build Log</a></li>
+          <li><a href="index.html">Home</a></li><li><a href="boat.html">The Boat</a></li><li><a href="build-log.html">Build Log</a></li><li><a href="updates.html">Weekly updates</a></li>
           <li><a href="partners.html">Partners</a></li><li><a href="team.html">Team</a></li><li><a href="contact.html">Contact</a></li></ul></div>
         <div><h2>Try it</h2><ul>
           <li><a href="${PLANNER}" target="_blank" rel="noopener">V1 waypoint planner ↗</a></li>
@@ -186,6 +187,27 @@
       el.addEventListener('pointerleave', () => hl(i, false));
     }));
   });
+
+  /* ── Weekly updates: rendered live from UPDATES.md (the team edits it on GitHub) ── */
+  const upd = document.querySelector('[data-updates]');
+  if (upd) {
+    const GH = 'https://github.com/ka1e27/dreams/blob/main/UPDATES.md';
+    const fail = () => { upd.innerHTML = `<p class="lead">The updates didn't load. Read them <a href="${GH}">on GitHub</a>.</p>`; };
+    fetch(upd.dataset.src, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(md => {
+      if (!window.marked) return fail();
+      md = md.replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*$/m, '');
+      const weeks = md.split(/^## /m).map(s => s.trim()).filter(Boolean);
+      if (!weeks.length) { upd.innerHTML = '<p class="lead">No updates yet.</p>'; return; }
+      upd.innerHTML = weeks.map(w => {
+        const nl = w.indexOf('\n');
+        const title = (nl < 0 ? w : w.slice(0, nl)).trim();
+        const body = nl < 0 ? '' : w.slice(nl + 1);
+        const m = title.match(/^week of\s+(.*)$/i);
+        const head = m ? `<span class="label">Week of</span><h2>${m[1]}</h2>` : `<h2>${title}</h2>`;
+        return `<article class="week reveal"><div class="week-date">${head}</div><div class="week-body">${window.marked.parse(body)}</div></article>`;
+      }).join('');
+    }).catch(fail);
+  }
 
   /* ── Build-log filters ───────────────────────────────────────────────── */
   const grid = document.querySelector('[data-log-grid]');

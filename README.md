@@ -12,6 +12,12 @@ Live site: https://ka1e27.github.io/dreams/
 - `media/`: the interactive 3D board (`v3-carrier.glb`), the annotated top-view render and the V1 winch test video
 - `demo/v2-dashboard/`: the V2 command center, running on simulated data
 
+## Weekly updates
+The Updates page (`updates.html`) shows `UPDATES.md`, so anyone on the team can post from GitHub:
+1. Open [`UPDATES.md`](UPDATES.md) on GitHub and click the pencil icon.
+2. Under this week's `## Week of ...` heading (add one at the top if it's a new week), add a bullet: `- **Your name:** what you worked on`.
+3. Click **Commit changes**. The site updates in about a minute.
+
 ## Editing
 - **Build log:** `build-log.html` is generated. Add or edit entries in `tools/gen_build_log.py`, then run `python tools/gen_build_log.py`.
 - **Board callouts:** edit `media/v3-carrier-callouts.json` (or the wording overrides in `tools/gen_callouts.py`), then run `python tools/gen_callouts.py`.

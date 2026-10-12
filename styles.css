@@ -737,3 +737,17 @@ p, li, dd { text-wrap: pretty; }
 @media (min-width: 561px) and (max-width: 1180px) { .log-grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 561px) and (max-width: 1020px) { .log-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 561px) and (max-width: 680px) { .log-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Weekly updates page (rendered from UPDATES.md) */
+.updates { display: grid; gap: 20px; max-width: 980px; }
+.week { display: grid; grid-template-columns: 200px 1fr; gap: 32px; padding: 30px 34px; background: var(--white); border-radius: 24px; box-shadow: var(--shadow); }
+.week-date h2 { margin-top: 6px; font-size: clamp(26px, 2.4vw, 34px); line-height: 1.05; }
+.week-body { display: grid; gap: 12px; font-size: 17px; color: var(--ink-2); }
+.week-body ul { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.week-body li { position: relative; padding-left: 20px; }
+.week-body li::before { content: ""; position: absolute; left: 0; top: .62em; width: 8px; height: 8px; border-radius: 50%; background: var(--coral); }
+.week-body li > strong:first-child { color: var(--blue); }
+.week-body h3 { font-size: 19px; margin-top: 6px; }
+.week-body img { width: 100%; height: auto; border-radius: 16px; margin-top: 4px; }
+.week-body a, .updates .lead a { color: var(--blue); font-weight: 600; }
+@media (max-width: 680px) { .week { grid-template-columns: 1fr; gap: 12px; padding: 22px; } }
