@@ -10,6 +10,11 @@ HOW TO ADD AN UPDATE (anyone on the team, or a Claude Code session)
 - On GitHub: open this file, click the pencil icon, edit, then "Commit changes". The website's Updates page reads this file, so it goes live in about a minute.
 -->
 
+## Week of Oct 12, 2026
+
+- **Kyle:** Designed V3.1, an interim starter carrier board to get the boat on the water before the full V3. It pairs the Raspberry Pi 5 with one Raspberry Pi Pico 2 instead of the Teensy, runs from one 10S Li-ion pack, and has a CAN chain for the VESCs, RC control, GPS, hull leak sensors and the pod tether.
+- **Kyle:** Shrank V3.1 to 98 × 67 mm by tucking the Pico and the 5 V converter under the Pi, which mounts face down on standoffs, and moving the small surface-mount parts and the SHT41 hull-air sensor to the underside. Design-rule and schematic checks all pass.
+
 ## Week of Oct 5, 2026
 
 - **Kyle:** Launched the D.R.E.A.M.S website, with the build log, the V3 board in 3D and the V2 command-center demo.
