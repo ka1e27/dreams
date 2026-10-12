@@ -169,3 +169,18 @@ emit("showcase-demo", flatten(load(OLD / "dreams-v1-demo.jpg")), [1200, 800], q=
 # Build-log page header: V1 with the plush husky riding in a hull
 husky = flatten(load(PORT / "D.R.E.A.M.S with husky.jpg"))
 emit("husky-boat", husky.crop((0, round(husky.height * 0.17), husky.width, husky.height)), [1400, 900], q=78)  # drop the wall and socket
+
+# --- Weekly-update photos: sources in images/updates/ (at least 1600 px wide), shown on week.html.
+#     updates/<week>.md links the -1600.jpg; the gallery uses the -900 copy as its thumbnail.
+UPDATES = {
+    "upd-2026-10-05-site": "2026-10-05-site.png",            # the home page at launch (headless screenshot, 2x)
+    "upd-2026-10-12-iso": "2026-10-12-v31-iso.png",          # V3.1 KiCad renders
+    "upd-2026-10-12-top": "2026-10-12-v31-top.png",
+    "upd-2026-10-12-bottom": "2026-10-12-v31-bottom.png",
+    "upd-2026-10-12-below": "2026-10-12-v31-below.png",
+    "upd-2026-10-12-side": "2026-10-12-v31-side.png",
+}
+for slug, name in UPDATES.items():
+    if ONLY and slug not in ONLY:
+        continue
+    emit(slug, flatten(load(OLD / "updates" / name)), [1600, 900], q=80)

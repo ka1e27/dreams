@@ -6,6 +6,7 @@ Live site: https://ka1e27.github.io/dreams/
 
 ## Structure
 - `index.html`, `boat.html`, `build-log.html`, `partners.html`, `team.html`, `contact.html`: the pages (plain HTML, no build step)
+- `updates.html` and `week.html`: the weekly updates, read live from `UPDATES.md` and `updates/<YYYY-MM-DD>.md`
 - `styles.css`: the whole design system (light "Fresh Water + Blueprint" theme)
 - `site.js`: the shared nav, contact band and footer, plus small behaviours. **Edit `NAV` and `CONTACTS` here** and every page updates.
 - `img/`: optimized images (WebP + JPEG), made by `tools/build_images.py`
@@ -17,6 +18,8 @@ The Updates page (`updates.html`) shows `UPDATES.md`, so anyone on the team can 
 1. Open [`UPDATES.md`](UPDATES.md) on GitHub and click the pencil icon.
 2. Under this week's `## Week of ...` heading (add one at the top if it's a new week), add a bullet: `- **Your name:** what you worked on`.
 3. Click **Commit changes**. The site updates in about a minute.
+
+For the full story with photos, add `updates/<the week's Monday>.md` (for example `updates/2026-10-12.md`): a `# Headline`, a sentence or two, then `## Sections` with text and photos (`![what it shows](img/your-photo.jpg)`). The week then opens its own page from the Updates page. Remove location data from photos first; `tools/build_images.py` does that.
 
 ## Editing
 - **Build log:** `build-log.html` is generated. Add or edit entries in `tools/gen_build_log.py`, then run `python tools/gen_build_log.py`.

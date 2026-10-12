@@ -9,10 +9,11 @@ The team posts weekly updates in **`UPDATES.md`** (repo root). The site's Update
 **Every session that does real D.R.E.A.M.S work (boat hardware, PCBs, firmware, CAD, testing, sponsors, or this site) must add to it before finishing:**
 
 1. Find the heading for the current week, `## Week of <Mon> <day>, <year>`, using the Monday of the week. If it doesn't exist, add it at the top, just under the instructions comment. Newest week first.
-2. Add one short bullet per meaningful change: `- **Name:** what was built, tested, decided or broken.` Use the name of the person you're working with (Kyle unless told otherwise).
-3. Write for the public, because it's on the website: true and specific, no hype. Follow "Never publish" below. Don't say who wrote the code or mention AI tools.
-4. Matthew and the others edit this file too. Pull before editing (`git pull`), only add to it, and don't rewrite other people's bullets.
-5. Commit the change, with your other site changes if there are any, and push to `main` so it goes live.
+2. Add one short bullet per project: `- **Name:** what was built, tested, decided or broken.` Use the name of the person you're working with (Kyle unless told otherwise). Kyle wants these very short, so fold later work on the same project into its bullet instead of adding more.
+3. The full story goes in `updates/<YYYY-MM-DD>.md` (the week's Monday): `# Headline`, one or two intro sentences, then `## Sections` with text and photos. Once the file exists, the week on the Updates page links to `week.html?w=<YYYY-MM-DD>`, which shows the bullets, the write-up and the photos. Photos on adjacent lines share a row and open full size when clicked. Put photo sources in `images/updates/` (git-ignored), add them to `UPDATES` in `tools/build_images.py`, run it, and link the `img/upd-<week>-<name>-1600.jpg` it writes (the page picks the 900 px and WebP copies itself).
+4. Write for the public, because it's on the website: true and specific, no hype. Follow "Never publish" below. Don't say who wrote the code or mention AI tools.
+5. Matthew and the others edit these files too. Pull before editing (`git pull`), and don't rewrite other people's bullets.
+6. Commit the change, with your other site changes if there are any, and push to `main` so it goes live.
 
 Work anywhere in this repo (boat code, PCBs, CAD) gets its bullet here too.
 

@@ -174,7 +174,7 @@ After meaningful work here (PCBs, firmware, CAD, tests, the site), add to it bef
 2. Write for the public: true and specific. Follow "Keep damaging information out of the repo" below. Don't say who wrote the code or mention AI tools.
 3. Only add, never rewrite teammates' bullets. Commit it with your other changes; pushing `main` publishes it.
 
-`website/CLAUDE.md` has the full format and the site's own notes.
+For the full story with photos, add `website/updates/<YYYY-MM-DD>.md` too; the week then gets its own page. `website/CLAUDE.md` has the full format and the site's own notes.
 
 ## Keep damaging information out of the repo
 

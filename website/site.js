@@ -188,25 +188,162 @@
     }));
   });
 
-  /* ── Weekly updates: rendered live from UPDATES.md (the team edits it on GitHub) ── */
+  /* ── Weekly updates ───────────────────────────────────────────────────────
+     UPDATES.md has the short version of every week (the team edits it on GitHub). A week with a
+     write-up in updates/<YYYY-MM-DD>.md (its Monday) links to week.html?w=<YYYY-MM-DD>, which
+     shows both, with the write-up's photos in a gallery that opens full size. */
+  const GH_UPD = 'https://github.com/ka1e27/dreams/blob/main/website/UPDATES.md';
+  const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const weekSlug = (date) => {        // "Oct 12, 2026" -> "2026-10-12"
+    const m = date.match(/^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
+    const mo = m ? MONTHS.indexOf(m[1].toLowerCase()) : -1;
+    return mo < 0 ? '' : `${m[3]}-${String(mo + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  };
+  const parseWeeks = (md) => md.replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*$/m, '')
+    .split(/^## /m).map(s => s.trim()).filter(Boolean).map(w => {
+      const nl = w.indexOf('\n');
+      const title = (nl < 0 ? w : w.slice(0, nl)).trim();
+      const m = title.match(/^week of\s+(.*)$/i);
+      return { title, date: m ? m[1] : '', slug: m ? weekSlug(m[1]) : '', body: nl < 0 ? '' : w.slice(nl + 1) };
+    });
+  const getText = (url) => fetch(url, { cache: 'no-cache' }).then(r => (r.ok ? r.text() : null)).catch(() => null);
+  const writeUp = (slug) => getText(`updates/${slug}.md`);
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Photos made by tools/build_images.py come as img/<slug>-1600.jpg plus -900 and .webp copies; anything else is used as is.
+  const built = (src) => /^img\/[\w-]+-1600\.jpg$/.test(src);
+  const photo = (src, sizes, loading = 'lazy') => {
+    if (!built(src)) return `<img src="${esc(src)}" alt="" loading="${loading}" decoding="async">`;
+    const b = src.slice(0, -'-1600.jpg'.length);
+    return `<picture><source type="image/webp" srcset="${b}-900.webp 900w, ${b}-1600.webp 1600w" sizes="${sizes}">` +
+      `<img src="${b}-900.jpg" srcset="${b}-900.jpg 900w, ${b}-1600.jpg 1600w" sizes="${sizes}" alt="" loading="${loading}" decoding="async"></picture>`;
+  };
+
   const upd = document.querySelector('[data-updates]');
   if (upd) {
-    const GH = 'https://github.com/ka1e27/dreams/blob/main/website/UPDATES.md';
-    const fail = () => { upd.innerHTML = `<p class="lead">The updates didn't load. Read them <a href="${GH}">on GitHub</a>.</p>`; };
-    fetch(upd.dataset.src, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(r.status); return r.text(); }).then(md => {
-      if (!window.marked) return fail();
-      md = md.replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*$/m, '');
-      const weeks = md.split(/^## /m).map(s => s.trim()).filter(Boolean);
+    const fail = () => { upd.innerHTML = `<p class="lead">The updates didn't load. Read them <a href="${GH_UPD}">on GitHub</a>.</p>`; };
+    getText(upd.dataset.src).then(md => {
+      if (md == null || !window.marked) return fail();
+      const weeks = parseWeeks(md);
       if (!weeks.length) { upd.innerHTML = '<p class="lead">No updates yet.</p>'; return; }
       upd.innerHTML = weeks.map(w => {
-        const nl = w.indexOf('\n');
-        const title = (nl < 0 ? w : w.slice(0, nl)).trim();
-        const body = nl < 0 ? '' : w.slice(nl + 1);
-        const m = title.match(/^week of\s+(.*)$/i);
-        const head = m ? `<span class="label">Week of</span><h2>${m[1]}</h2>` : `<h2>${title}</h2>`;
-        return `<article class="week reveal"><div class="week-date">${head}</div><div class="week-body">${window.marked.parse(body)}</div></article>`;
+        const head = w.date ? `<span class="label">Week of</span><h2>${w.date}</h2>` : `<h2>${w.title}</h2>`;
+        return `<article class="week reveal"${w.slug ? ` data-slug="${w.slug}"` : ''}><div class="week-date">${head}</div><div class="week-body">${window.marked.parse(w.body)}</div></article>`;
       }).join('');
-    }).catch(fail);
+      // weeks with a write-up become links to it, with its first photo
+      upd.querySelectorAll('.week[data-slug]').forEach(card => writeUp(card.dataset.slug).then(full => {
+        if (!full) return;
+        const pics = [...full.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)/g)].map(m => m[1]);
+        const n = pics.length ? ` · ${pics.length} photo${pics.length > 1 ? 's' : ''}` : '';
+        card.classList.add('has-more');
+        card.querySelector('.week-body').insertAdjacentHTML('beforeend', `<a class="week-more" href="week.html?w=${card.dataset.slug}">Read the full week${n} →</a>`);
+        if (pics.length) card.insertAdjacentHTML('beforeend', `<div class="week-thumb" aria-hidden="true">${photo(pics[0], '(max-width: 680px) 100vw, 240px')}</div>`);
+      }));
+    });
+  }
+
+  /* Full-size photo viewer for a week's gallery (Esc closes, arrow keys step through) */
+  const lightbox = (buttons) => {
+    if (!buttons.length) return;
+    const dlg = document.createElement('dialog');
+    dlg.className = 'lightbox';
+    dlg.setAttribute('aria-label', 'Photo');
+    const many = buttons.length > 1;
+    dlg.innerHTML = `<figure><figcaption></figcaption></figure><span class="lb-count" aria-live="polite"></span>
+      <button type="button" class="lb-btn lb-close" aria-label="Close photo">×</button>${many ? `<button type="button" class="lb-btn lb-prev" aria-label="Previous photo">‹</button><button type="button" class="lb-btn lb-next" aria-label="Next photo">›</button>` : ''}`;
+    document.body.appendChild(dlg);
+    const fig = dlg.querySelector('figure'), cap = dlg.querySelector('figcaption'), count = dlg.querySelector('.lb-count');
+    const img = document.createElement('img');      // added on first open, once it has a src
+    let at = 0;
+    const show = (i) => {
+      at = (i + buttons.length) % buttons.length;
+      const b = buttons[at];
+      img.src = b.dataset.full; img.alt = b.dataset.alt; cap.textContent = b.dataset.cap;
+      if (!img.isConnected) fig.prepend(img);
+      count.textContent = many ? `${at + 1} / ${buttons.length}` : '';
+    };
+    buttons.forEach((b, i) => b.addEventListener('click', () => { show(i); dlg.showModal(); }));
+    dlg.addEventListener('click', (e) => { if (e.target === dlg || e.target.tagName === 'FIGURE') dlg.close(); });
+    dlg.querySelector('.lb-close').addEventListener('click', () => dlg.close());
+    if (many) {
+      dlg.querySelector('.lb-prev').addEventListener('click', () => show(at - 1));
+      dlg.querySelector('.lb-next').addEventListener('click', () => show(at + 1));
+      dlg.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(at - 1); else if (e.key === 'ArrowRight') show(at + 1); });
+    }
+  };
+
+  /* week.html?w=YYYY-MM-DD */
+  const wk = document.querySelector('[data-week]');
+  if (wk) {
+    const slug = new URLSearchParams(location.search).get('w') || '';
+    const head = document.querySelector('[data-week-head]');
+    const missing = (msg) => { wk.innerHTML = `<p class="lead">${msg} See <a href="updates.html">all the weekly updates</a>.</p>`; };
+    Promise.all([getText('UPDATES.md'), /^\d{4}-\d{2}-\d{2}$/.test(slug) ? writeUp(slug) : Promise.resolve(null)]).then(([md, full]) => {
+      if (!window.marked) return missing("This week didn't load.");
+      const weeks = md ? parseWeeks(md) : [];
+      const i = weeks.findIndex(w => w.slug === slug);
+      const week = weeks[i];
+      if (!week && !full) return missing("We couldn't find that week.");
+      const date = week ? `Week of ${week.date}` : `Week of ${slug}`;
+      document.title = `${date} — D.R.E.A.M.S`;
+      head.querySelector('[data-wk-kicker]').textContent = date;
+
+      // the write-up: "# Headline", a short intro paragraph, then sections; image-only paragraphs become galleries
+      const body = document.createElement('div');
+      body.innerHTML = full ? window.marked.parse(full) : '';
+      const h1 = body.querySelector('h1');
+      head.querySelector('[data-wk-title]').textContent = h1 ? h1.textContent : date;
+      if (h1) h1.remove();
+      const intro = body.firstElementChild;
+      if (intro && intro.tagName === 'P' && !intro.querySelector('img')) {
+        const lead = head.querySelector('[data-wk-lead]');
+        lead.innerHTML = intro.innerHTML; lead.hidden = false; intro.remove();
+      }
+      body.querySelectorAll('p').forEach(p => {
+        const imgs = [...p.querySelectorAll('img')];
+        if (!imgs.length || p.textContent.trim()) return;
+        const g = document.createElement('div');
+        g.className = `gallery${imgs.length === 1 ? ' one' : ''}`;
+        g.innerHTML = imgs.map(im => {
+          const src = im.getAttribute('src'), alt = im.getAttribute('alt') || '', capText = im.getAttribute('title') || alt;
+          return `<figure><button type="button" class="ph" data-full="${esc(src)}" data-alt="${esc(alt)}" data-cap="${esc(capText)}" aria-label="Open photo: ${esc(alt || 'photo')}">` +
+            `${photo(src, imgs.length === 1 ? '(max-width: 900px) 100vw, 860px' : '(max-width: 680px) 100vw, 430px')}</button>${capText ? `<figcaption>${esc(capText)}</figcaption>` : ''}</figure>`;
+        }).join('');
+        p.replaceWith(g);
+      });
+
+      // the first photo moves into the page head's blob (it still opens full size, first in the viewer)
+      const first = body.querySelector('.gallery figure');
+      let cover = null;
+      if (first) {
+        const b = first.querySelector('.ph'), g = first.parentElement;
+        first.remove();
+        if (!g.children.length) g.remove(); else if (g.children.length === 1) g.classList.add('one');
+        const bg = head.querySelector('.bg');
+        bg.innerHTML = `<button type="button" class="ph-head" aria-label="${esc(b.getAttribute('aria-label'))}"><img src="${esc(b.dataset.full)}" alt=""></button>`;
+        cover = bg.querySelector('.ph-head');
+        Object.assign(cover.dataset, b.dataset);
+        const hi = cover.querySelector('img');
+        const show = () => { if (hi.naturalWidth) head.style.setProperty('--ar', (hi.naturalWidth / hi.naturalHeight).toFixed(3)); bg.hidden = false; };
+        if (hi.complete) show(); else hi.addEventListener('load', show, { once: true });
+      }
+
+      const short = week && week.body.trim() ? `<aside class="wk-short"><span class="label">This week in short</span><div class="week-body">${window.marked.parse(week.body)}</div></aside>` : '';
+      const none = full ? '' : '<p class="wk-none">There\'s no longer write-up for this week yet.</p>';
+      wk.innerHTML = `${short}${none}<article class="wk-body">${body.innerHTML}</article><nav class="wk-nav" aria-label="Other weeks"></nav>`;
+      lightbox([...(cover ? [cover] : []), ...wk.querySelectorAll('.gallery .ph')]);
+      // each photo sizes its slot from its own proportions, so a row of mixed photos lines up without cropping
+      wk.querySelectorAll('.gallery img').forEach(im => {
+        const fit = () => { if (im.naturalWidth) im.closest('figure').style.setProperty('--ar', (im.naturalWidth / im.naturalHeight).toFixed(3)); };
+        if (im.complete) fit(); else im.addEventListener('load', fit, { once: true });
+      });
+
+      // older and newer weeks that have write-ups of their own
+      const nav = wk.querySelector('.wk-nav');
+      const link = (w, rel) => w ? writeUp(w.slug).then(t => t ? `<a class="wk-${rel}" href="week.html?w=${w.slug}"><span class="label">${rel === 'older' ? '← Older' : 'Newer →'}</span><strong>Week of ${w.date}</strong></a>` : '') : Promise.resolve('');
+      Promise.all([link(i >= 0 ? weeks[i + 1] : null, 'older'), link(i > 0 ? weeks[i - 1] : null, 'newer')]).then(([older, newer]) => {
+        nav.innerHTML = `${older || '<span></span>'}<a class="wk-all btn btn-ghost" href="updates.html">All updates</a>${newer || '<span></span>'}`;
+      });
+    });
   }
 
   /* ── Build-log filters ───────────────────────────────────────────────── */
