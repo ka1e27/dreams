@@ -1,0 +1,6 @@
+# Scratch and sources that are not part of the published site
+_directions/
+media/hero-v1-*
+images/*
+__pycache__/
+*.pyc
