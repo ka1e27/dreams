@@ -160,6 +160,7 @@ emit("v3-pod-iso", load(OLD / "v3-pod.png"), [900, 600], alpha=True)
 emit("arm-gearbox", flatten(load(PORT / "web" / "arm-gearbox-assembly.png")), [1200, 700])
 emit("arm-disc", flatten(load(PORT / "web" / "arm-cycloidal-disc.png")), [900, 600])
 emit("omar", flatten(load(OLD / "dreams-omar.jpg")), [1200, 800])
+emit("omar-team", flatten(load(OLD / "dreams-omar-team.jpg")), [1200, 800])  # the team with Omar and V1
 emit("kyle-tran", cover(flatten(load(OLD / "team" / "kyle-tran.jpg")), 4 / 5, (0.5, 0.2)), [900, 600])
 emit("matthew-hong", cover(flatten(load(OLD / "team" / "matthew-hong-headshot.jpg")), 4 / 5, (0.5, 0.15)), [900, 600])
 
