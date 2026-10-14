@@ -90,3 +90,7 @@ kicad-cli pcb drc --severity-all --schematic-parity Boat_PCB/Boat_PCB_V3/Boat_PC
 
 V3 contradicts V2 on purpose. Don't try to reconcile the two. See
 [`docs/v3/README.md`](docs/v3/README.md).
+
+## Sponsors
+
+[PCBWay](https://www.pcbway.com/) sponsors the project's circuit boards.

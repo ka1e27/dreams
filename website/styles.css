@@ -471,6 +471,7 @@ p, li, dd { text-wrap: pretty; }
 
 .mail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .mail-grid > * { min-width: 0; }
+.mail-card.wide { grid-column: 1 / -1; }
 .mail-card { display: flex; flex-direction: column; gap: 10px; padding: 30px; background: var(--white); border-radius: var(--r); box-shadow: var(--shadow); text-decoration: none; transition: transform .2s; }
 .mail-card:hover { transform: translateY(-3px); }
 .mail-card strong { font: 800 30px/1 var(--display); letter-spacing: -.02em; color: var(--ink); }

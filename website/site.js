@@ -1,5 +1,5 @@
 /* D.R.E.A.M.S — shared behaviour for every page.
-   Edit NAV and CONTACTS below and every page updates (nav, footer, CTA band).
+   Edit NAV, PROJECT and CONTACTS below and every page updates (nav, footer, CTA band).
    Pages work without this file: each page ships a plain <noscript> nav, and all
    content is visible without JS (motion is CSS-only and progressive).
    <body data-page="home|boat|log|partners|team|contact"> marks the current section;
@@ -7,8 +7,9 @@
 (() => {
   const PLANNER = 'https://dreamsv1.kylegtran2007.workers.dev/';
   const DEMO = 'demo/v2-dashboard/';
+  const PROJECT = { name: 'D.R.E.A.M.S', email: 'DREAMSboatproject@gmail.com' };   // the project's official inbox
   const CONTACTS = [
-    { name: 'Kyle Tran', email: 'tran.kyl@northeastern.edu', alt: 'kylegtran2007@gmail.com', site: 'https://ka1e27.github.io/Portfolio/' },
+    { name: 'Kyle Tran', email: 'tran.kyl@northeastern.edu', site: 'https://ka1e27.github.io/Portfolio/' },
     { name: 'Matthew Hong', email: 'hong.matt@northeastern.edu', site: 'https://matthewhong29.github.io/' }
   ];
   const NAV = [
@@ -90,7 +91,7 @@
     const cta = document.body.dataset.cta === 'off' ? '' : `<section class="cta-band" aria-labelledby="cta-h"><div class="wrap">
       <div><span class="kicker">Work with us</span><h2 id="cta-h" style="margin-top:16px">Let's put it on the water together.</h2>
         <p>Funding, a mentor in the field, a fab shop or a place to test: tell us what you could bring. We read every email.</p></div>
-      <div class="cta-mails">${CONTACTS.map(c => `<a href="mailto:${c.email}?subject=D.R.E.A.M.S"><div><strong>${c.name}</strong><span>${c.email}</span></div><span aria-hidden="true">→</span></a>`).join('')}</div>
+      <div class="cta-mails">${[PROJECT, ...CONTACTS].map(c => `<a href="mailto:${c.email}?subject=D.R.E.A.M.S"><div><strong>${c.name}</strong><span>${c.email}</span></div><span aria-hidden="true">→</span></a>`).join('')}</div>
     </div></section>`;
     foot.outerHTML = `${cta}<footer class="footer"><div class="wrap">
       <div class="foot-grid">
@@ -104,7 +105,7 @@
           <li><a href="${DEMO}" target="_blank" rel="noopener">V2 command center ↗</a></li>
           <li><a href="index.html#field">Field-test videos</a></li></ul></div>
         <div><h2>Contact</h2><ul>
-          ${CONTACTS.map(c => `<li><a href="mailto:${c.email}">${c.name}\u00a0· ${c.email}</a></li>`).join('')}
+          ${[PROJECT, ...CONTACTS].map(c => `<li><a href="mailto:${c.email}">${c.name}\u00a0· ${c.email}</a></li>`).join('')}
           ${CONTACTS.map(c => `<li><a href="${c.site}" target="_blank" rel="noopener">${c.name.split(' ')[0]}'s portfolio ↗</a></li>`).join('')}</ul></div>
       </div>
       <div class="foot-base"><span>© 2026 D.R.E.A.M.S</span><a href="#main">Back to top ↑</a></div>

@@ -30,8 +30,8 @@ Work anywhere in this repo (boat code, PCBs, CAD) gets its bullet here too.
 Everything here is public the moment it's pushed, and git history keeps it after a file is deleted. Before committing, check the diff for:
 
 - **Secrets:** API keys, tokens, passwords, keys, Wi-Fi or Tailscale details.
-- **Personal info:** phone numbers, home or shipping addresses, personal emails (only the team's public Northeastern emails and Kyle's listed Gmail appear on the site), student IDs.
-- **Partners and sponsors:** a contact's name, or what they said in meetings. Naming the organizations is fine (CRWA, the Port of Oakland): "we're talking with CRWA about data collection" is OK. No sponsor discounts, quotes or deal terms until Kyle announces them.
+- **Personal info:** phone numbers, home or shipping addresses, personal emails (only the project's Gmail, DREAMSboatproject@gmail.com, and the team's public Northeastern emails appear on the site), student IDs.
+- **Partners and sponsors:** the names of the people we talked to. Naming the organizations is fine, as contacts or partners (CRWA, the Port of Oakland), and so is what an organization told us: "the Port of Oakland and CRWA both told us they still send divers down for sediment samples" is OK. No sponsor discounts, quotes or deal terms until Kyle announces them.
 - **Money:** budgets, spending, or what anything cost.
 - **Photos:** location (EXIF/GPS) data. `tools/build_images.py` re-encodes images, which drops it. Don't commit original phone photos.
 - **Third-party files** whose license doesn't allow sharing.
