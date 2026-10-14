@@ -14,13 +14,17 @@
 >
 > - **The GPS footprint (3) is closed.** The module connects by cable to a JST-XH connector, J1.
 > - **The pod tether voltage (4) is closed, and the pod plan below is superseded (2026-09-25).**
->   - The tether carries the electronics pack voltage (15–21 V), and the pod makes its own 5 V with
->     a buck.
+>   - The tether carries 15 V from the carrier's U15 (since rev F, 2026-10-14; it was the
+>     electronics pack, 15–21 V, before), and the pod makes its own 5 V with a buck.
 >   - The link is one RS-485 pair, not a raw UART.
 >   - The sensor set is a DFRobot test-phase list.
 >   - See [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) §5 and `Boat_PCB/Pod_PCB_V3/`.
-> - **The Teensy concurrency model (1) is still undecided.** It is the first call the firmware has
->   to make.
+> - **The Teensy below is superseded (2026-10-13).** Rev E of the carrier runs two Raspberry Pi
+>   Pico 2s instead: Pico A for control (CAN on the PIO, SBUS, winch, stepper, LED, leak, pack ADC),
+>   Pico B for sensors (the I²C mux, GPS, the pod RS-485). So the Teensy concurrency model (1) no
+>   longer applies; how each Pico uses its two cores is the firmware's first call now. The Pi talks
+>   to Pico A over a UART on its header and can reset either Pico (Q3, Q4); Pico B reaches the Pi
+>   through Pico A, so the Picos' USB cables are optional. Pin maps are in `CLAUDE.md`.
 
 ---
 

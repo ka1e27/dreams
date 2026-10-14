@@ -15,12 +15,12 @@ blow-by-blow, run `git show v2-final:docs/v3/v3_review_2026-08-05.md`.
 
 | | V3 | Why |
 |---|---|---|
-| Boat MCU | **Teensy 4.1**, C++/Teensyduino | Pin count and the concurrency model; full rewrite from MicroPython |
-| Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051** | No MCP2515 — the Teensy has native CAN |
-| Drive pack | **12S LiPo**, voltage sense only | No shunt, no current sensing on this rail (see §3) |
-| Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is one **RS-485 pair** + 2× power. The link runs half duplex through a ±70 V fault-protected THVD2410 (U13). The power pair carries the **electronics pack voltage** (15–21 V), and the pod makes its own 5 V |
-| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on one Teensy I²C bus |
-| Power | **3 isolated domains** — drive / electronics / winch | Per-pack BMS protection; fusing is off-board |
+| Boat MCU | **Two Raspberry Pi Pico 2s** (RP2350), C++. Pico A (U1) runs control, Pico B (U14) the sensors | Replaced the Teensy 4.1 in rev E (2026-10-13), after V3.1 tried one Pico. Two give 52 GPIO and 6 ADC. The Pi talks to Pico A over a UART on its GPIO header and can reset either Pico (Q3, Q4); Pico B reaches the Pi over the UART link that joins the two. USB cables are optional (to flash a Pico, or to run its link over USB instead), so the Pi's USB ports can stay free for cameras and the modem |
+| Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051T/3** | No MCP2515: CAN runs on Pico A's PIO (can2040). The /3 part keeps the logic side at 3.3 V |
+| Packs | **Two 10S 10 Ah Li-ion in parallel**: one 10S bus (30–42 V) for the drives, electronics and winch. Optional **4S backup** on J18 | Rev F (2026-10-14). Kyle's pick: one pack type for V3.1 and V3. The drive side is voltage-sense only (see §3). The backup only keeps the 5 V side up (Pi, Picos, sensors, radios) while the 10S bus is off |
+| Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is one **RS-485 pair** + 2× power. The link runs half duplex through a ±70 V fault-protected THVD2410 (U13). The power pair carries **15 V** from U15 through F1 (since rev F), and the pod makes its own 5 V |
+| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on Pico B's I²C0 |
+| Power | **One 10S bus, three fused feeds** — drive (off-board) / electronics (J13) / winch (J14) | Per-pack BMS protection; fusing is off-board. On the board: 43 V TVSs (D3, D4), a -60 V winch P-FET (Q1), 63 V bulk caps, U15 (Pololu D36V6F15) for +15V, and the D12/D13 diode-OR into the 5 V buck |
 | Winch kill | **High-side P-FET, fail-safe OFF** | Gate pulled to source by R34; de-energised = open |
 | Passives | **THT** | Reworkability, by builder preference |
 | Stackup | 4-layer **JLC04161H-7628**, 1.6 mm, ENIG | **In1 = GND, In2 = PWR** |
@@ -41,9 +41,12 @@ k = 0.048 external, **0.024 internal**.
 | Rail | Current | Source of the number |
 |---|---|---|
 | Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
-| Electronics pack | 15 A fuse; real load ≈ **2 A** | Pololu D36V50F5 buck + A4988 stepper |
+| Electronics feed (J13, 10S) | 5 A fuse; real load ≈ **1 A** | Pololu D36V50F5 buck (through D12) + U15 (A4988 stepper and pod) |
+| `+15V` rail | **0.6 A** | U15's ceiling: the pod takes ≈ 0.13 A, so the stepper gets ≈ 0.45 A |
+| 4S backup (J18) | ≈ **2.3 A** worst case | The D36V50F5 at full load from 12 V, through D13 (B360B, 3 A) and two vias |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
-| Pod branch (F1) | **0.40 A hold**, fed from `+VELEC` | Bel Fuse 0ZRE0040FF1A PTC. At pack voltage the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short |
+| `+3V3` rail | **0.3 A** | Pico A's 3V3 pin (the RT6150 on the Pico, shared with the RP2350 itself) |
+| Pod branch (F1) | **0.40 A hold**, fed from `+15V` | Bel Fuse 0ZRE0040FF1A PTC. At 15 V the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short. The feed runs on In2: 0.8 mm along the top edge, ≈ 0.6 A at a 10 °C rise on 0.5 oz. Since rev F it carries U15's +15V, not the pack |
 | LED branch (F2) | **1.25 A hold** | " |
 | SBUS branch (F3) | **0.75 A hold** | Deliberately loose — the RC link is the manual override and must never nuisance-trip |
 | Drive | 100 A main / 80 A per ESC | **Off-board**, ANL fuses |
@@ -69,17 +72,18 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 - **INA228, not INA226.** A correctness fix, not an upgrade: INA226 is rated to 36 V common-mode
   and the drive domain exceeds that. Two are fitted, on electronics and winch. The drive one went
   out with the drive shunt chain (next point).
-- **Drive rail is voltage-only.** No shunt, no INA228 on 12S. An INA228 with nothing across
-  Vin+/Vin− measures nothing, so the whole chain came out — 7 components and a 4-wire harness.
-  The 12S rail has exactly one sense path: the ADC divider.
+- **Drive rail is voltage-only.** No shunt, no INA228 on the drive side. An INA228 with nothing
+  across Vin+/Vin− measures nothing, so the whole chain came out — 7 components and a 4-wire
+  harness. The drive side has exactly one sense path: J11's ADC divider.
 - **Shunts:** electronics **10 mΩ** (R32), winch **2 mΩ** (R33). Both 4-terminal — Kelvin sense
   pads tap the *small* pads, never the current pads.
 - **SHT45, not SHT41.** V2 fed an SHT41 5 V against a 3.6 V absolute max. Do not repeat that.
-- **Pack voltages.** The electronics and winch packs are read by their INA228s: VBUS is tied to the
-  load side of each shunt, so the chip reports voltage and current at 20 bits. The 68k/10k ADC
+- **Pack voltages.** The electronics and winch feeds are read by their INA228s: VBUS is tied to the
+  load side of each shunt, so the chip reports voltage and current at 20 bits. On the one 10S bus
+  (rev F) both read the bus voltage, and U10's VBUS near 0 V means the board is on the 4S backup. The 68k/10k ADC
   dividers that duplicated those readings came out in the 2026-09-28 parts review, along with their
-  1 k series resistors and filter caps. The 12S rail keeps its divider, 220k/13k, 2.81 V at 50.4 V,
-  with C4 at the ADC pin. Size any new divider the same way, for the worst case at 1 %: V2's
+  1 k series resistors and filter caps. J11's drive-side tap keeps its divider, 220k/13k:
+  2.34 V for a full 10S pack (42 V), 2.81 V at 12S (50.4 V), with C4 at the ADC pin. Size any new divider the same way, for the worst case at 1 %: V2's
   56k/10k gave 3.46 V at 5 % worst case on a 21 V pack, over a 3.3 V ADC rail.
 - **Series resistors on every net that leaves the board.** 330 Ω on WS2812 data, 1 k on each hull
   leak probe, 1 k on SBUS. Series, *not* a divider — a divider sized for a 5 V receiver drops a
@@ -87,7 +91,7 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 - **Specify passives properly in Value:** `100nF 50V X7R`, `22pF 50V C0G`, `1 %`. A generic disc
   could be Y5V and lose 80 % of its capacitance over temperature and DC bias.
 
-**Library.** `Boat_PCB/Boat_PCB_V3/lib/` already holds a built `dreams_v3` symbol library, 34
+**Library.** `Boat_PCB/lib/` already holds a built `dreams_v3` symbol library, 34
 footprints and the 3D models. Reuse it. Most parts come from stock KiCad libraries; the ones that
 needed downloading were **TCA9548A, BNO085 and INA228**.
 
@@ -151,11 +155,11 @@ both.**
 
 ## 5. The pod (test phase)
 
-Schematic and rev A layout: `Boat_PCB/Pod_PCB_V3/`. It shares the carrier's `lib/`. The pod
+Schematic and rev B layout: `Boat_PCB/Pod_PCB_V3/`. It uses the shared `Boat_PCB/lib/`. The pod
 rides the winch tether and profiles the water column to about 20 m. This round is for testing in
 freshwater, so it uses cheap hobby sensors rather than lab-grade ones.
 
-**Board (rev A, 2026-09-26).** 48 × 63 mm, 2 layers, GND poured on both sides. It's built for hand
+**Board (rev B, 2026-09-29).** 48 × 63 mm, 2 layers, GND poured on both sides. It's built for hand
 assembly. The resistors lie flat on the 10.16 mm footprint the carrier uses, the caps are 5 mm discs,
 and the XIAO and the Pololu buck sit on headers. No parts sit under either module, so each can be
 soldered straight down or socketed.
@@ -167,6 +171,11 @@ soldered straight down or socketed.
 - **Where things are.** Tether pads J1 on the top edge. The XIAO's USB-C faces the left edge. The
   right edge, top to bottom: AUX, PRESS, DO, TDS, pH (J10, J6, J4, J3, J2). The bottom edge: TURB,
   TEMP, LEAK, BOTTOM (J5, J7, J8, J9). The AIN assignment below is unchanged.
+- **Rev B is a re-placement of rev A, not a redesign.** Same 54 footprints, outline and netlist.
+  The right-edge groups sit on one 8.47 mm pitch, the bottom groups on equal gaps, and the twelve
+  upright resistors and caps stand in one row on a 3.4 mm pitch. The AP2112's caps are now within
+  3 mm of its pins (rev A had them about 10 mm away), and the back legend is on a grid, with a
+  label at every pad.
 - **No test points.** Probe GND and 5V on any sensor pad group, 3V3 on TEMP or AUX, and the tether
   voltage on J1.
 
@@ -174,8 +183,8 @@ soldered straight down or socketed.
 sensors, ADC and transceiver need 12–21 V on J1. Don't exceed 24 V, the SMBJ24A's standoff voltage.
 
 **Tether and power.**
-- **Power:** the carrier's J2 sends the electronics pack (15–21 V) through F1 (0.40 A PTC). At pack
-  voltage the pod draws about 0.1 A.
+- **Power:** the carrier's J2 sends 15 V from U15 through F1 (0.40 A PTC). At 15 V the pod draws
+  about 0.13 A.
 - **Pod input:** a Schottky and an SMBJ24A protect it, then a Pololu D36V6F5 buck makes 5 V. An
   AP2112K-3.3 feeds the ADC, transceiver and pull-ups. The XIAO keeps its own 3V3; the two 3.3 V
   rails are never tied.

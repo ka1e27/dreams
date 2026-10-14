@@ -63,3 +63,6 @@ Boat_PCB/**/*.drl
 Boat_PCB/**/fab/
 Boat_PCB/**/gerbers/
 Boat_PCB/**/production/
+
+# Partner decks and meeting notes stay out of the repo
+docs/presentations/

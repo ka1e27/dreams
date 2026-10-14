@@ -1,15 +1,17 @@
 # `docs/v3/`: V3 hardware design knowledge
 
 This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/`, the pod board in
-`Boat_PCB/Pod_PCB_V3/` (brief §5), and the reasons they are built the way they are.
+`Boat_PCB/Pod_PCB_V3/` (brief §5), and the reasons they are built the way they are. The hull,
+bridge and drive design is in `V3_MECHANICAL.md`.
 
 | File | What it is |
 |---|---|
 | **[`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md)** | **Start here.** Locked decisions, the current budget, part choices with their reasons, and the layout mistakes the first attempt made |
+| [`V3_1_STARTER_CARRIER.md`](V3_1_STARTER_CARRIER.md) | The V3.1 starter carrier (`Boat_PCB/Boat_PCB_V3_1/`): an interim Pi 5 + Pico 2 board. Power, pin map, connectors, bring-up checks |
+| [`V3_MECHANICAL.md`](V3_MECHANICAL.md) | Matthew's rev D hull, bridge and outdrive proposal (from `feature/mechanical-rev-d`): what's decided, the numbers, the sampling plan, open questions, and which newer decisions override it |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
-| [`session_journal.md`](session_journal.md) | Running log of recent work sessions: what changed, what's still open. Read it at session start |
-| [`../../Boat_PCB/Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
+| [`../../Boat_PCB/lib/README.md`](../../Boat_PCB/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
 
 The two planning files were written outside this repo. They are stored verbatim under a scope note.
 If they disagree with the brief or the KiCad files, the brief and the KiCad files win.
@@ -36,13 +38,13 @@ someone. These are two different boats, not discrepancies to fix.
 
 | | V2 (`v2-final`) | V3 |
 |---|---|---|
-| Boat MCU | RP2040 Pico, MicroPython | Teensy 4.1, C++/Teensyduino, a full rewrite |
+| Boat MCU | RP2040 Pico, MicroPython | Two Pico 2s (RP2350), C++, a full rewrite on a new pin map. The Teensy 4.1 of revs A–D was dropped in rev E |
 | Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
-| Drive pack | Milwaukee M18 | 12S LiPo, voltage sense only |
-| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus pack-voltage power |
+| Packs | Milwaukee M18 | Two 10S 10 Ah Li-ion in parallel, one bus for drive, electronics and winch (rev F); optional 4S backup for the 5 V side |
+| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus 15 V from the carrier's U15 |
 | Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
-| Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch through the INA228s; the 12S rail through one 220k/13k, 1 % divider into the Teensy's ADC |
-| Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V only; the stepper moved to the Teensy |
+| Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch feeds through the INA228s; the 10S bus through J11 and one 220k/13k, 1 % divider into Pico A's ADC0 |
+| Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V, a UART to Pico A and a reset line to each Pico; the stepper moved to Pico A |
 
 Copying a V2 pin number, divider ratio, protocol field or threshold into V3 without re-deriving it
 is exactly the mistake this separation exists to catch.
