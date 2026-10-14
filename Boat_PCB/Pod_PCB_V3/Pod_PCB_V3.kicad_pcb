@@ -12278,7 +12278,7 @@
 			(justify mirror)
 		)
 	)
-	(gr_text "JLCJLCJLCJLC"
+	(gr_text "WayWayWay"
 		(at 112.8635 85.7 0)
 		(layer "B.SilkS")
 		(uuid "787530e4-abd9-4e79-b085-edb14bbf8c6f")

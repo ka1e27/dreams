@@ -211,6 +211,11 @@ and locked: the +5V feed round the socket's left end (1.3 mm, both layers), the 
 (XT60 → F1 → Q1), and a 0.35 mm GND link from Pico pin 23 round the antenna keep-out to pin 18
 (signals otherwise wall pin 23 in). Keep them if you re-route.
 
+**Ordering boards.** PCBWay makes them. Each of the three boards carries PCBWay's order-number marker,
+the text "WayWayWay" on the back silkscreen: pick "Specify a location" for the product number at
+checkout and PCBWay prints it there. Upload a zip of the gerber and drill export (each board's
+`gerbers/` folder is git-ignored, so regenerate it from the board before an order).
+
 **Python:** ruff config lives in `pyproject.toml`.
 
 ## Raspberry Pi 5 notes (learned during V2 bring-up, still true of the platform)
