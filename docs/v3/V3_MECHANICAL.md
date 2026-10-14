@@ -23,7 +23,7 @@ Settle these before anyone models the boat in CAD from the rev D drawings.
 
 | Topic | Rev D says | Now | What it means |
 |---|---|---|---|
-| **Hull printing** | Each tub and lid in 3 segments (520 / 260 / 520 mm), split at the frames, printed on end on the Giga (800 × 800 × 1000 mm) | Each hull printed in one piece on the Giga (Kyle, 2026-10-14) | **Conflict.** Rev D found a one-piece hull only fits standing on end if it's ≤ ~980 mm long, and a shorter hull runs at a higher Froude number: a 300 mm wide one needs ~2× the power at 1.5 m/s (229 vs 110 W). Decide the hull length and whether it's one piece before CAD |
+| **Hull length and printing** | 1300 mm hulls, each tub and lid in 3 segments (520 / 260 / 520 mm), split at the frames, printed on end on the Giga (800 × 800 × 1000 mm) | Each hull printed in one piece on the Giga, **985 mm long** (Kyle, 2026-10-14, to confirm) | 985 mm fits the Giga on end with 15 mm to spare. But rev D's layout is drawn for 1300 mm, and Matthew's model says a 985 mm hull sits deeper, leaves less payload and needs ~45 % more power at cruise (§5.5). Move the frames, hub and packs to suit, and re-run trim and the SF checks, before CAD |
 | **Sealing** | Glassed outside (200 g/m² E-glass, a second layer on keel, chines and stem), 2 coats of epoxy inside | Epoxy only, no fibreglass, on the first boat (Kyle, 2026-10-14) | Use the printing and epoxy steps in §5.1 without the glass. Rev D used the glass to cover the segment seams, so the soak test matters more |
 | **Outdrive mount** | Printed ABS for now; mill a 6061 one later | Motor mounts machined from metal (Kyle, 2026-10-14) | Go straight to the metal version of the mount in §4.3 |
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
@@ -180,6 +180,34 @@ With the arm aboard, 152 mm (6 in) hulls fail (45 mm to the lid joint), 190 mm i
 220 mm keeps +7 kg of payload and 250 mm +13 kg. 6 in hulls have 16 % less drag but their 84 mm flat
 deck doesn't take the 140 mm feet. Hence 220 mm.
 
+### 5.5 Hull length check: 985 mm (2026-10-14)
+
+Matthew's model, run at 985 mm with the same gear aboard and the hull shape scaled to the new
+length, at rev D's 220 mm beam and two wider ones for comparison. Only the shell's mass changes. The
+trim, the layout and the strength checks were **not** re-run: the frames, hub and packs are still
+placed for a 1300 mm hull.
+
+| | 1300 × 220 (rev D) | 985 × 220 | 985 × 250 | 985 × 300 |
+|---|---|---|---|---|
+| Enclosed volume per hull | 51.6 L | 39.1 L | 44.2 L | 52.7 L |
+| Design mass | 34.3 kg | 31.9 kg | 32.4 kg | 33.4 kg |
+| Draft | 99 mm | 116 mm | 108 mm | 98 mm |
+| To the lid joint (limit 60 mm) | 91 mm | 74 mm | 82 mm | 92 mm |
+| Payload before the joint is within 60 mm | +15 kg | +5 kg | +9 kg | +15 kg |
+| With Kyle's arm (+9.9 kg), to the lid joint | 70 mm | **47 mm, fails** | **58 mm, fails** | 71 mm |
+| Both drives at 1.0 / 1.5 / 3.0 m/s | 23 / 94 / 381 W | 27 / 138 / 429 W | 28 / 156 / 449 W | 31 / 192 / 498 W |
+| Endurance at 1.5 m/s (400 Wh) | 4.2 h | 2.9 h | 2.6 h | 2.1 h |
+
+- At 220 mm wide, a 985 mm hull still floats with 74 mm to the lid joint, but only +5 kg of payload
+  is left, so the arm no longer fits.
+- Cruise at 1.5 m/s takes ~45 % more power (138 vs 94 W). The shorter hull runs at Froude number
+  0.48 instead of 0.42, close to the hump, and endurance drops from ~4.2 h to ~2.9 h.
+- Wider hulls buy the freeboard back but cost more power: at 300 mm the freeboard matches rev D's,
+  at about twice its cruise power.
+- At 3 m/s both drives need ~430 W, inside Kyle's 200–300 W per side.
+- The 190 mm joint height and the 60 mm limit are rev D's. A higher lid joint changes the freeboard
+  rows, not the power.
+
 ## 6. Water sampling and sensors
 
 ### 6.1 How a sample gets taken (proposal)
@@ -286,7 +314,8 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
 
 ## 7. Open questions
 
-- **Hull length and one-piece printing** (§1).
+- **Hull length:** confirm 985 mm, then lay the frames, hub and packs out for it and re-run trim and
+  the SF checks (§1, §5.5).
 - **Motor KV.** Rev C's 380 KV was picked for 18 V; on a 12S rail it would run at ~10–25 % duty.
   ~150–200 KV suits 12S. Most such motors are 50xx (~55 mm across), which fits the cover if the motor
   axis goes up ~5 mm. Matthew's pick, and it depends on the pack (§1).
