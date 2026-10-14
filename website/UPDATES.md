@@ -20,7 +20,7 @@ HOW TO ADD AN UPDATE (anyone on the team, or a Claude Code session)
 ## Week of Oct 12, 2026
 
 - **Kyle:** PCBWay is now sponsoring our circuit boards.
-- **Kyle:** Designed a new PCB, V3.1, to get the boat on the water before the full V3 board and to try out the Pico-based electronics planned for it. It pairs the Raspberry Pi 5 with a Raspberry Pi Pico 2 in place of the Teensy, runs from one 10S Li-ion pack, and has CAN for the motor controllers, RC control, GPS and hull leak sensors. Then moved the full V3 board to two Pico 2s as well: one runs the motors, winch and RC, the other the sensors, GPS and the pod link. They talk to the Pi over its GPIO pins, so its USB ports stay free for cameras. All three boards now share one KiCad parts library.
+- **Kyle:** Designed a new PCB, V3.1, to get the boat on the water before the full V3 board and to try out the Pico-based electronics planned for it. It pairs the Raspberry Pi 5 with a Raspberry Pi Pico 2 in place of the Teensy, runs from one 10S Li-ion pack, and has CAN for the motor controllers, RC control, GPS and hull leak sensors. Then moved the full V3 board to two Pico 2s as well: one runs the motors, winch and RC, the other the sensors, GPS and the pod link. They talk to the Pi over its GPIO pins, so its USB ports stay free for cameras. All three boards now share one KiCad parts library, and each board's layout rules are written up beside it.
 - **Kyle:** Gave every week on the website's Updates page its own page, with the full story and photos.
 
 ## Week of Oct 5, 2026
