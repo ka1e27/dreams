@@ -31,6 +31,11 @@
 
 ### Core compute
 
+> **Updated 2026-10-14 (rev F, 10S power):** the carrier now runs from 10S Li-ion. New: 1× Pololu D36V6F15
+> (U15, `Pololu_D36V6F5`), 2× Diodes Inc. B360B (D12, D13, `D_SMB`), 1× JST-VH 2-pin (J18, the 4S backup).
+> Changed: D3/D4 SMBJ24A → SMBJ43A, Q1 IPP120P04P4L-03 → Vishay SUP90P06-09L, C1/C2/C26 → 100 µF 63 V,
+> R60 10k → 22k. The 12S, M18 and 15–21 V figures below are rev E and earlier.
+>
 > **Updated 2026-10-13 (rev E):** the Teensy 4.1 below was replaced by two Raspberry Pi Pico 2s. Fit:
 > 2× Raspberry Pi Pico 2 (the H version has the headers on), 4× 1×20 female header, 8.5 mm (one pair
 > per Pico, soldered to the carrier's underside), 2× B5819W (D10, D11, SOD-123), 2× 6 mm tact switch
@@ -51,7 +56,7 @@ Bought for V2's CAN circuit. Use them before ordering more:
 | Part | Qty | Where it goes |
 |---|---|---|
 | NXP **TJA1051T/3,118** CAN transceiver, SO-8 | 3 | V3 U3 and V3.1 U4; one spare |
-| Rubycon **35ZLH470MEFC10X16**, 470 µF 35 V, 10 × 16 mm, 5 mm leads | 5 | V3 C1, C2, C25 and C26 (C25 went from 100 µF to 470 µF to use one); one spare. Not V3.1's C1: its 10S pack reaches 42 V |
+| Rubycon **35ZLH470MEFC10X16**, 470 µF 35 V, 10 × 16 mm, 5 mm leads | 5 | V3 C25 only, on the 15 V A4988 supply; four spare. Since rev F (10S) C1, C2 and C26 are 100 µF 63 V: a 10S pack reaches 42 V, as on V3.1 |
 | Microchip **MCP2515-I/P** CAN controller, DIP-18 | 3 | Spare: V3 and V3.1 run CAN on can2040 |
 | ECS **ECS-80-20-4X** crystal, 8 MHz, 20 pF | 4 | Spare: they were for the MCP2515 |
 

@@ -87,7 +87,7 @@
         <article class="log-card" data-v="v2" data-s="tested"><div class="ph"><picture><source type="image/webp" srcset="img/log-stereo-480.webp 480w, img/log-stereo-720.webp 720w" sizes="(max-width: 680px) 50vw, 300px"><img src="img/log-stereo-480.jpg" alt="Stereo camera rig on the test bench" width="480" height="600" loading="lazy"></picture></div><div class="meta"><div class="row"><span>V2&nbsp;· Vision</span><span class="chip tested">Tested</span></div><h3>Stereo tracking on the bench</h3><p>Per-object depth from a stereo pair, with YOLOv8 detection.</p></div></article>
         <article class="log-card" data-v="v2" data-s="built"><div class="ph"><picture><source type="image/webp" srcset="img/log-dashboard-480.webp 480w, img/log-dashboard-720.webp 720w" sizes="(max-width: 680px) 50vw, 300px"><img src="img/log-dashboard-480.jpg" alt="The V2 command-center dashboard" width="480" height="600" loading="lazy"></picture></div><div class="meta"><div class="row"><span>V2&nbsp;· Software</span><span class="chip built">Built</span></div><h3>Command-center dashboard</h3><p>Ran on the Pi&nbsp;5. Now a live demo you can try.</p></div></article>
         <article class="log-card failed" data-v="v2" data-s="failed"><div class="ph blank" aria-hidden="true"><span>V2 → V3</span></div><div class="meta"><div class="row"><span>V2&nbsp;· Bench</span><span class="chip failed">Failed</span></div><h3>Bench testing</h3><p>Exposed flaws in motor control, power and safety. We redesigned the whole system.</p></div></article>
-        <article class="log-card" data-v="v3" data-s="designed"><div class="ph"><picture><source type="image/webp" srcset="img/log-v3-carrier-480.webp 480w, img/log-v3-carrier-720.webp 720w" sizes="(max-width: 680px) 50vw, 300px"><img src="img/log-v3-carrier-480.jpg" alt="3D render of the V3 carrier board" width="480" height="600" loading="lazy"></picture></div><div class="meta"><div class="row"><span>V3&nbsp;· Fall 2026</span><span class="chip designed">Designed</span></div><h3>Carrier board, rev D</h3><p>130.6&nbsp;×&nbsp;101.5&nbsp;mm, 4 layers, 126 parts, fully routed.</p></div></article>
+        <article class="log-card" data-v="v3" data-s="designed"><div class="ph"><picture><source type="image/webp" srcset="img/log-v3-carrier-480.webp 480w, img/log-v3-carrier-720.webp 720w" sizes="(max-width: 680px) 50vw, 300px"><img src="img/log-v3-carrier-480.jpg" alt="3D render of the V3 carrier board" width="480" height="600" loading="lazy"></picture></div><div class="meta"><div class="row"><span>V3&nbsp;· Fall 2026</span><span class="chip designed">Designed</span></div><h3>Carrier board, rev F</h3><p>130.6&nbsp;×&nbsp;101.5&nbsp;mm, 4 layers, 141 parts, fully routed.</p></div></article>
         <article class="log-card" data-v="v3" data-s="designed"><div class="ph"><picture><source type="image/webp" srcset="img/log-v3-pod-480.webp 480w, img/log-v3-pod-720.webp 720w" sizes="(max-width: 680px) 50vw, 300px"><img src="img/log-v3-pod-480.jpg" alt="3D render of the V3 sensor-pod board" width="480" height="600" loading="lazy"></picture></div><div class="meta"><div class="row"><span>V3&nbsp;· Fall 2026</span><span class="chip designed">Designed</span></div><h3>Sensor-pod board, rev B</h3><p>48&nbsp;×&nbsp;63&nbsp;mm. Talks to the boat over an <span class="nw">RS-485</span> tether.</p></div></article>
         <article class="log-card" data-v="v3" data-s="next"><div class="ph blank" aria-hidden="true"><span>In CAD</span></div><div class="meta"><div class="row"><span>V3&nbsp;· Hull</span><span class="chip incad">In CAD</span></div><h3>Modular hull</h3><p>The new V3 hull, in CAD now.</p></div></article>
         <article class="log-card" data-v="v3" data-s="next"><div class="ph blank" aria-hidden="true"><span>Next</span></div><div class="meta"><div class="row"><span>V3&nbsp;· Software</span><span class="chip planned">Planned</span></div><h3>Firmware</h3><p>Autonomous waypoint navigation, surface sampling and depth logging.</p></div></article>
@@ -138,7 +138,7 @@
         <div class="tag"><span class="v">V3</span><span class="chip built live">In build</span><span class="label">Fall 2026</span></div>
         <div>
           <h3>Built for the field</h3>
-          <p>A ground-up redesign that fixes what V2 got wrong: a Teensy&nbsp;4.1 real-time core, CAN-bus motor control, isolated power domains and a new <span class="nw">RS-485</span> sensor pod, with a fish-finder sonar for depth. The carrier and pod boards are laid out and checked.</p>
+          <p>A ground-up redesign that fixes what V2 got wrong: two Raspberry Pi Pico&nbsp;2 real-time controllers, CAN-bus motor control, a fused and monitored 10S power system and a new <span class="nw">RS-485</span> sensor pod, with a fish-finder sonar for depth. The carrier and pod boards are laid out and checked.</p>
           <p>The goal: autonomous surface surveys of small bodies of water. Right now we're talking with the Charles River Watershed Association (CRWA) about data collection.</p>
           <p class="mt-18"><a class="more" href="boat.html#system">See the V3 system →</a></p>
         </div>
@@ -168,7 +168,7 @@
         <span class="chip failed">Failed&nbsp;· V2 bench</span>
         <h3>V2's control, power and safety design</h3>
         <p>Bench testing showed that V2's motor control, power and safety design weren't reliable enough to put on the water.</p>
-        <p class="fix"><b>Fix in V3</b>Real-time control moved to a Teensy&nbsp;4.1, each VESC became its own CAN node, power was split into three isolated domains, and the winch driver got a fail-safe hardware kill, ready for the later sample-collection stage.</p>
+        <p class="fix"><b>Fix in V3</b>Real-time control moved to two Raspberry Pi Pico&nbsp;2s, each VESC became its own CAN node, every power feed got its own fuse and current monitor, and the winch driver got a fail-safe hardware kill, ready for the later sample-collection stage.</p>
       </article>
     </div>
   </section>
@@ -189,7 +189,7 @@
 
       <p class="label" style="margin:72px 0 0">V3 milestones</p>
       <ol class="mile reveal">
-        <li><span class="chip designed">Done</span><h3>Electronics designed</h3><p>Carrier board (rev D) and sensor-pod board (rev B) laid out and checked.</p></li>
+        <li><span class="chip designed">Done</span><h3>Electronics designed</h3><p>Carrier board (rev F), V3.1 starter board and sensor-pod board (rev B) laid out and checked.</p></li>
         <li><span class="chip built live">In progress</span><h3>New hull</h3><p>A modular hull in CAD, built around the V3 electronics.</p></li>
         <li><span class="chip planned">Next</span><h3>Build</h3><p>Fabricate the boards and assemble the electronics, pod and fish finder into the hull.</p></li>
         <li><span class="chip planned">Planned</span><h3>Firmware</h3><p>Autonomous waypoint navigation, surface sampling and depth logging, streamed to the dashboard.</p></li>

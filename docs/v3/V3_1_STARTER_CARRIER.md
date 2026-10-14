@@ -3,8 +3,8 @@
 An interim board to get the boat moving before the full V3 carrier. It keeps the Pi 5 and the Pololu
 5 V buck, swaps the Teensy for one Raspberry Pi Pico 2, and leaves out what the first trials don't
 need: current sensing, the I²C mux and its sensors, the radar stepper and the winch kill. The full V3
-carrier now uses two Picos as well (rev E, 2026-10-13, with its own pin map), and this board keeps a
-header for a second one.
+carrier now uses two Picos as well (rev E, 2026-10-13, with its own pin map) and, since rev F, the same
+10S Li-ion packs. This board keeps a header for a second Pico.
 
 - **Files:** `Boat_PCB/Boat_PCB_V3_1/`, KiCad 10. It uses the shared library in `Boat_PCB/lib/`.
 - **Board:** 98 × 67 mm, 2 layers, 1.6 mm FR-4, GND poured on both sides. The tall parts (the Pico,

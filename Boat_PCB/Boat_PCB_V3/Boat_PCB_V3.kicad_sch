@@ -13091,6 +13091,179 @@
 			)
 			(embedded_fonts no)
 		)
+		(symbol "dreams_v3:Pololu_D36V6F5"
+			(pin_names
+				(offset 1.016)
+			)
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "U"
+				(at -7.62 6.35 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "Pololu_D36V6F5"
+				(at 0 -6.35 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Footprint" "dreams_v3:Pololu_D36V6F5"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" "https://www.pololu.com/product/3792"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Pololu D36V6F5 step-down regulator module: 5 V, 600 mA, 5.2-50 V in, < 0.1 mA quiescent. Pins in one 0.1 in row: SHDN, VIN, GND, VOUT. SHDN is active low and can be left open. Pololu asks for >= 33 uF on the input with long leads."
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "buck regulator module pololu"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "Pololu*D36V6*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "Pololu_D36V6F5_0_1"
+				(rectangle
+					(start -7.62 5.08)
+					(end 7.62 -3.81)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+			)
+			(symbol "Pololu_D36V6F5_1_1"
+				(pin input line
+					(at -10.16 0 0)
+					(length 2.54)
+					(name "~{SHDN}"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at -10.16 2.54 0)
+					(length 2.54)
+					(name "VIN"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -6.35 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_out line
+					(at 10.16 2.54 180)
+					(length 2.54)
+					(name "VOUT"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
 	)
 	(text "CARRIER  -  COMPUTE & BUS"
 		(exclude_from_sim no)
@@ -13116,7 +13289,7 @@
 		)
 		(uuid "0ce35d16-87b2-4a86-bd07-d9d3d6af15d8")
 	)
-	(text "CARRIER  -  CURRENT SENSE  (M18 domains only; the 12S drive rail is voltage-only, and the VESCs already report per-motor current over CAN)"
+	(text "CARRIER  -  CURRENT SENSE  (electronics and winch feeds only; the drive is voltage-only, and the VESCs already report per-motor current over CAN)"
 		(exclude_from_sim no)
 		(at 15.00 225.78 0)
 		(effects
@@ -13128,7 +13301,7 @@
 		)
 		(uuid "3784d87f-ea58-42aa-bb99-6383576aa584")
 	)
-	(text "BATTERY SENSE  -  12S LiPo tap 220k/13k = 17.9x (50.4V), elec + winch 68k/10k = 7.8x (2.69 V at 21 V), plus a 1k series into each ADC pin.  R1/R2/R13 removed with the drive shunt: the 12S rail is voltage-only now, on J11."
+	(text "BATTERY SENSE  -  10S pack tap J11, 220k/13k = 17.9x (2.34 V at 42 V, room up to 12S), plus C4 at Pico A's ADC0.  Electronics and winch voltages come from the INA228s (U10, U11)."
 		(exclude_from_sim no)
 		(at 15.00 279.18 0)
 		(effects
@@ -13140,7 +13313,7 @@
 		)
 		(uuid "11483872-f0bf-4b77-a272-302685f040e8")
 	)
-	(text "CAPACITORS  -  470uF bulk per M18 pack; 100nF ADC filters (V2 had none). The 12S tap filter cap is C4 at Pico A's ADC0 pin; J11 is JST-VH so no signal plug can mate with it."
+	(text "CAPACITORS  -  100uF 63V bulk on each 10S input; 470uF 35V on the 15 V A4988 supply (C25); 100nF ADC filters. The pack tap filter cap is C4 at Pico A's ADC0 pin; J11 is JST-VH so no signal plug can mate with it."
 		(exclude_from_sim no)
 		(at 15.00 314.80 0)
 		(effects
@@ -13152,7 +13325,7 @@
 		)
 		(uuid "657928f8-1220-4f03-982e-aa9fb24aa967")
 	)
-	(text "CONNECTORS  -  JST-XH for signals, JST-VH for the 12S tap, XT60 for packs; J16 is female (switched output)"
+	(text "CONNECTORS  -  JST-XH for signals, JST-VH for the 10S tap (J11) and the 4S backup (J18), XT60 for the 10S inputs; J16 is female (switched output)"
 		(exclude_from_sim no)
 		(at 15.00 350.42 0)
 		(effects
@@ -13164,7 +13337,7 @@
 		)
 		(uuid "3a34e5a8-dc90-4185-a76f-d4d91444ba44")
 	)
-	(text "M18 PACK INPUTS  -  XT60 (pin 1 = notched end = negative, per the XT60 convention) + in-line Kelvin shunts; the sense pins have their own nets (ELEC/WINCH_SHUNT_P/N).  Drive is sensed off-board: its pack never reaches this carrier."
+	(text "10S INPUTS  -  XT60 (pin 1 = notched end = negative, per the XT60 convention) + in-line Kelvin shunts; the sense pins have their own nets (ELEC/WINCH_SHUNT_P/N).  Both packs share one 10S bus; the drive is sensed off-board: its current never crosses this carrier."
 		(exclude_from_sim no)
 		(at 15.00 396.20 0)
 		(effects
@@ -13224,7 +13397,7 @@
 		)
 		(uuid "33363742-710a-4d08-819b-31d1551f1634")
 	)
-	(text "POD PCB  -  separate board, here for reference only.  Tether pin 2 carries the electronics pack voltage (M18, 15-21 V) through F1; the pod makes its own 5 V."
+	(text "POD PCB  -  separate board, here for reference only.  Tether pin 2 carries 15 V from U15 through F1; the pod makes its own 5 V."
 		(exclude_from_sim no)
 		(at 15.00 579.38 0)
 		(effects
@@ -14575,7 +14748,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "12S divider top"
+		(property "Description" "Pack divider top: 220k/13k reads a full 10S pack (42 V) as 2.34 V at ADC0, and takes up to 12S (2.81 V)"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -14653,7 +14826,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "12S divider bottom"
+		(property "Description" "Pack divider bottom"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -14837,7 +15010,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470uF 35V"
+		(property "Value" "100uF 63V"
 			(at 15.49 332.43 0)
 			(do_not_autoplace no)
 			(effects
@@ -14869,7 +15042,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "electronics pack input bulk"
+		(property "Description" "10S electronics input bulk (63 V for a 42 V pack)"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -14915,7 +15088,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470uF 35V"
+		(property "Value" "100uF 63V"
 			(at 32.00 332.43 0)
 			(do_not_autoplace no)
 			(effects
@@ -14947,7 +15120,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "winch pack input bulk"
+		(property "Description" "10S winch input bulk (63 V for a 42 V pack)"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -15172,6 +15345,16 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+		(property "Description" "JST-XH 4-pin to the pod tether through the slip ring: RS-485 pair (A/B, from U13) + 15 V from U15 through F1. The pod makes its own 5 V."
+			(at 38.10 361.95 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(pin "1"
@@ -15781,7 +15964,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "12S HV tap (JST-VH)"
+		(property "Value" "10S pack tap (JST-VH)"
 			(at 198.12 367.99 0)
 			(do_not_autoplace no)
 			(effects
@@ -15813,7 +15996,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "12S drive-pack tap, up to 50.4 V. JST-VH (3.96 mm) on purpose, so no JST-XH signal plug can mate with it. Fuse the harness at the pack end."
+		(property "Description" "10S pack tap, up to 42 V (the divider reads up to 12S, 50.4 V). JST-VH (3.96 mm) on purpose, so no JST-XH signal plug can mate with it. Fuse the harness at the pack end."
 			(at 203.20 359.41 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -15859,7 +16042,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "XT60 M18 ELECTRONICS"
+		(property "Value" "XT60 10S ELECTRONICS"
 			(at 15.24 413.71 0)
 			(do_not_autoplace no)
 			(effects
@@ -15889,6 +16072,16 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+		(property "Description" "XT60 male, 10S pack in for the electronics (30-42 V). Pin 1 = notched end = negative"
+			(at 20.32 405.13 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(pin "1"
@@ -16011,7 +16204,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "XT60 M18 WINCH"
+		(property "Value" "XT60 10S WINCH"
 			(at 49.53 413.71 0)
 			(do_not_autoplace no)
 			(effects
@@ -16041,6 +16234,16 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+		(property "Description" "XT60 male, 10S pack in for the winch (30-42 V). Pin 1 = notched end = negative"
+			(at 54.61 405.13 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
 			)
 		)
 		(pin "1"
@@ -16163,7 +16366,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "IPP120P04P4L-03"
+		(property "Value" "SUP90P06-09L"
 			(at 15.24 454.35 0)
 			(do_not_autoplace no)
 			(effects
@@ -16195,7 +16398,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "P-FET -40 V, 3.4 mOhm max at VGS -10 V (TO-220, tab = drain). VGS rating +5/-16 V, so D2 clamps the gate. About 1.4 W at 20 A: fit the insulated clip-on heatsink."
+		(property "Description" "P-FET -60 V, 9.3 mOhm max at VGS -10 V (Vishay SUP90P06-09L, TO-220, tab = drain), for a 10S pack (42 V). VGS rating +/-20 V: the divider gives -Vpack/2 (-21 V full), so D2 clamps it at -15 V. About 1 W at 10 A: fit the insulated clip-on heatsink."
 			(at 20.32 445.77 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -16549,7 +16752,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "470uF 35V"
+		(property "Value" "100uF 63V"
 			(at 122.17 451.81 0)
 			(do_not_autoplace no)
 			(effects
@@ -16581,7 +16784,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "winch ESC output bulk, absorbs Q1 turn-off kick"
+		(property "Description" "Winch ESC output bulk (63 V for 10S), absorbs Q1 turn-off kick"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -17623,7 +17826,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "A4988 VMOT bulk - keep local to A1"
+		(property "Description" "A4988 VMOT bulk on +15V (from U15), keep local to A1"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -22073,7 +22276,7 @@
 		)
 		(uuid "be14a523-13f9-49e8-a941-cc2735461018")
 	)
-	(label "+VELEC"
+	(label "+VLOGIC"
 		(at 177.80 40.64 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22084,7 +22287,7 @@
 		)
 		(uuid "00befa8f-af45-4600-9442-1ac95aaccd0e")
 	)
-	(label "+VELEC"
+	(label "+VLOGIC"
 		(at 190.50 40.64 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22366,7 +22569,7 @@
 	
 	
 	
-	(label "12S_RAW"
+	(label "PACK_RAW"
 		(at 198.12 361.95 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22377,7 +22580,7 @@
 		)
 		(uuid "1be0055d-f8e2-4753-879b-e7b4d38ac11e")
 	)
-	(label "12S_RAW"
+	(label "PACK_RAW"
 		(at 80.01 285.75 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22388,7 +22591,7 @@
 		)
 		(uuid "783d5663-65e2-47ca-8f32-9c4f13d5b7a1")
 	)
-	(label "S12_ADC"
+	(label "PACK_ADC"
 		(at 80.01 293.37 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22399,7 +22602,7 @@
 		)
 		(uuid "484a1a65-3d3f-47ef-ac69-cd752c7654f9")
 	)
-	(label "S12_ADC"
+	(label "PACK_ADC"
 		(at 95.25 285.75 0)
 		(fields_autoplaced yes)
 		(effects
@@ -22473,7 +22676,7 @@
 		)
 	)
 	
-	(label "S12_ADC"
+	(label "PACK_ADC"
 		(at 50.80 321.31 0)
 		(fields_autoplaced yes)
 		(effects
@@ -23694,7 +23897,7 @@
 		)
 		(uuid "08fd46d2-1818-4ae2-ae2a-222e802d3dac")
 	)
-	(label "+VELEC"
+	(label "+15V"
 		(at 217.17 31.75 0)
 		(fields_autoplaced yes)
 		(effects
@@ -23705,7 +23908,7 @@
 		)
 		(uuid "d0b356d3-f04d-400f-b625-ac570fd8240f")
 	)
-	(label "+VELEC"
+	(label "+15V"
 		(at 50.80 514.35 0)
 		(fields_autoplaced yes)
 		(effects
@@ -29602,7 +29805,7 @@
 		(uuid "41b2dca3-b1b7-448a-90c6-f503e8e4562b")
 	)
 	
-	(label "POD_VPACK"
+	(label "POD_15V"
 		(at 33.02 361.95 0)
 		(fields_autoplaced yes)
 		(effects
@@ -29688,7 +29891,7 @@
 				(justify left)
 			)
 		)
-		(property "Description" "pod tether 5V"
+		(property "Description" "Pod tether fuse on U15's +15V branch, so a flooded or shorted tether trips this and not the stepper supply"
 			(at 0 0 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -29713,7 +29916,7 @@
 			)
 		)
 	)
-	(label "+VELEC"
+	(label "+15V"
 		(at 345.44 57.15 0)
 		(fields_autoplaced yes)
 		(effects
@@ -29724,7 +29927,7 @@
 		)
 		(uuid "a9a89f1a-ecce-4b8c-8fd1-28797d475b1a")
 	)
-	(label "POD_VPACK"
+	(label "POD_15V"
 		(at 345.44 64.77 0)
 		(fields_autoplaced yes)
 		(effects
@@ -31139,7 +31342,7 @@
 		)
 		(uuid "d5a8b910-0034-48d7-80f0-733413dac3d4")
 	)
-	(text "PROTECTION  -  TVS on both pack rails (also a reverse-polarity crowbar that blows the pack fuse), +5V over-voltage clamp, Q1 gate clamp, tether TVS (24 V NUP2105L, D6)"
+	(text "PROTECTION  -  43 V TVS on both 10S rails (also a reverse-polarity crowbar that blows the pack fuse), +5V over-voltage clamp, Q1 gate clamp, tether TVS (24 V NUP2105L, D6)"
 		(exclude_from_sim no)
 		(at 469.90 38.64 0)
 		(effects
@@ -31270,7 +31473,7 @@
 				)
 			)
 		)
-		(property "Description" "Q1 gate-source clamp: IPP120P04P4L-03 is rated VGS -16 V and the divider gives VGS = -Vpack/2"
+		(property "Description" "Q1 gate-source clamp: the divider gives VGS = -Vpack/2, -21 V on a full 10S pack, over the SUP90P06-09L's -20 V rating; this holds it at -15 V"
 			(at 469.90 67.31 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -31337,7 +31540,7 @@
 				)
 			)
 		)
-		(property "Value" "SMBJ24A"
+		(property "Value" "SMBJ43A"
 			(at 502.88 69.81 0)
 			(do_not_autoplace no)
 			(effects
@@ -31366,7 +31569,7 @@
 				)
 			)
 		)
-		(property "Description" "Electronics rail TVS (24 V standoff, SMB). Also a reverse-polarity crowbar that blows the pack fuse"
+		(property "Description" "Electronics rail TVS (43 V standoff, SMB): stays off on a full 10S pack (42 V). Also a reverse-polarity crowbar that blows the pack fuse"
 			(at 500.38 67.31 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -31494,7 +31697,7 @@
 				)
 			)
 		)
-		(property "Value" "SMBJ24A"
+		(property "Value" "SMBJ43A"
 			(at 533.36 69.81 0)
 			(do_not_autoplace no)
 			(effects
@@ -31523,7 +31726,7 @@
 				)
 			)
 		)
-		(property "Description" "Winch bus TVS on the switched output (24 V standoff, SMB). Clamps ESC regen spikes on the whole bus through Q1's body diode and crowbars a reversed pack into the fuse"
+		(property "Description" "Winch bus TVS on the switched output (43 V standoff, SMB), above a full 10S pack (42 V). Clamps ESC regen spikes on the whole bus through Q1's body diode and crowbars a reversed pack into the fuse"
 			(at 530.86 67.31 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -31898,7 +32101,7 @@
 				)
 			)
 		)
-		(property "Description" "24 V dual bidirectional TVS on the RS-485 pair at J2: stays off if a tether fault puts the pack (21 V) on A/B, clamps well under U13's 70 V"
+		(property "Description" "24 V dual bidirectional TVS on the RS-485 pair at J2: stays off if a tether fault puts the 15 V pod feed on A/B, clamps well under U13's 70 V"
 			(at 591.82 67.31 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -34866,7 +35069,7 @@
 				)
 			)
 		)
-		(property "Value" "10k 1%"
+		(property "Value" "22k 1%"
 			(at 594.32 336.51 0)
 			(do_not_autoplace no)
 			(effects
@@ -34895,7 +35098,7 @@
 				)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "WINCH ON LED: about 1.8 mA from a full 10S pack (42 V)"
 			(at 591.82 334.01 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -35567,7 +35770,7 @@
 				)
 			)
 		)
-		(property "Description" "Pod tether RS-485 transceiver, ±70 V fault-protected: survives the pack voltage on A/B"
+		(property "Description" "Pod tether RS-485 transceiver, +/-70 V fault-protected: survives a 10S pack (42 V) on A/B"
 			(at 492.76 440.69 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -36489,7 +36692,7 @@
 		)
 		(uuid "480cd5ec-4514-5def-be6f-d22174c7048b")
 	)
-	(label "S12_ADC"
+	(label "PACK_ADC"
 		(at 90.17 97.79 0)
 		(fields_autoplaced yes)
 		(effects
@@ -39170,6 +39373,609 @@
 			(justify left top)
 		)
 		(uuid "d090b27b-4865-5744-8f56-b46d29c1c5e9")
+	)
+	(label "+VELEC"
+		(at 269.24 213.36 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "cedb9dd0-608c-59d8-84a8-b5eb2f825b16")
+	)
+	(label "+15V"
+		(at 289.56 213.36 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "059fb1c0-b87e-5f4b-9031-f61638a8ca61")
+	)
+	(label "+VLOGIC"
+		(at 339.09 213.36 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "665799f9-e95d-5f7c-b52c-cca6ddaca764")
+	)
+	(label "+VELEC"
+		(at 346.71 213.36 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "e2949351-d15e-55ba-9994-4ddba59d9e3d")
+	)
+	(label "+VLOGIC"
+		(at 339.09 226.06 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "37f2c55f-777f-5eae-9132-27074d972efd")
+	)
+	(label "+VBACKUP"
+		(at 346.71 226.06 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7f39b2a5-6e2f-5f30-99ca-76c720bd8023")
+	)
+	(label "+VBACKUP"
+		(at 383.54 228.60 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "0ef75a29-7b94-5405-9a9b-0ca0e5feb299")
+	)
+	(label "+VLOGIC"
+		(at 358.14 205.74 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "576f471d-ff97-5d76-991e-2477ad8eea0f")
+	)
+	(no_connect
+		(at 269.24 215.90)
+		(uuid "d0340fc3-9b2f-5892-9686-d81a16db2bad")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 279.40 222.25 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3154807a-4edf-50b3-b3d2-e762adffb65b")
+		(property "Reference" "#PWR218"
+			(at 279.40 222.25 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 279.40 226.45 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 279.40 222.25 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 279.40 222.25 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "b9cb2b6e-9f1f-582e-8ceb-bc06f974a624")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "#PWR218")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "dreams_v3:Pololu_D36V6F5")
+		(at 279.40 215.90 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "3fd45fd9-dc7e-55b4-9080-781314f09a28")
+		(property "Reference" "U15"
+			(at 279.40 209.55 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "Pololu D36V6F15 15V 600mA"
+			(at 279.40 222.25 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "dreams_v3:Pololu_D36V6F5"
+			(at 279.40 215.90 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 279.40 215.90 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "+15V from the 10S rail (Pololu D36V6F15, 600 mA, the same part as V3.1's U2): the A4988's motor supply (it takes 8-35 V, under a full 10S pack's 42 V) and, through F1, the pod tether (12-21 V). The pod draws about 0.13 A, so keep the radar stepper under about 0.45 A from this rail with A1's current limit. SHDN is left open, so it's always on."
+			(at 279.40 215.90 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c65bf6d5-04be-5824-82e4-e9f5700faac1")
+		)
+		(pin "2"
+			(uuid "510a5a1c-edf6-51c2-a740-dd6bd205f1cc")
+		)
+		(pin "3"
+			(uuid "2e11730c-083d-5ced-990e-bdec5da4f158")
+		)
+		(pin "4"
+			(uuid "0a49cc72-6b12-5c2f-8173-0ec92fc3cf7f")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "U15")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "dreams_v3:D_Schottky")
+		(at 342.90 213.36 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "49a3c17d-3957-5fe3-8c58-e702e64cd511")
+		(property "Reference" "D12"
+			(at 342.90 210.82 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "B360B"
+			(at 342.90 217.17 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "dreams_v3:D_SMB"
+			(at 342.90 213.36 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 342.90 213.36 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "10S side of the diode-OR into the 5 V buck A2 (Diodes Inc. B360B, 60 V 3 A Schottky, SMB). The 4S backup on J18 takes over through D13 only while the 10S rail is off."
+			(at 342.90 213.36 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "5ad68fcf-fd59-532f-b74c-67328041bc79")
+		)
+		(pin "2"
+			(uuid "0c65fa15-ebc5-52c3-916b-ec98d7c78c2b")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "D12")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "dreams_v3:D_Schottky")
+		(at 342.90 226.06 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "18444467-5595-51cf-b032-3ea866efa347")
+		(property "Reference" "D13"
+			(at 342.90 223.52 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "B360B"
+			(at 342.90 229.87 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "dreams_v3:D_SMB"
+			(at 342.90 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 342.90 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "4S backup side of the diode-OR into A2 (B360B, SMB): blocks a reversed backup pack and keeps the 10S rail out of it."
+			(at 342.90 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "92384aff-6dd4-5551-a9ac-ca10bfe3ccb7")
+		)
+		(pin "2"
+			(uuid "50707062-a57d-50e7-a93a-0dc9b8c66afa")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "D13")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 383.54 226.06 270)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "93cc9518-bb50-5ec0-a85b-2a29cd9095e8")
+		(property "Reference" "#PWR219"
+			(at 383.54 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 378.67 226.06 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 383.54 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 383.54 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e8439a84-b489-5af7-a2b3-f5cb44b78e80")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "#PWR219")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "dreams_v3:Conn_12S_Tap_1x02")
+		(at 388.62 226.06 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "f612ca2c-5f5d-5fa1-8b58-afa2bbac1b27")
+		(property "Reference" "J18"
+			(at 388.62 223.52 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "4S backup (JST-VH)"
+			(at 388.62 229.87 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "dreams_v3:JST_VH_B2P-VH_1x02_P3.96mm_Vertical"
+			(at 388.62 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 388.62 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Optional 4S Li-ion backup (12-16.8 V). It only runs the 5 V buck A2 (Pi, Picos, sensors, radios), through D13, while the 10S rail is off. Fuse the harness at the pack end."
+			(at 388.62 226.06 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "3aff45d8-4f2c-58dc-81e3-db8c326530ea")
+		)
+		(pin "2"
+			(uuid "880a4d57-d560-5612-8105-0b4bdd0f1dc6")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "J18")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 358.14 205.74 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "cc065b01-4108-5b95-a003-efabf1fb21ca")
+		(property "Reference" "#FLG008"
+			(at 358.14 203.74 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 358.14 203.74 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 358.14 205.74 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 358.14 205.74 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "e6b4748f-71d3-5a11-aafc-d2c61bb87826")
+		)
+		(instances
+			(project "Boat_PCB_V3"
+				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
+					(reference "#FLG008")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(text "10S POWER  (rev F, 2026-10-14)"
+		(exclude_from_sim no)
+		(at 261.62 198.12 0)
+		(effects
+			(font
+				(size 2.0 2.0)
+				(bold yes)
+			)
+			(justify left bottom)
+		)
+		(uuid "8b07ff6e-67e0-5a3a-bc5e-52619548864b")
+	)
+	(text "Two 10S 10 Ah Li-ion packs in parallel make one 10S bus (30-42 V): drives, J13 and J14.\n+VELEC (10S, after R32) feeds three things:\n  the 5 V buck A2 through D12, diode-ORed with an optional 4S backup on J18 through D13 (+VLOGIC);\n  U15, +15V for the A4988's motor supply (it tops out at 35 V) and, through F1, the pod tether,\n  as on V3.1. 600 mA in all: the pod takes about 0.13 A, the stepper the rest.\nThe backup only keeps the Pi, Picos, sensors and radios up; the winch, stepper and pod need 10S.\nU10 reads the 10S electronics rail: VBUS near 0 V means the board is running on the backup."
+		(exclude_from_sim no)
+		(at 261.62 201.93 0)
+		(effects
+			(font
+				(size 1.5 1.5)
+			)
+			(justify left top)
+		)
+		(uuid "2fc0815e-8f75-58ca-99b8-8b2f2c31a160")
 	)
 	(sheet_instances
 		(path "/"

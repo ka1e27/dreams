@@ -5,7 +5,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 **Contents:** [1 Repo map](#1-repo-map) · [2 System overview](#2-system-overview) ·
 [3 Open decisions](#3-open-decisions-ask-first) · [4 Rules for every change](#4-rules-for-every-change) ·
-[5 Carrier firmware reference](#5-carrier-rev-e-firmware-reference) ·
+[5 Carrier firmware reference](#5-carrier-rev-f-firmware-reference) ·
 [6 V3.1 firmware reference](#6-v31-starter-carrier-firmware-reference) · [7 Tooling](#7-tooling) ·
 [8 Raspberry Pi 5 notes](#8-raspberry-pi-5-notes) · [9 V2 archive](#9-v2-archive-v2-final)
 
@@ -13,7 +13,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 | Path | What it is |
 |---|---|
-| `Boat_PCB/Boat_PCB_V3/` | The carrier (V3, rev E): KiCad 10 schematic and layout |
+| `Boat_PCB/Boat_PCB_V3/` | The carrier (V3, rev F): KiCad 10 schematic and layout. Runs from 10S Li-ion |
 | `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
 | `Boat_PCB/Pod_PCB_V3/` | The pod board, test phase: schematic and rev B layout |
 | `Boat_PCB/lib/` | The `dreams_v3` KiCad library (symbols, footprints, 3D models) all three boards share; per-part notes in its README |
@@ -30,13 +30,13 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 | Term | Means |
 |---|---|
-| **Carrier** | The V3 carrier board, rev E (`Boat_PCB_V3`): Pi 5, Pico A and Pico B |
+| **Carrier** | The V3 carrier board, rev F (`Boat_PCB_V3`): Pi 5, Pico A and Pico B |
 | **V3.1** | The interim starter carrier (`Boat_PCB_V3_1`): Pi 5 and one Pico 2. Its pin map differs from the carrier's |
 | **Pod** | The pod board (`Pod_PCB_V3`): a XIAO ESP32-S3 on the winch tether |
 | **Pico A, Pico B** | The carrier's control MCU (U1) and sensor MCU (U14), both Raspberry Pi Pico 2 (RP2350) |
-| **12S pack** | The drive pack. The carrier only senses its voltage |
-| **Electronics pack** | 15–21 V. The pod tether carries it |
-| **Winch pack** | Powers the winch ESC through the P-FET kill |
+| **10S bus** | Two 10S 10 Ah Li-ion packs in parallel (30–42 V). It feeds the drives (off-board), the electronics (J13) and the winch (J14, through the P-FET kill) |
+| **4S backup** | An optional 4S Li-ion pack on J18 (underside). It only keeps the 5 V side up (Pi, Picos, sensors, radios) while the 10S bus is off |
+| **+15V** | U15's output: the A4988's motor supply and, through F1, the pod tether |
 
 The system, as the carrier wires it:
 
@@ -48,7 +48,7 @@ Raspberry Pi 5 ─ navigation, mission logic, CV, cloud link      Python (not ye
   │    ├─ GP1 ──────────────► SBUS receiver (UART0 RX or a PIO UART, see below)
   │    ├─ PWM ──────────────► winch ESC, behind the P-FET kill
   │    ├─ STEP/DIR ─────────► A4988 radar-bar stepper
-  │    └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 12S pack divider
+  │    └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 10S pack divider
   ├─ Pico B (U14, Pico 2) ─ sensors                             C++ (not yet written)
   │    ├─ I²C0 via TCA9548A ─► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
   │    ├─ UART1 ────────────► GPS (M10-25Q)
@@ -137,7 +137,7 @@ re-deriving it. That is the mistake to avoid. Reading V2: §9.
 - When a commit touches a board, put the change against that board's numbers in the commit message.
   The baselines are in `Boat_PCB/CLAUDE.md`.
 
-## 5. Carrier (rev E): firmware reference
+## 5. Carrier (rev F): firmware reference
 
 ### 5.1 Safety and power rules
 
@@ -151,8 +151,14 @@ re-deriving it. That is the mistake to avoid. Reading V2: §9.
   (Pico A GP9) **high** turns the winch *on*: a BSS138 pulls the high-side P-FET's gate down. Low,
   floating, or Pico A held in reset all leave the winch off, because a 4.7k pulls the net to ground
   and a 10k holds the P-FET gate at its source.
-- **The pod tether carries pack voltage, not 5 V.** J2 pin 2 is the electronics pack (15–21 V)
-  through F1, and the pod regulates its own 5 V. A pod board built for 5 V in will be destroyed by it.
+- **The board runs from 10S (30–42 V) since rev F.** J13 and J14 take the 10S bus, and so does
+  J11's sense tap. U15 makes +15V from it for the A4988 and the pod.
+- **The pod tether carries 15 V, not 5 V.** J2 pin 2 is U15's +15V through F1, and the pod regulates
+  its own 5 V. A pod board built for 5 V in will be destroyed by it.
+- **The 4S backup only runs the 5 V buck.** J18 joins A2's input through D13, diode-ORed with the
+  10S rail through D12. On backup the winch, the stepper and the pod are off. U10's VBUS (the 10S
+  electronics rail) reads near 0 V then: that's how firmware can tell. The backup's own voltage isn't
+  sensed.
 - **The hull leak probes are excited, not biased.** Pico A's ADC1 and ADC2 (GP27, GP28) read the
   probes through 100k pull-ups that hang off GP22 (`LEAK_EXC`). Drive GP22 high only while
   sampling, then back low: a probe held at DC corrodes. A dry probe reads near 3.3 V; water pulls it
@@ -203,7 +209,7 @@ Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the re
 | GP16 / GP17 | Pi link TX / RX (UART0) |
 | GP20 / GP21 | Pico B link TX / RX (UART1) |
 | GP22 | Leak excite (`LEAK_EXC`) |
-| ADC0 (GP26) | 12S pack divider |
+| ADC0 (GP26) | 10S pack divider (J11) |
 | ADC1 / ADC2 (GP27 / GP28) | Leak L / R |
 | Free | GP12, GP13, GP18, GP19 |
 
@@ -240,12 +246,12 @@ Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the re
   transmit); left alone, a 4.7k holds it in receive. The carrier end is terminated (120 Ω), so the
   pod end needs its own transceiver and a 120 Ω terminator too.
 - **Pack voltages:**
-  - **12S pack:** the carrier senses voltage only on the 12S drive rail: one ADC divider, no shunt,
-    no INA228. The divider (220k/13k) reads on Pico A's ADC0 (GP26), with C4 at the pin (brief §3).
-    If you want drive current, get it from the VESCs over CAN.
-  - **Electronics and winch packs:** their voltages come from the INA228s (VBUS, on each shunt's
-    load side): U10 at 0x41 and U11 at 0x44, both on mux channel 6. There are no ADC dividers on
-    those packs any more.
+  - **Drive side:** J11 taps the 10S bus for one ADC divider, no shunt, no INA228. The divider
+    (220k/13k) reads on Pico A's ADC0 (GP26), with C4 at the pin (brief §3): a full 10S pack (42 V)
+    reads 2.34 V, and it has room up to 12S. If you want drive current, get it from the VESCs over CAN.
+  - **Electronics and winch feeds:** their voltages come from the INA228s (VBUS, on each shunt's
+    load side): U10 at 0x41 and U11 at 0x44, both on mux channel 6. Both read the same 10S bus while
+    it's connected.
 
 ### 5.5 Mounting
 
