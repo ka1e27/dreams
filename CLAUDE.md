@@ -20,7 +20,8 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | `Boat_PCB/CLAUDE.md` | Board baselines, layout constraints, locked copper, ordering. **Read it before changing a board** |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
-| `docs/v3/V3_MECHANICAL.md` | Hull, bridge, outdrive and water-sampling design (Matthew's rev D proposal). The design tools are on the `feature/mechanical-rev-d` branch, not `main` |
+| `docs/v3/V3_MECHANICAL.md` | Hull, bridge, outdrive and water-sampling design (Matthew's rev D proposal). The design tools are in `mechanical/` |
+| `mechanical/` | Matthew's hull, bridge and outdrive design tools (rev E), with their drawings, renders, props and reports. How to run them is in its README |
 | `website/` | The public site, https://ka1e27.github.io/dreams/. Its own notes are in `website/CLAUDE.md` |
 | `CONTRIBUTING.md` | Branches, commit style, pre-push checks |
 

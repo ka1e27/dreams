@@ -1,21 +1,14 @@
 # V3 mechanical design: Matthew's rev D
 
-Matthew's hull, bridge and drive design, from 2026-09-26 to 2026-10-02. The work lives on the
-branch `feature/mechanical-rev-d` (PR #4, open, not merged): the design tools in `mechanical/`, their
-drawings, renders and props, two design docs, and a session journal. This file keeps the decisions,
-the numbers and the open questions on `main`, so they don't get lost if the branch never merges.
+Matthew's hull, bridge and drive design, from 2026-09-26 to 2026-10-02. The design tools are in
+`mechanical/`, with their drawings, renders and props, beside two design docs
+(`docs/hull_and_crossbeam_sizing.md` and `docs/solidworks_modeling_guide.md`). The tools have moved on
+to rev E (2026-10-05: 940 mm hulls, each tub and lid printed in one piece); this file keeps rev D's
+decisions, numbers and open questions.
 
 **Status: proposal.** Matthew's own status line was "nothing here is locked". Every number below is
 an estimate from his design model (`mechanical/hull_sizing.py` and `propulsion.py`), not a test.
 Where a newer decision disagrees, §1 says so, and the newer decision wins.
-
-To look at the full work without merging it:
-
-```bash
-git fetch origin
-git show origin/feature/mechanical-rev-d:mechanical/reports/hull_report.md   # read one file
-git worktree add ../dreams-mech origin/feature/mechanical-rev-d                 # full checkout beside this one
-```
 
 ## 1. Newer decisions that override rev D
 
@@ -115,7 +108,7 @@ branch. Robot arm mass is **not** in the budget (§7).
 ### 4.2 Arched bridge and the hub garage
 
 - **Two 1/4 in 6061-T6 arch frames**, 50 mm deep, laser or waterjet cut from
-  `mechanical/cad/arch_frame_plate.dxf` (on the branch), at 520 and 780 mm forward of the transom,
+  `mechanical/cad/arch_frame_plate.dxf`, at 520 and 780 mm forward of the transom,
   right over 8 mm ribs in the lids. 700 mm foot to foot.
 - **Feet:** a 300 × 140 × 6 mm 6061 plate each side, on a 1.5 mm EPDM pad on the lid deck. 8 × M6
   × 60 A4 per foot come up from inside the lid through full-depth Ø20 bosses in the rib, so the rib
@@ -352,7 +345,7 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
   (the 131 N); pull-test a printed rib boss and a heat-set insert; soak a sealed test segment for a
   week; confirm the outdrive's thrust on the stand.
 
-## 8. The design tools (on the branch)
+## 8. The design tools (`mechanical/`)
 
 Stdlib Python 3.10+, no packages. Edge or Chrome, if present, makes the PDFs and PNG renders.
 `python mechanical/build_all.py` regenerates everything in about a minute (`--quick` skips the
@@ -366,9 +359,9 @@ renders).
 | `concept_model.py` | A spinnable three.js viewer, renders and an OBJ mesh |
 | `toroidal_prop.py` | The prop STL, viewer, curves and report, and the thrust stand |
 
-The branch also has `docs/hull_and_crossbeam_sizing.md` (the design record; its body is still rev
-C, with a rev D note at the top) and `docs/solidworks_modeling_guide.md` (rev D, step by step from
-the drawings). Generated files are still named `DREAMS_V2_*` from before the V3 sync.
+Beside them are `docs/hull_and_crossbeam_sizing.md` (the design record; its body is still rev C,
+with rev D and rev E notes at the top) and `docs/solidworks_modeling_guide.md` (rev E, step by step
+from the drawings). Generated files are still named `DREAMS_V2_*` from before the V3 sync.
 
 What to watch after any change: trim within ±10 mm (move the hub to fix it), freeboard to the lid
 joint above ~60 mm at design load, positive garage margins, no outdrive clash with the rail, every
