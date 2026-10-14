@@ -40,10 +40,10 @@ someone. These are two different boats, not discrepancies to fix.
 |---|---|---|
 | Boat MCU | RP2040 Pico, MicroPython | Two Pico 2s (RP2350), C++, a full rewrite on a new pin map. The Teensy 4.1 of revs A–D was dropped in rev E |
 | Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
-| Drive pack | Milwaukee M18 | 12S LiPo, voltage sense only |
-| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus pack-voltage power |
+| Packs | Milwaukee M18 | Two 10S 10 Ah Li-ion in parallel, one bus for drive, electronics and winch (rev F); optional 4S backup for the 5 V side |
+| Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus 15 V from the carrier's U15 |
 | Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
-| Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch through the INA228s; the 12S rail through one 220k/13k, 1 % divider into Pico A's ADC0 |
+| Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch feeds through the INA228s; the 10S bus through J11 and one 220k/13k, 1 % divider into Pico A's ADC0 |
 | Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V, a UART to Pico A and a reset line to each Pico; the stepper moved to Pico A |
 
 Copying a V2 pin number, divider ratio, protocol field or threshold into V3 without re-deriving it
