@@ -27,9 +27,10 @@ Settle these before anyone models the boat in CAD from the rev D drawings.
 | **Sealing** | Glassed outside (200 g/m² E-glass, a second layer on keel, chines and stem), 2 coats of epoxy inside | Epoxy only, no fibreglass, on the first boat (Kyle, 2026-10-14) | Use the printing and epoxy steps in §5.1 without the glass. Rev D used the glass to cover the segment seams, so the soak test matters more |
 | **Outdrive mount** | Printed ABS for now; mill a 6061 one later | Motor mounts machined from metal (Kyle, 2026-10-14) | Go straight to the metal version of the mount in §4.3 |
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
-| **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | Carrier rev E uses two Pico 2s; the V3.1 starter runs everything from one 10S Li-ion pack (30–42 V) | Rev D's three packs (12S drive, two 15–21 V) match the carrier. A V3.1 boat carries one pack, so redo the mass budget and the motor KV pick for the rail it will actually run on |
+| **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | Carrier rev E uses two Pico 2s; the V3.1 starter uses one | The boat starts on V3.1 (next row) |
+| **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **One 10S Li-ion pack (30–42 V) runs everything on V3.1** (Kyle, 2026-10-14). A separate electronics pack may come later. The carrier's three-pack setup isn't the plan for now | Redo the mass budget and trim for one pack, and pick its hull. Rev D's endurance (§3) assumed ~400 Wh for the drives alone; one shared pack also feeds the electronics (about 2 A on the carrier's 15–21 V pack, brief §2), so size its capacity for both |
 | **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Kyle's figure leaves more headroom than rev D's estimate |
-| **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | 200 KV is the top of rev D's 150–200 KV range for 12S: ~8,900 rpm unloaded on 12S, ~7,400 on V3.1's 10S. The controller's 8–60 V (3–13S) covers both packs, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
+| **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | On the 10S pack, 200 KV gives ~7,200 rpm unloaded at 36 V nominal and ~6,000 near empty (30 V). Rev D needs ~3,900 rpm at the prop for 3 m/s through its 1:1 belt, so there's headroom. Rev D's 150–200 KV range was for 12S, which is ~185–245 KV at 10S, so 200 KV sits inside it. The controller's 8–60 V (3–13S) covers 10S, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
 | **Test site** | Muddy River as the design target (Matthew, 2026-09-30) | Confirmed with CRWA: water temperature and depth on the Muddy River where people can't walk; water testing from the thaw, about March 2027; CRWA only uses data from sensors that meet NIST standards (Kyle, 2026-10-14) | Agrees. Any sensor upgrade in §6 has to meet the NIST rule |
 
 ## 2. Decided by Matthew
@@ -69,7 +70,7 @@ Settle these before anyone models the boat in CAD from the rev D drawings.
 | Draft with props | ~132 mm (the props hang below the keel line) |
 | Resistance, both hulls | 6.6 N at 1.0 m/s, 21.5 N at 1.5 m/s, 49.4 N at 3.0 m/s (15 % service margin) |
 | Drive power, both | ~23 W at 1.0 m/s, ~94 W at 1.5 m/s, ~381 W at 3.0 m/s |
-| Endurance | ~17 h at 1.0 m/s, ~4 h at 1.5 m/s, from ~400 Wh (one 12S ~10 Ah pack for both drives, 90 % usable) |
+| Endurance | ~17 h at 1.0 m/s, ~4 h at 1.5 m/s, from ~400 Wh (one 12S ~10 Ah pack for both drives, 90 % usable). The plan is now one 10S pack for everything (§1) |
 
 The current numbers are in `mechanical/reports/hull_report.md` and `propulsion_report.md` on the
 branch. Robot arm mass is **not** in the budget (§7).
@@ -319,7 +320,7 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
   the SF checks (§1, §5.5).
 - **Fitting the picked motor** (§1). The 5048 200KV replaces rev C's 380 KV pick. Raise the
   motor axis ~5 mm in the outdrive drawings so the can clears the cover, confirm the motor's shaft
-  diameter for the pulley bore, and set both controllers to the same cell count and limits in VESC
+  diameter for the pulley bore, and set both controllers to 10S and the same limits in VESC
   Tool, since they share the CAN bus.
 - **Does Kyle's arm go on the boat?** With water samples on the winch and sediment on the pod, the
   arm is left with surface grabs. Without it the boat is ~10 kg lighter. With it, rev D still has
