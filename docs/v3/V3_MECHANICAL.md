@@ -29,6 +29,7 @@ Settle these before anyone models the boat in CAD from the rev D drawings.
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
 | **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | Carrier rev E uses two Pico 2s; the V3.1 starter runs everything from one 10S Li-ion pack (30–42 V) | Rev D's three packs (12S drive, two 15–21 V) match the carrier. A V3.1 boat carries one pack, so redo the mass budget and the motor KV pick for the rail it will actually run on |
 | **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Kyle's figure leaves more headroom than rev D's estimate |
+| **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | 200 KV is the top of rev D's 150–200 KV range for 12S: ~8,900 rpm unloaded on 12S, ~7,400 on V3.1's 10S. The controller's 8–60 V (3–13S) covers both packs, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
 | **Test site** | Muddy River as the design target (Matthew, 2026-09-30) | Confirmed with CRWA: water temperature and depth on the Muddy River where people can't walk; water testing from the thaw, about March 2027; CRWA only uses data from sensors that meet NIST standards (Kyle, 2026-10-14) | Agrees. Any sensor upgrade in §6 has to meet the NIST rule |
 
 ## 2. Decided by Matthew
@@ -316,9 +317,10 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
 
 - **Hull length:** confirm 985 mm, then lay the frames, hub and packs out for it and re-run trim and
   the SF checks (§1, §5.5).
-- **Motor KV.** Rev C's 380 KV was picked for 18 V; on a 12S rail it would run at ~10–25 % duty.
-  ~150–200 KV suits 12S. Most such motors are 50xx (~55 mm across), which fits the cover if the motor
-  axis goes up ~5 mm. Matthew's pick, and it depends on the pack (§1).
+- **Fitting the picked motor** (§1). The 5048 200KV replaces rev C's 380 KV pick. Raise the
+  motor axis ~5 mm in the outdrive drawings so the can clears the cover, confirm the motor's shaft
+  diameter for the pulley bore, and set both controllers to the same cell count and limits in VESC
+  Tool, since they share the CAN bus.
 - **Does Kyle's arm go on the boat?** With water samples on the winch and sediment on the pod, the
   arm is left with surface grabs. Without it the boat is ~10 kg lighter. With it, rev D still has
   +15 kg of payload, but the foot bolting may need backing plates or M8 to keep SF ≥ 3.
