@@ -7,7 +7,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 | | |
 |---|---|
-| `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
+| `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/`. Two Raspberry Pi Pico 2s since rev E (2026-10-13) |
 | `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
 | `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Uses the carrier's `lib/`; notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
@@ -17,18 +17,21 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 ```
 Raspberry Pi 5 ─ navigation, mission logic, CV, cloud link      Python (not yet written)
-  │ USB CDC
-  └─ Teensy 4.1 ─ real-time I/O                                 C++/Teensyduino (not yet written)
-       ├─ CAN via TJA1051 ──► VESC ×2, node IDs 1 and 2
-       ├─ I²C via TCA9548A ─► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
-       ├─ UART ─────────────► GPS (M10-25Q) · SBUS receiver
-       ├─ RS-485 (Serial8) ─► pod tether (XIAO ESP32-S3, own board), through U13
-       ├─ PWM ──────────────► winch ESC, behind the P-FET kill
-       ├─ STEP/DIR ─────────► A4988 radar-bar stepper
-       └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 12S pack divider
+  │ UART0 on the GPIO header to Pico A · GPIO23/GPIO24 reset Pico A / Pico B · USB cables optional
+  ├─ Pico A (U1, Pico 2) ─ control                              C++ (not yet written)
+  │    ├─ CAN on the PIO (can2040) via TJA1051T/3 ─► VESC ×2, node IDs 1 and 2
+  │    ├─ GP1 ──────────────► SBUS receiver (UART0 RX or a PIO UART, see below)
+  │    ├─ PWM ──────────────► winch ESC, behind the P-FET kill
+  │    ├─ STEP/DIR ─────────► A4988 radar-bar stepper
+  │    └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 12S pack divider
+  ├─ Pico B (U14, Pico 2) ─ sensors                             C++ (not yet written)
+  │    ├─ I²C0 via TCA9548A ─► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
+  │    ├─ UART1 ────────────► GPS (M10-25Q)
+  │    └─ RS-485 (UART0) ───► pod tether (XIAO ESP32-S3, own board), through U13
+  └─ Pico A ↔ Pico B: a UART link (A's UART1, B's PIO UART); Pico B reaches the Pi through it
 
 Pod ─ XIAO ESP32-S3 on the winch tether, Boat_PCB/Pod_PCB_V3 (test phase, freshwater)
-  ├─ RS-485 (UART0, D6/D7, DE on D3) ─► back up the tether to the Teensy
+  ├─ RS-485 (UART0, D6/D7, DE on D3) ─► back up the tether to Pico B
   ├─ I²C via ADS1115 (0x48) ─► pH · TDS (isolated) · dissolved O2 (fit later) · depth (pressure)
   ├─ ADC (D0) ───────────────► turbidity, relative only
   ├─ 1-Wire (D1) ────────────► DS18B20 water temperature
@@ -37,8 +40,11 @@ Pod ─ XIAO ESP32-S3 on the winch tether, Boat_PCB/Pod_PCB_V3 (test phase, fres
 
 These are still open. Ask the user before building on an assumption about any of them:
 
-- **Teensy concurrency model:** a `millis()`-scheduled `loop()`, or TeensyThreads.
-- **Pi ↔ Teensy protocol over USB CDC:** not defined yet.
+- **Pico firmware structure:** how each Pico splits its work between its two cores and the PIO. The board
+  fixes which Pico does what; nothing else is decided.
+- **Pi ↔ Pico A protocol over the header UART, and the Pico A ↔ Pico B link** (which also carries
+  Pico B's traffic to and from the Pi): not defined yet. Nor is which of SBUS and the Pi link gets
+  Pico A's hardware UART0 (the other runs on a PIO UART).
 - **Pod firmware:** the planning record assumed MicroPython on the ESP32-S3. Nothing has been
   written.
 
@@ -47,35 +53,74 @@ These are still open. Ask the user before building on an assumption about any of
 - **Never power the Pi from the carrier and from USB-C at the same time.** The Pololu buck isn't
   reverse-current tolerant, and the Pi's header 5 V pins become outputs when USB-C is attached. This
   is unsolved in hardware, so for now it's a build rule (brief §4).
-- **The Pi header carries power only.** Pins 2 and 4 take +5 V from the carrier, and no GPIO is
-  connected. Everything the Pi controls goes through the Teensy.
+- **The Pi talks to the Picos over its header, not USB.** Pins 2 and 4 take +5 V from the carrier.
+  The Pi's UART0 (GPIO14 TX, GPIO15 RX; header pins 8 and 10, `/dev/ttyAMA0` with `dtparam=uart0=on`)
+  runs to Pico A's UART0 (GP17 RX, GP16 TX), 3.3 V at both ends, through a 1k in each line (R66,
+  R67). Those keep either end from back-powering the other through its pins, e.g. a Pico running on
+  a laptop's USB while the Pi is off. Pico B reaches the Pi through Pico A over their link. GPIO23
+  and GPIO24 (pins 16 and 18) high reset Pico A and Pico B: each turns on a BSS138 (Q3, Q4) across
+  that Pico's reset button. R64 and R65 (100k) hold the gates low while the Pi is off, booting or
+  unplugged, so the Picos never wait on the Pi. No other GPIO is connected.
+- **The Picos' USB cables are optional.** Running without them leaves the Pi's USB ports for cameras
+  and the modem, but either Pico can still be plugged into the Pi, to flash it or to run its link
+  over USB CDC instead of (or as well as) the header. That's safe with the board powered: VBUS isn't
+  connected on the carrier, so the cable's 5 V reaches VSYS only through the Pico's own diode, and
+  the carrier's +5V comes in through D10/D11. Which link the firmware uses is its choice.
+- **Two Pico 2s, one job each.** Pico A (U1, next to the Pi header) is the control MCU, Pico B (U14)
+  the sensor MCU. Both are socketed under the carrier, USB ends toward the Pi's USB ports, and get
+  VSYS from +5V through a B5819W (D10, D11). SW1 and SW2 (underside, right edge) reset A and B: hold
+  that Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the resets too, see
+  above). Pin maps:
+  - **Pico A:** GP0 winch ESC PWM · GP1 SBUS · GP2–GP8 A4988 DIR, STEP, SLEEP, MS3, MS2, MS1, EN ·
+    GP9 winch kill · GP10 WS2812 data (PIO, through U12) · GP11 5 V power-good · GP14/GP15 CAN RX/TX
+    (can2040) · GP16/GP17 Pi link TX/RX (UART0) · GP20/GP21 Pico B link TX/RX (UART1) · GP22 leak
+    excite · ADC0 12S pack · ADC1/ADC2 leak L/R. GP12, GP13, GP18 and GP19 are free.
+  - **Pico B:** GP4/GP5 GPS (UART1 TX/RX) · GP6 BMP390 INT · GP7 INA228 ALERT · GP8/GP9 BNO085
+    INT/RST · GP10/GP11 link TX/RX (PIO UART) · GP12/GP13 I²C0 SDA/SCL to the TCA9548A · GP14 mux
+    reset · GP16/GP17 pod RS-485 (UART0) · GP18 RS-485 DE · GP19/GP20 ADXL375 INT1/INT2. Its ADC pins
+    and GP0–GP3, GP15, GP21, GP22 are free.
+- **The +3V3 rail is Pico A's 3V3 pin** (keep the load under 300 mA), as it was the Teensy's. Pico B's
+  3V3 pin is left open, so two regulator outputs are never tied. So fit Pico A whenever Pico B runs:
+  the sensors, pull-ups and RS-485 transceiver Pico B talks to are powered from Pico A.
+- **Mounting.** Each Pico hangs about 15 mm under the carrier on its sockets, more with a USB plug
+  in, so mount the carrier at least 20 mm off its base. The Picos' USB ends face the board's bottom
+  edge, under the Pi's USB ports: plug in a short right-angle micro-USB cable when you need one.
+- **The RP2350's input leakage (erratum E9) is why two pull-downs are 4.7k.** A pull-down above
+  8.2k can't hold a pin low against it, so R36 (`WINCH_KILL`) and R62 (`TETHER_DE`) are 4.7k, not
+  10k. Keep any new pull-down at 8.2k or less.
 - **The winch kill is fail-safe OFF, and its net name reads backwards.** Driving `WINCH_KILL`
-  **high** turns the winch *on*: a BSS138 pulls the high-side P-FET's gate down. Low, floating, or a
-  Teensy held in reset all leave the winch off, because a 10k pulls the net to ground and another
-  10k holds the P-FET gate at its source.
+  (Pico A GP9) **high** turns the winch *on*: a BSS138 pulls the high-side P-FET's gate down. Low,
+  floating, or Pico A held in reset all leave the winch off, because a 4.7k pulls the net to ground
+  and a 10k holds the P-FET gate at its source.
 - **The carrier senses voltage only on the 12S drive rail:** one ADC divider, no shunt, no INA228.
   If you want drive current, get it from the VESCs over CAN.
 - **Electronics and winch pack voltages come from the INA228s** (VBUS, on each shunt's load side):
   U10 at 0x41 and U11 at 0x44, both on mux channel 6. There are no ADC dividers on those packs any
-  more. The 12S divider (220k/13k) reads on pin 17 (A3); pins 14 and 15 are free (brief §3).
+  more. The 12S divider (220k/13k) reads on Pico A's ADC0 (GP26), with C4 at the pin (brief §3).
 - **SBUS is the manual override.** Its 5 V branch is fused loosely on purpose so it can't
-  nuisance-trip.
+  nuisance-trip. It goes to Pico A's GP1, which is a UART0 RX pin, but UART0 also carries the Pi link
+  on GP16/GP17 and can't take both: run SBUS or the Pi link on a PIO UART. Either way, invert SBUS
+  in the GPIO block (`gpio_set_inover`).
+- **CAN runs on the PIO with can2040** (Pico A GP14 RX, GP15 TX, through the TJA1051T/3). There is
+  no MCP2515 on purpose (re-confirmed 2026-10-13). On the RP2350 can2040 needs Pico SDK 2.0 or later.
+  It is GPLv3, so Pico A's firmware is GPL once it links it. J3 is 1 CANH, 2 CANL, 3 GND, like V3.1's
+  J3/J4. V2's CAN plug was 1 GND, 2 CANH, 3 CANL, so re-pin a V2 cable before plugging it in.
 - **The pod tether carries pack voltage, not 5 V.** J2 pin 2 is the electronics pack (15–21 V)
   through F1, and the pod regulates its own 5 V. A pod board built for 5 V in will be destroyed by it.
-- **The pod link is half-duplex RS-485, not a UART.** Serial8 (TX8 pin 35, RX8 pin 34) runs through
-  a THVD2410 (U13) onto J2 pins 3/4 (A/B). Call `Serial8.transmitterEnable(37)` so pin 37 drives the
-  transceiver's DE and ~RE; left alone, a 10k holds it in receive. The carrier end is terminated
-  (120 Ω), so the pod end needs its own transceiver and a 120 Ω terminator too.
-- **The hull leak probes are excited, not biased.** Pins 40 and 41 (A16/A17) read the probes
-  through 100k pull-ups that hang off pin 39 (`LEAK_EXC`). Drive pin 39 high only while sampling,
-  then back low: a probe held at DC corrodes. A dry probe reads near 3.3 V; water pulls it toward
-  ground.
+- **The pod link is half-duplex RS-485, not a UART.** Pico B's UART0 (GP16 TX, GP17 RX) runs through
+  a THVD2410 (U13) onto J2 pins 3/4 (A/B). GP18 drives the transceiver's DE and ~RE (high =
+  transmit); left alone, a 4.7k holds it in receive. The carrier end is terminated (120 Ω), so the
+  pod end needs its own transceiver and a 120 Ω terminator too.
+- **The hull leak probes are excited, not biased.** Pico A's ADC1 and ADC2 (GP27, GP28) read the
+  probes through 100k pull-ups that hang off GP22 (`LEAK_EXC`). Drive GP22 high only while
+  sampling, then back low: a probe held at DC corrodes. A dry probe reads near 3.3 V; water pulls it
+  toward ground.
 
 ## V3.1 starter carrier (interim board)
 
 `Boat_PCB/Boat_PCB_V3_1/` gets the boat moving before the full V3 carrier: the Pi 5 and the
-D36V50F5 stay, and one Raspberry Pi Pico 2 replaces the Teensy. The full V3 is planned around two
-Picos instead of the Teensy (user, 2026-10-10); that redesign hasn't been started. Pin map,
+D36V50F5 stay, and one Raspberry Pi Pico 2 replaces the Teensy. The full V3 carrier moved to two
+Picos as well (rev E, 2026-10-13); its pin maps are above, and the two boards' maps differ. Pin map,
 connectors and bring-up checks are in `docs/v3/V3_1_STARTER_CARRIER.md`. What the firmware has to
 respect:
 
@@ -123,17 +168,34 @@ KC="/c/Program Files/KiCad/10.0/bin/kicad-cli.exe"   # not on PATH
 "$KC" pcb drc --severity-all --schematic-parity --format json -o drc.json Boat_PCB/Boat_PCB_V3/Boat_PCB_V3.kicad_pcb
 ```
 
-Carrier baseline as of 2026-09-28 (rev D, 130.6 × 101.5 mm). When a commit touches a board, put the
-change against that board's numbers in the commit message.
+Carrier baseline as of 2026-10-13 (rev E with the Pi link, 130.6 × 101.5 mm, 137 footprints, 5 on the
+underside: A2, both Picos, SW1, SW2). When a commit touches a board, put the change against that board's numbers in
+the commit message.
 
-- **DRC: 0 violations, 0 unconnected.** Rev C's one warning (A2's bottom-side outline on C28's GND
-  pad) went away with the rev D placement.
+- **DRC: 0 violations, 0 unconnected.**
 - **Schematic parity: 0.** Every footprint carries its `dreams_v3:` library ID. *Update footprints
   from library* still resets per-pad edits, and 10 footprints have them. There are solid zone
   connections on the XT60s, Q1, C2, C26, R33, D4 and J12's GND pads 25 and 30, and leftover
   overrides on the U11 sense pins. Re-apply them after any footprint update.
 - **ERC: 0.** Unused pins carry no-connect flags. The tied-pin and power-pin conflicts were fixed
   with pin types in the project library.
+- **Rev E layout (Teensy → two Picos).** The power block, the left half and the top and bottom
+  connector rows kept their rev D places and copper. Under the Pi, Pico A's socket rows sit at x 82.3
+  and 100.08, Pico B's at 104.0 and 121.78, pads from y 42.74 to 91.0. Each Pico footprint keeps the
+  Pico W antenna keep-out between its rows at y 40.9–49.9: no copper on any layer there. Between Pico A's
+  rows on top sit U2, its decap, C4 (at ADC0) and 8 pull-ups. Between Pico B's rows sit 10 pull-ups.
+  R53 stands upright above J10.
+- **Copper you can't see from the top.** The +VELEC feed to the pod fuse F1 is a 0.8 mm track on In2,
+  from the power block's via at (15.0, 15.84) along y 1.6 above the top-edge connectors. The In2
+  +5V zone has a strip under both Picos' USB ends for D10/D11. Locked copper: the rev D power block,
+  that In2 track, the D10/D11 +5V stubs, U2's A0/A1 GND via, the PICO_B_RUN lane past the right Pi
+  standoff, rev D's fan-outs at U4, U7, U8, U10, U11 and U13, and the hand-routed (maze) runs of
+  IMU_INT, CH4_SDA/SCL, CH6_SDA, INA_ALERT, STEP_EN and the whole Pi link (PI_TX, PI_RX, PICO_A_TX,
+  PICO_A_RX, PI_RST_A/B, Q3/Q4's GND vias and their drain runs to PICO_A_RUN and PICO_B_RUN), plus
+  CAN_TX, re-routed round R66/R67. Keep them if you re-route. Q3, Q4, R64 and R65 sit above Pico B,
+  on the R62/R38 column. R66 and R67 stand upright between J12 and C15, the only room on the UART's
+  path. Pico A's GP12/GP13 pins are walled in by the J12-to-Pico tracks, which is why the Pi link
+  uses GP16/GP17.
 
 Pod baseline as of 2026-09-26 (rev A, 48 × 63 mm), same commands on
 `Boat_PCB/Pod_PCB_V3/Pod_PCB_V3.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** One per-pad edit:

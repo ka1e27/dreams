@@ -7057,7 +7057,7 @@
 					(alternate "USB_VBUS_DET" passive line)
 					(alternate "~{SPI0_CSn}" bidirectional line)
 				)
-				(pin power_out line
+				(pin power_in line
 					(at 0 -35.56 90)
 					(length 3.81)
 					(name "GND"
@@ -23623,6 +23623,150 @@
 			(project "Boat_PCB_V3_1"
 				(path "/f04ccb01-50e1-5ad8-9dcc-9a7a44265a94"
 					(reference "#FLG02")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 45.72 43.18 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "8e92213f-6d24-5eb7-a45b-51e9d6cc7ddf")
+		(property "Reference" "#FLG03"
+			(at 45.72 38.10 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 45.72 39.37 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "a6dfab97-f68a-5ec9-bc0e-469b6a22b343")
+		)
+		(instances
+			(project "Boat_PCB_V3_1"
+				(path "/f04ccb01-50e1-5ad8-9dcc-9a7a44265a94"
+					(reference "#FLG03")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 45.72 43.18 0)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom no)
+		(on_board no)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "4bb20efa-6f45-50bc-8c72-9f41fb876521")
+		(property "Reference" "#PWR086"
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "GND"
+			(at 45.72 47.38 0)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" ""
+			(at 45.72 43.18 0)
+			(hide yes)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "ab1d5af9-2bb0-5200-8454-b1a25ddad0dd")
+		)
+		(instances
+			(project "Boat_PCB_V3_1"
+				(path "/f04ccb01-50e1-5ad8-9dcc-9a7a44265a94"
+					(reference "#PWR086")
 					(unit 1)
 				)
 			)
