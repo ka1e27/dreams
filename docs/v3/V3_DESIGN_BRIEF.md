@@ -15,11 +15,11 @@ blow-by-blow, run `git show v2-final:docs/v3/v3_review_2026-08-05.md`.
 
 | | V3 | Why |
 |---|---|---|
-| Boat MCU | **Teensy 4.1**, C++/Teensyduino | Pin count and the concurrency model; full rewrite from MicroPython |
-| Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051** | No MCP2515 — the Teensy has native CAN |
+| Boat MCU | **Two Raspberry Pi Pico 2s** (RP2350), C++. Pico A (U1) runs control, Pico B (U14) the sensors | Replaced the Teensy 4.1 in rev E (2026-10-13), after V3.1 tried one Pico. Two give 52 GPIO and 6 ADC. The Pi talks to Pico A over a UART on its GPIO header and can reset either Pico (Q3, Q4); Pico B reaches the Pi over the UART link that joins the two. USB cables are optional (to flash a Pico, or to run its link over USB instead), so the Pi's USB ports can stay free for cameras and the modem |
+| Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051T/3** | No MCP2515: CAN runs on Pico A's PIO (can2040). The /3 part keeps the logic side at 3.3 V |
 | Drive pack | **12S LiPo**, voltage sense only | No shunt, no current sensing on this rail (see §3) |
 | Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is one **RS-485 pair** + 2× power. The link runs half duplex through a ±70 V fault-protected THVD2410 (U13). The power pair carries the **electronics pack voltage** (15–21 V), and the pod makes its own 5 V |
-| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on one Teensy I²C bus |
+| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on Pico B's I²C0 |
 | Power | **3 isolated domains** — drive / electronics / winch | Per-pack BMS protection; fusing is off-board |
 | Winch kill | **High-side P-FET, fail-safe OFF** | Gate pulled to source by R34; de-energised = open |
 | Passives | **THT** | Reworkability, by builder preference |
@@ -43,7 +43,8 @@ k = 0.048 external, **0.024 internal**.
 | Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
 | Electronics pack | 15 A fuse; real load ≈ **2 A** | Pololu D36V50F5 buck + A4988 stepper |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
-| Pod branch (F1) | **0.40 A hold**, fed from `+VELEC` | Bel Fuse 0ZRE0040FF1A PTC. At pack voltage the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short |
+| `+3V3` rail | **0.3 A** | Pico A's 3V3 pin (the RT6150 on the Pico, shared with the RP2350 itself) |
+| Pod branch (F1) | **0.40 A hold**, fed from `+VELEC` | Bel Fuse 0ZRE0040FF1A PTC. At pack voltage the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short. Since rev E the feed runs on In2: 0.8 mm along the top edge, ≈ 0.6 A at a 10 °C rise on 0.5 oz |
 | LED branch (F2) | **1.25 A hold** | " |
 | SBUS branch (F3) | **0.75 A hold** | Deliberately loose — the RC link is the manual override and must never nuisance-trip |
 | Drive | 100 A main / 80 A per ESC | **Off-board**, ANL fuses |

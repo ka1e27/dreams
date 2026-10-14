@@ -15938,7 +15938,7 @@
 				(alternate "USB_VBUS_DET" passive line)
 				(alternate "~{SPI0_CSn}" bidirectional line)
 			)
-			(pin power_out line
+			(pin power_in line
 				(at 0 -35.56 90)
 				(length 3.81)
 				(name "GND"

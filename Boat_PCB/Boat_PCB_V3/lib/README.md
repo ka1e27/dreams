@@ -10,6 +10,16 @@ no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 The pod project (`../../Pod_PCB_V3/`) and the V3.1 starter carrier (`../../Boat_PCB_V3_1/`) use this
 library too: their lib tables point here through `${KIPRJMOD}/../Boat_PCB_V3/lib/`.
 
+## Rev E: two Picos on the V3 carrier (2026-10-13)
+
+- **`RaspberryPi_Pico` pin 3 (GND) is `power_in` now**, not `power_out`. Two Picos on one GND net
+  were a power-output conflict. A module's ground isn't a supply anyway. A board that relies on the
+  Pico to drive GND in ERC now needs a `PWR_FLAG` on GND: the V3.1 schematic got one (`#FLG03`).
+- **`Teensy4.1` / `Teensy41` are unused** since the carrier dropped the Teensy. They stay in the
+  library (and their STEP model in `dreams_v3.3dshapes/`) so older revisions still open.
+- The carrier uses the V3.1 parts it needed: `RaspberryPi_Pico` + `RaspberryPi_Pico_Socketed_THT`
+  ×2, `D_Schottky` (`D_SOD-123`) ×2 and `SW_Push` (`SW_PUSH_6mm`) ×2.
+
 ## V3.1 starter carrier additions (2026-10-10)
 
 - **Flattened from stock:**

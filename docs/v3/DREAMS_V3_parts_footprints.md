@@ -30,9 +30,30 @@
 ## BOAT CARRIER PCB
 
 ### Core compute
+
+> **Updated 2026-10-13 (rev E):** the Teensy 4.1 below was replaced by two Raspberry Pi Pico 2s. Fit:
+> 2× Raspberry Pi Pico 2 (the H version has the headers on), 4× 1×20 female header, 8.5 mm (one pair
+> per Pico, soldered to the carrier's underside), 2× B5819W (D10, D11, SOD-123), 2× 6 mm tact switch
+> (SW1, SW2). The project library has all of them (`RaspberryPi_Pico_Socketed_THT`, `D_SOD-123`,
+> `SW_PUSH_6mm`). The original line is kept for the record. The Pi's reset lines to the Picos (same
+> day) add 2× BSS138 (Q3, Q4, `SOT-23`) and 2× 100k 1 % axial (R64, R65), and its UART adds 2× 1k 1 %
+> axial standing upright (R66, R67, `R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical`). All are already in
+> the library.
+
 | Part | Package | KiCad? | Link |
 |---|---|---|---|
-| **Teensy 4.1** | THT module, 2.4"x0.7" | **Needs download** | Verified working KiCad project (schematic + PCB, tested): https://github.com/jenschr/Teensy-4.1-example — also general Teensy symbol/footprint libraries: https://github.com/XenGi/teensy_library (symbols) + https://github.com/XenGi/teensy.pretty (footprints), though confirm Teensy 4.1 coverage vs just 3.x/4.0 before relying on it |
+| ~~**Teensy 4.1**~~ (replaced in rev E) | THT module, 2.4"x0.7" | **Needs download** | Verified working KiCad project (schematic + PCB, tested): https://github.com/jenschr/Teensy-4.1-example — also general Teensy symbol/footprint libraries: https://github.com/XenGi/teensy_library (symbols) + https://github.com/XenGi/teensy.pretty (footprints), though confirm Teensy 4.1 coverage vs just 3.x/4.0 before relying on it |
+
+### Parts already on hand (2026-10-13)
+
+Bought for V2's CAN circuit. Use them before ordering more:
+
+| Part | Qty | Where it goes |
+|---|---|---|
+| NXP **TJA1051T/3,118** CAN transceiver, SO-8 | 3 | V3 U3 and V3.1 U4; one spare |
+| Rubycon **35ZLH470MEFC10X16**, 470 µF 35 V, 10 × 16 mm, 5 mm leads | 5 | V3 C1, C2, C25 and C26 (C25 went from 100 µF to 470 µF to use one); one spare. Not V3.1's C1: its 10S pack reaches 42 V |
+| Microchip **MCP2515-I/P** CAN controller, DIP-18 | 3 | Spare: V3 and V3.1 run CAN on can2040 |
+| ECS **ECS-80-20-4X** crystal, 8 MHz, 20 pF | 4 | Spare: they were for the MCP2515 |
 
 ### CAN bus
 | Part | Package | KiCad? | Link |
