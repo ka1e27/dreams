@@ -1,0 +1,124 @@
+[
+  {
+    "id": "teensy",
+    "label": "Teensy 4.1",
+    "detail": "Real-time controller for sensors, motors and safety. Fitted on the underside, so only its header holes show here.",
+    "refs": [
+      "U1"
+    ],
+    "side": "bottom",
+    "x": 0.8706,
+    "y": 0.5517
+  },
+  {
+    "id": "pi5",
+    "label": "Raspberry Pi 5 socket",
+    "detail": "The Pi plugs in here on standoffs. This header carries 5 V power only; every control signal goes through the Teensy.",
+    "refs": [
+      "J12"
+    ],
+    "side": "top",
+    "x": 0.5923,
+    "y": 0.397
+  },
+  {
+    "id": "can",
+    "label": "CAN link to motor controllers",
+    "detail": "TJA1051 transceiver and a 3-pin connector to the two VESC motor controllers, plus a jumper for the 120 Ω terminator.",
+    "refs": [
+      "U3",
+      "J3",
+      "JP1"
+    ],
+    "side": "top",
+    "x": 0.6681,
+    "y": 0.1182
+  },
+  {
+    "id": "mux",
+    "label": "I²C sensor multiplexer",
+    "detail": "TCA9548A splits one I²C bus into 8 channels: IMU, accelerometer, barometer, light sensor, two humidity sensors, power monitors, GPS compass.",
+    "refs": [
+      "U2",
+      "J4"
+    ],
+    "side": "top",
+    "x": 0.7531,
+    "y": 0.5086
+  },
+  {
+    "id": "pod-link",
+    "label": "Sensor-pod link (RS-485)",
+    "detail": "THVD2410 transceiver and a 4-pin connector for the tether to the water-sensing pod. The same cable powers the pod.",
+    "refs": [
+      "U13",
+      "J2"
+    ],
+    "side": "top",
+    "x": 0.9153,
+    "y": 0.1547
+  },
+  {
+    "id": "gps",
+    "label": "GPS connector",
+    "detail": "6-pin cable socket for the u-blox M10 GPS module: serial data plus the I²C lines of its built-in compass.",
+    "refs": [
+      "J1"
+    ],
+    "side": "top",
+    "x": 0.7575,
+    "y": 0.9606
+  },
+  {
+    "id": "sbus",
+    "label": "RC receiver input (SBUS)",
+    "detail": "3-pin socket for the radio-control receiver, the manual override. Its 5 V supply is fused loosely so it never nuisance-trips.",
+    "refs": [
+      "J7",
+      "F3"
+    ],
+    "side": "top",
+    "x": 0.3199,
+    "y": 0.9606
+  },
+  {
+    "id": "power-in",
+    "label": "Battery inputs",
+    "detail": "Two XT60 connectors take separate battery packs, one for the electronics and one for the winch. A 5 V buck regulator on the underside powers the Pi and Teensy.",
+    "refs": [
+      "J13",
+      "J14",
+      "A2"
+    ],
+    "side": "top",
+    "x": 0.1627,
+    "y": 0.0601
+  },
+  {
+    "id": "power-monitors",
+    "label": "Battery monitors (INA228)",
+    "detail": "Two INA228 chips with shunt resistors measure voltage and current on the electronics pack and the winch pack.",
+    "refs": [
+      "U10",
+      "U11",
+      "R32",
+      "R33"
+    ],
+    "side": "top",
+    "x": 0.1053,
+    "y": 0.2044
+  },
+  {
+    "id": "winch-kill",
+    "label": "Winch safety cut-off",
+    "detail": "A P-channel MOSFET switches power to the winch controller and fails safe: if the Teensy resets or loses power, the winch is off. A red LED shows it is live.",
+    "refs": [
+      "Q1",
+      "Q2",
+      "D9"
+    ],
+    "side": "top",
+    "x": 0.356,
+    "y": 0.1734
+  }
+]

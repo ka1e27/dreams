@@ -6,6 +6,7 @@ This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/`, the pod boar
 | File | What it is |
 |---|---|
 | **[`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md)** | **Start here.** Locked decisions, the current budget, part choices with their reasons, and the layout mistakes the first attempt made |
+| [`V3_1_STARTER_CARRIER.md`](V3_1_STARTER_CARRIER.md) | The V3.1 starter carrier (`Boat_PCB/Boat_PCB_V3_1/`): an interim Pi 5 + Pico 2 board. Power, pin map, connectors, bring-up checks |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
 | [`../../Boat_PCB/Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
