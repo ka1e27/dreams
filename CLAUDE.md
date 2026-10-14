@@ -8,7 +8,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | | |
 |---|---|
 | `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
-| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev A layout. Uses the carrier's `lib/` |
+| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev B layout. Uses the carrier's `lib/` |
 | `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Uses the carrier's `lib/`; notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
@@ -197,10 +197,10 @@ the commit message.
   path. Pico A's GP12/GP13 pins are walled in by the J12-to-Pico tracks, which is why the Pi link
   uses GP16/GP17.
 
-Pod baseline as of 2026-09-26 (rev A, 48 × 63 mm), same commands on
+Pod baseline as of 2026-09-29 (rev B, 48 × 63 mm), same commands on
 `Boat_PCB/Pod_PCB_V3/Pod_PCB_V3.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** One per-pad edit:
-C3's GND pad connects solid to the pour, because the neighbouring traces starve its thermal spokes.
-Re-apply it after a footprint update.
+U5's GND pad 3 connects solid to the pour, because the neighbouring traces starve its thermal
+spokes. Re-apply it after a footprint update.
 
 V3.1 baseline as of 2026-10-12 (rev A, 98 × 67 mm, 2 layers, 75 footprints, 21 on the underside), same commands on
 `Boat_PCB/Boat_PCB_V3_1/Boat_PCB_V3_1.*`: **DRC 0, 0 unconnected, parity 0, ERC 0.** No per-pad
