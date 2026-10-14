@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Boat — D.R.E.A.M.S</title>
-<meta name="description" content="How the D.R.E.A.M.S V3 survey boat works: the survey loop, the custom carrier board in 3D, the full spec sheet and the long-term sample-collection arm.">
+<meta name="description" content="How the D.R.E.A.M.S V3 survey boat works: the survey loop, the boat and its carrier board in 3D, the full spec sheet and the long-term sample-collection arm.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="D.R.E.A.M.S">
 <meta property="og:url" content="https://ka1e27.github.io/dreams/boat.html">
@@ -19,7 +19,8 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,500..800&family=Figtree:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=04d51211">
+<link rel="stylesheet" href="styles.css?v=ec63a18e">
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <script type="module" src="https://unpkg.com/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
 </head>
 <body data-page="boat">
@@ -33,7 +34,7 @@
       <span class="kicker">The boat&nbsp;· V3 design</span>
       <h1>The boat, piece by piece.</h1>
       <p class="lead">V3 is a modular twin-hull survey boat: a Linux mission computer, a real-time controller and a tethered sensor pod, joined by one custom carrier board. Its first job is to drive itself around small bodies of water and sample them.</p>
-      <nav class="subnav" aria-label="On this page"><a href="#how">How a survey works</a><a href="#system">The V3 system</a><a href="#model">Spin the board</a><a href="#specs">Spec sheet</a><a href="#later">Later: arm + sediment</a></nav>
+      <nav class="subnav" aria-label="On this page"><a href="#how">How a survey works</a><a href="#explore">Take the boat apart</a><a href="#system">The V3 system</a><a href="#model">Spin the board</a><a href="#specs">Spec sheet</a><a href="#later">Later: arm + sediment</a></nav>
     </div>
   </header>
 
@@ -53,10 +54,72 @@
     </div>
   </section>
 
+  <!-- The boat in 3D: media/boat-v3.glb, exported from our SolidWorks model; boat-explorer.js runs it -->
+  <section class="sec rule" id="explore" aria-labelledby="explore-h">
+    <div class="wrap head">
+      <div><span class="kicker">02&nbsp;· The boat in 3D</span><h2 id="explore-h">Take the boat apart.</h2></div>
+      <p class="lead">Our V3 boat, straight from our SolidWorks model. Spin it, pull it apart, slice through it from bow to stern or port to starboard, and pick any part to see why it&#x27;s built the way it is.</p>
+    </div>
+    <div class="wrap">
+      <div class="bx">
+        <div class="bx-viewer">
+          <div class="bx-stage" id="bx-stage">
+            <picture><source type="image/webp" srcset="media/boat-v3-poster.webp"><img class="bx-poster" id="bx-poster" src="media/boat-v3-poster.png" alt="" width="1600" height="900"></picture>
+            <canvas id="bx-view" role="img" aria-label="3D model of the D.R.E.A.M.S V3 boat: two red hulls with white deck plates, joined by a pink arched bridge"></canvas>
+            <div class="bx-views" role="group" aria-label="Camera views">
+              <button type="button" data-view="iso" aria-pressed="true">3/4</button>
+              <button type="button" data-view="side" aria-pressed="false">Side</button>
+              <button type="button" data-view="bow" aria-pressed="false">Bow</button>
+              <button type="button" data-view="top" aria-pressed="false">Top</button>
+              <button type="button" data-view="below" aria-pressed="false">Below</button>
+            </div>
+            <p class="bx-readout"><span class="label">Overall</span><b>963&nbsp;×&nbsp;733&nbsp;×&nbsp;368&nbsp;mm</b></p>
+            <p class="bx-status" id="bx-status">Loading the 3D model&nbsp;· 1.7&nbsp;MB</p>
+            <div class="bx-tip" id="bx-tip" hidden></div>
+          </div>
+          <div class="bx-controls">
+            <div class="bx-ctl">
+              <span class="label">Pull apart</span>
+              <div class="bx-slide">
+                <input type="range" id="bx-explode" min="0" max="100" value="0" step="1" aria-label="Pull the boat apart" aria-valuetext="Assembled">
+                <output id="bx-explode-out" for="bx-explode">Assembled</output>
+              </div>
+              <div class="bx-tools">
+                <button type="button" class="bx-tool" id="bx-spin" aria-pressed="true">Spin</button>
+                <button type="button" class="bx-tool" id="bx-reset">Reset</button>
+              </div>
+            </div>
+            <div class="bx-ctl">
+              <span class="label">Layers</span>
+              <div class="bx-seg" role="group" aria-label="Layer view">
+                <button type="button" data-cut="off" aria-pressed="true">Off</button>
+                <button type="button" data-cut="z" aria-pressed="false">Bow to stern</button>
+                <button type="button" data-cut="x" aria-pressed="false">Port to starboard</button>
+              </div>
+              <div class="bx-slide" id="bx-cut-row" hidden>
+                <input type="range" id="bx-cut" min="0" max="1000" value="500" step="1" aria-label="Where the layer view cuts">
+                <output id="bx-cut-out" for="bx-cut"></output>
+                <button type="button" class="bx-tool" id="bx-sweep" aria-pressed="false">Sweep</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="bx-side" aria-label="Parts of the boat">
+          <section class="bx-parts" aria-labelledby="bx-parts-h">
+            <header><h3 id="bx-parts-h" class="label">Parts in the model</h3><button type="button" class="bx-tool" id="bx-show-all">Show all</button></header>
+            <div id="bx-parts"></div>
+          </section>
+          <article class="bx-card" id="bx-card" aria-live="polite"></article>
+        </aside>
+      </div>
+      <p class="bx-note">From our SolidWorks model, exported 14&nbsp;Oct&nbsp;2026. Not in the CAD yet: the drives, the electronics and batteries, the sensor pod, the depth sonar and the antennas.</p>
+    </div>
+  </section>
+
   <!-- The V3 system -->
   <section class="sec alt gridded" id="system" aria-labelledby="system-h">
     <div class="wrap head">
-      <div><span class="kicker">02&nbsp;· The V3 system</span><h2 id="system-h">One board ties it all together.</h2></div>
+      <div><span class="kicker">03&nbsp;· The V3 system</span><h2 id="system-h">One board ties it all together.</h2></div>
       <p class="lead">The carrier board hosts the Raspberry Pi&nbsp;5 and two Raspberry Pi Pico&nbsp;2 controllers, talks to both motor controllers over CAN, and runs everything from one 10S battery bus, with an optional backup battery for the computers.</p>
     </div>
     <div class="wrap">
@@ -91,7 +154,7 @@
   <!-- 3D model -->
   <section class="sec" id="model" aria-labelledby="model-h">
     <div class="wrap head">
-      <div><span class="kicker">03&nbsp;· Interactive</span><h2 id="model-h">Spin the board.</h2></div>
+      <div><span class="kicker">04&nbsp;· Interactive</span><h2 id="model-h">Spin the board.</h2></div>
       <p class="lead">The real V3 carrier board, exported straight from our KiCad layout. Drag to rotate, scroll or pinch to zoom.</p>
     </div>
     <div class="wrap">
@@ -111,7 +174,7 @@
   <!-- Spec sheet -->
   <section class="sec alt" id="specs" aria-labelledby="specs-h">
     <div class="wrap head">
-      <div><span class="kicker">04&nbsp;· Spec sheet</span><h2 id="specs-h">V3, line by line.</h2></div>
+      <div><span class="kicker">05&nbsp;· Spec sheet</span><h2 id="specs-h">V3, line by line.</h2></div>
       <p class="lead">The design as it stands today. Modular by intent: the hull, payload and software are configured for each application, starting with surface water-quality surveys.</p>
     </div>
     <div class="wrap">
@@ -139,7 +202,7 @@
   <!-- Later: arm + sediment -->
   <section class="sec" id="later" aria-labelledby="later-h">
     <div class="wrap head">
-      <div><span class="kicker">05&nbsp;· Later</span><h2 id="later-h">From measuring water to collecting it.</h2></div>
+      <div><span class="kicker">06&nbsp;· Later</span><h2 id="later-h">From measuring water to collecting it.</h2></div>
       <p class="lead">Further down the line, we want D.R.E.A.M.S to bring samples back, not just readings.</p>
     </div>
     <div class="wrap boat-grid" style="align-items:start">
@@ -159,7 +222,7 @@
   <!-- Try it -->
   <section class="sec alt rule" aria-labelledby="try-h">
     <div class="wrap head">
-      <div><span class="kicker">06&nbsp;· Try the software</span><h2 id="try-h" class="h-sm">Run a simulated survey.</h2></div>
+      <div><span class="kicker">07&nbsp;· Try the software</span><h2 id="try-h" class="h-sm">Run a simulated survey.</h2></div>
       <div><p class="lead">The V2 command center runs in your browser with a simulated boat. V3's dashboard will build on it.</p><div class="btns" style="margin-top:22px"><a class="btn btn-signal" href="demo/v2-dashboard/" target="_blank" rel="noopener">Open the V2 demo ↗</a><a class="btn btn-ghost" href="https://dreamsv1.kylegtran2007.workers.dev/" target="_blank" rel="noopener">V1 planner ↗</a></div></div>
     </div>
   </section>
@@ -167,5 +230,6 @@
 
 <div id="footer"><noscript><footer class="footer"><div class="wrap"><p>Contact: <a href="mailto:DREAMSboatproject@gmail.com">DREAMSboatproject@gmail.com</a>&nbsp;· <a href="mailto:tran.kyl@northeastern.edu">Kyle Tran&nbsp;· tran.kyl@northeastern.edu</a>&nbsp;· <a href="mailto:hong.matt@northeastern.edu">Matthew Hong&nbsp;· hong.matt@northeastern.edu</a></p></div></footer></noscript></div>
 <script src="site.js?v=78616e95"></script>
+<script type="module" src="boat-explorer.js?v=c258bc85"></script>
 </body>
 </html>

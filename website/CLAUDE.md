@@ -15,5 +15,6 @@ Static site for the D.R.E.A.M.S autonomous survey boat. It lives in the `website
 - Pages are plain HTML. `site.js` holds the shared nav, footer and contacts. `styles.css` is the whole design system.
 - `build-log.html` is generated. Edit `tools/gen_build_log.py` and `tools/build-log.template.html`, then run `python -I tools/gen_build_log.py`.
 - Board callouts: run `python -I tools/gen_callouts.py`. Logo: run `python -I tools/make_logo.py`. Images: run `python -I tools/build_images.py <slugs>`.
-- After editing `styles.css` or `site.js`, run `python -I tools/stamp.py` so browsers fetch the new files.
+- After editing `styles.css`, `site.js` or `boat-explorer.js`, run `python -I tools/stamp.py` so browsers fetch the new files.
+- The Boat page's 3D boat (`#explore`) is `boat-explorer.js` with `media/boat-v3.glb`, exported from the team's SolidWorks model. The part names, numbers and "why" text live at the top of `boat-explorer.js`.
 - `_directions/` is local scratch (mockups, Instagram slides, sponsor drafts). It's git-ignored and never published.
