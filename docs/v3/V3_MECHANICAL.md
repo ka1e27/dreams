@@ -28,7 +28,7 @@ Settle these before anyone models the boat in CAD from the rev D drawings.
 | **Outdrive mount** | Printed ABS for now; mill a 6061 one later | Motor mounts machined from metal (Kyle, 2026-10-14) | Go straight to the metal version of the mount in §4.3 |
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
 | **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | Carrier rev E uses two Pico 2s; the V3.1 starter uses one | The boat starts on V3.1 (next row) |
-| **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **V3.1: one 10S 10 Ah Li-ion pack** (30–42 V, ~360 Wh) runs everything. **Full V3: two 10S 10 Ah packs,** maybe plus an electronics pack as a backup (Kyle, 2026-10-14) | Redo the mass budget and trim for the packs, and pick their hulls. Rough run time on the 985 mm hull (§5.5), from ~325 Wh usable per pack and counting ~35 W of electronics (about 2 A at 15–21 V, brief §2): V3.1 ~5 h at 1.0 m/s and ~1.9 h at 1.5 m/s; full V3 about double. **Carrier rev E can't take a 10S pack on its electronics or winch inputs as built** (§1.1) |
+| **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **V3.1: one 10S 10 Ah Li-ion pack** (30–42 V, ~360 Wh) runs everything. **Full V3: two 10S 10 Ah packs,** maybe plus a 3S or 4S Li-ion electronics pack (Kyle, 2026-10-14) | Redo the mass budget and trim for the packs, and pick their hulls. Rough run time on the 985 mm hull (§5.5), from ~325 Wh usable per pack and counting ~35 W of electronics (about 2 A at 15–21 V, brief §2): V3.1 ~5 h at 1.0 m/s and ~1.9 h at 1.5 m/s; full V3 about double. **Carrier rev E can't take a 10S pack on its electronics or winch inputs as built** (§1.1) |
 | **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Kyle's figure leaves more headroom than rev D's estimate |
 | **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | On the 10S pack, 200 KV gives ~7,200 rpm unloaded at 36 V nominal and ~6,000 near empty (30 V). Rev D needs ~3,900 rpm at the prop for 3 m/s through its 1:1 belt, so there's headroom. Rev D's 150–200 KV range was for 12S, which is ~185–245 KV at 10S, so 200 KV sits inside it. The controller's 8–60 V (3–13S) covers 10S, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
 | **Test site** | Muddy River as the design target (Matthew, 2026-09-30) | Confirmed with CRWA: water temperature and depth on the Muddy River where people can't walk; water testing from the thaw, about March 2027; CRWA only uses data from sensors that meet NIST standards (Kyle, 2026-10-14) | Agrees. Any sensor upgrade in §6 has to meet the NIST rule |
@@ -46,8 +46,17 @@ reads a full 42 V pack as 2.34 V. Its electronics and winch inputs are another m
 
 So for full V3 on two 10S packs, pick one before wiring it:
 
-- **Keep a 15–21 V pack** for the electronics and winch (the "backup" pack becomes required), with
-  both 10S packs on the drives.
+- **Use the electronics pack** on J13, with both 10S packs on the drives. Kyle's pick would be a 3S
+  or 4S Li-ion pack, and it would then be required, not just a backup. **4S fits better:**
+  - **4S (12–16.8 V)** sits inside the pod's 12–21 V range and runs the electronics rail's loads (the
+    D36V50F5 5 V buck and the A4988 stepper, whose motor supply needs 8–35 V). The carrier was
+    designed around 15–21 V, so a 4S pack runs it a little under that, which nothing on the rail
+    minds.
+  - **3S (9–12.6 V)** still runs the 5 V buck, but it's under the pod's 12 V minimum for its whole
+    discharge, and near empty it's close to the A4988's 8 V. Check the pod board works down to ~9 V,
+    with the tether's drop at 20 m, before choosing it.
+  - Either way the winch (J14) still needs its own feed of 21 V or less: from this pack (20 A is a
+    lot for a small pack), through a converter from 10S, or after a carrier revision.
 - **Add a converter** from 10S to ~15–21 V for J13 and J14, as V3.1 already does for its pod (a
   Pololu D36V6F15) and its winch (an off-board buck). The winch's 20 A makes that converter big.
 - **Revise the carrier** to take 10S directly: TVS parts, Q1 and the pod feed.
