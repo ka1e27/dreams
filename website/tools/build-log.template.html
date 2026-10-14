@@ -107,7 +107,7 @@
         <div class="tag"><span class="v">V3</span><span class="chip built live">In build</span><span class="label">Fall 2026</span></div>
         <div>
           <h3>Built for the field</h3>
-          <p>A ground-up redesign that fixes what V2 got wrong: a Teensy&nbsp;4.1 real-time core, CAN-bus motor control, isolated power domains and a new <span class="nw">RS-485</span> sensor pod, with a fish-finder sonar for depth. The carrier and pod boards are laid out and checked.</p>
+          <p>A ground-up redesign that fixes what V2 got wrong: two Raspberry Pi Pico&nbsp;2 real-time controllers, CAN-bus motor control, a fused and monitored 10S power system and a new <span class="nw">RS-485</span> sensor pod, with a fish-finder sonar for depth. The carrier and pod boards are laid out and checked.</p>
           <p>The goal: autonomous surface surveys of small bodies of water. Right now we're talking with the Charles River Watershed Association (CRWA) about data collection.</p>
           <p class="mt-18"><a class="more" href="boat.html#system">See the V3 system →</a></p>
         </div>
@@ -137,7 +137,7 @@
         <span class="chip failed">Failed&nbsp;· V2 bench</span>
         <h3>V2's control, power and safety design</h3>
         <p>Bench testing showed that V2's motor control, power and safety design weren't reliable enough to put on the water.</p>
-        <p class="fix"><b>Fix in V3</b>Real-time control moved to a Teensy&nbsp;4.1, each VESC became its own CAN node, power was split into three isolated domains, and the winch driver got a fail-safe hardware kill, ready for the later sample-collection stage.</p>
+        <p class="fix"><b>Fix in V3</b>Real-time control moved to two Raspberry Pi Pico&nbsp;2s, each VESC became its own CAN node, every power feed got its own fuse and current monitor, and the winch driver got a fail-safe hardware kill, ready for the later sample-collection stage.</p>
       </article>
     </div>
   </section>
@@ -158,7 +158,7 @@
 
       <p class="label" style="margin:72px 0 0">V3 milestones</p>
       <ol class="mile reveal">
-        <li><span class="chip designed">Done</span><h3>Electronics designed</h3><p>Carrier board (rev D) and sensor-pod board (rev B) laid out and checked.</p></li>
+        <li><span class="chip designed">Done</span><h3>Electronics designed</h3><p>Carrier board (rev F), V3.1 starter board and sensor-pod board (rev B) laid out and checked.</p></li>
         <li><span class="chip built live">In progress</span><h3>New hull</h3><p>A modular hull in CAD, built around the V3 electronics.</p></li>
         <li><span class="chip planned">Next</span><h3>Build</h3><p>Fabricate the boards and assemble the electronics, pod and fish finder into the hull.</p></li>
         <li><span class="chip planned">Planned</span><h3>Firmware</h3><p>Autonomous waypoint navigation, surface sampling and depth logging, streamed to the dashboard.</p></li>

@@ -1,19 +1,20 @@
 [
   {
-    "id": "teensy",
-    "label": "Teensy 4.1",
-    "detail": "Real-time controller for sensors, motors and safety. Fitted on the underside, so only its header holes show here.",
+    "id": "picos",
+    "label": "Two Raspberry Pi Pico 2s",
+    "detail": "The real-time controllers, socketed on the underside: one runs the motors, winch and RC, the other the sensors, GPS and the pod link. Only their header holes show here.",
     "refs": [
-      "U1"
+      "U1",
+      "U14"
     ],
     "side": "bottom",
-    "x": 0.8706,
-    "y": 0.5517
+    "x": 0.8652,
+    "y": 0.6305
   },
   {
     "id": "pi5",
     "label": "Raspberry Pi 5 socket",
-    "detail": "The Pi plugs in here on standoffs. This header carries 5 V power only; every control signal goes through the Teensy.",
+    "detail": "The Pi plugs in here, face down on standoffs. The header carries its 5 V power, a serial link to the control Pico and a reset line for each Pico.",
     "refs": [
       "J12"
     ],
@@ -49,7 +50,7 @@
   {
     "id": "pod-link",
     "label": "Sensor-pod link (RS-485)",
-    "detail": "THVD2410 transceiver and a 4-pin connector for the tether to the water-sensing pod. The same cable powers the pod.",
+    "detail": "THVD2410 transceiver and a 4-pin connector for the tether to the water-sensing pod. The same cable carries 15 V to power the pod.",
     "refs": [
       "U13",
       "J2"
@@ -120,5 +121,17 @@
     "side": "top",
     "x": 0.356,
     "y": 0.1734
+  },
+  {
+    "id": "backup",
+    "label": "Backup battery input",
+    "detail": "An optional small 4S battery plugs in on the underside. If the main packs go off, it keeps the Pi, both Picos and the radios running.",
+    "refs": [
+      "J18",
+      "D13"
+    ],
+    "side": "bottom",
+    "x": 0.2718,
+    "y": 0.798
   }
 ]
