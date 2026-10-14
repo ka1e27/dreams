@@ -1,4 +1,4 @@
-"""3D concept model and renders of the D.R.E.A.M.S boat (rev D; files keep the V2 names).
+"""3D concept model and renders of the D.R.E.A.M.S boat (rev E; files keep the V2 names).
 
 Builds the boat as triangle meshes from the parameters in hull_sizing.py and writes:
     mechanical/render/DREAMS_V2_viewer.html   interactive 3D viewer, one self-contained file
@@ -403,7 +403,7 @@ def build(hull: Hull, boat: Boat) -> tuple[list[Mesh], dict]:
     parts.append(cylinder("tether", "black", (ox, -0.015, s1), (ox, -0.015, boat.sheave[0]), 0.003, n=8))
     rail = hull.lid.flange_w + hull.lid.lip_t
     params = {
-        "dwl": dwl, "loa": hull.loa, "yc": yc, "beam": hull.beam, "depth": hull.depth,
+        "dwl": dwl, "loa": hull.loa, "loa_rails": hull.loa + 2 * rail, "yc": yc, "beam": hull.beam, "depth": hull.depth,
         "hub_x": hx, "mass": conditions(hull, boat)[1].total, "width": boat.overall_width + 2 * rail,
         "mast": boat.mast_top, "decal_z": (hull.lid.z - hull.lid.lip_drop + dwl) / 2,
         "floor": min(v[2] for p in parts for v in p.v) - 0.001,
@@ -563,13 +563,14 @@ function setMode(m) {
   scene.fog = wet ? new THREE.Fog(0xb9cfe2, 10, 45) : null;
 }
 
+const DX = P.loa / 2 - 0.65;  // the boat views were framed on a 1300 mm hull; slide them to this one
 const VIEWS = {
-  hero:   {pos: [2.35, 0.78, 1.95], tgt: [0.52, 0.30, 0.0], fov: 30},
-  stern:  {pos: [-1.85, 0.92, -1.55], tgt: [0.55, 0.30, 0.0], fov: 30},
-  front:  {pos: [6.0, 0.44, 0.0], tgt: [0.55, 0.40, 0.0], fov: 11},
-  side:   {pos: [0.62, 0.42, 6.6], tgt: [0.62, 0.40, 0.0], fov: 13},
-  top:    {pos: [0.62, 7.0, 0.0], tgt: [0.62, 0.0, 0.0], fov: 13, up: [0, 0, -1]},
-  studio: {pos: [2.3, 1.35, 2.05], tgt: [0.55, 0.32, 0.0], fov: 28},
+  hero:   {pos: [2.35 + DX, 0.78, 1.95], tgt: [0.52 + DX, 0.30, 0.0], fov: 30},
+  stern:  {pos: [-1.85 + DX, 0.92, -1.55], tgt: [0.55 + DX, 0.30, 0.0], fov: 30},
+  front:  {pos: [6.0 + DX, 0.44, 0.0], tgt: [0.55 + DX, 0.40, 0.0], fov: 11},
+  side:   {pos: [0.62 + DX, 0.42, 6.6], tgt: [0.62 + DX, 0.40, 0.0], fov: 13},
+  top:    {pos: [0.62 + DX, 7.0, 0.0], tgt: [0.62 + DX, 0.0, 0.0], fov: 13, up: [0, 0, -1]},
+  studio: {pos: [2.3 + DX, 1.35, 2.05], tgt: [0.55 + DX, 0.32, 0.0], fov: 28},
   drive:  {pos: [-0.80, 0.26, 1.06], tgt: [-0.04, 0.14, 0.33], fov: 30},
 };
 const camera = new THREE.PerspectiveCamera(30, W / H, 0.05, 100);
@@ -600,9 +601,9 @@ if (STILL) {
 def viewer_html(data: str, params: dict) -> str:
     three = (VENDOR / "three.min.js").read_text(encoding="utf-8")
     orbit = (VENDOR / "OrbitControls.js").read_text(encoding="utf-8")
-    info = (f"D.R.E.A.M.S concept, rev D: {params['loa'] * 1000:.0f} x {params['width'] * 1000:.0f} mm over the "
+    info = (f"D.R.E.A.M.S concept, rev E: {params['loa_rails'] * 1000:.0f} x {params['width'] * 1000:.0f} mm over the "
             f"rails, {params['mass']:.1f} kg design, draft {params['dwl'] * 1000:.0f} mm. Drag to orbit, scroll to zoom.")
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>D.R.E.A.M.S concept, rev D</title>
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>D.R.E.A.M.S concept, rev E</title>
 <style>body{{margin:0;overflow:hidden;font-family:Arial,sans-serif}}#ui{{position:absolute;top:10px;left:10px}}
 #ui button{{margin:0 4px 4px 0;padding:6px 10px;border:0;border-radius:4px;background:#20262ecc;color:#fff;cursor:pointer}}
 #info{{position:absolute;bottom:10px;left:10px;color:#20262e;font-size:13px;background:#ffffffb0;padding:4px 8px;border-radius:4px}}</style>

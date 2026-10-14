@@ -18,13 +18,26 @@ Change a parameter, re-run `build_all.py`, and update these tables. To model the
 
 **Status:** proposal, rev C, 2026-09-27. Nothing here is locked. See the decisions and open questions at the end.
 
+> **Rev E (2026-10-05) supersedes the length and the printing.** Matthew's call: the Elegoo Giga prints
+> 1000 mm tall, so make the boat 975 mm long and print each hull part in one piece, stern down, bow up.
+> The rail flange laps 17.5 mm past the transom and the stem, so the shell is **940 mm** and the boat is
+> **975 over the rails**: the lid prints 975 tall and the tub 970. Beam, depth, joint plane and the hull's
+> form fractions are unchanged; the bridge, hub garage and outdrives are the same parts, with the frames
+> moved to x 335 / 595 for level trim. No segment joints or bulkheads: printed-in ring frames (45° aft face)
+> stiffen the tub, and the two lid ribs are printed flat and bonded in. A flat landing in the lid deck
+> carries each foot over the bow taper. Results: 31.2 kg design, 118 mm draft, 72 mm to the lid joint,
+> +4 kg of payload before it comes within 60 mm of the water (rev D: +15), every SF ≥ 4.9. The shorter
+> hull reaches its wave-drag hump at 1.5 m/s: both drives need ~144 W there (rev D 94 W), so cruise near
+> 1.3 m/s (~92 W, 4.3 h). The numbers are in `mechanical/reports/`, the drawings and the SolidWorks guide are
+> rev E.
+
 > **Rev D (2026-10-01) supersedes parts of this record.** The arch stays. The hub is now the garage for the
 > winch, the pod and a horizontal Van Dorn sampler. The packs and electronics moved into the hulls. The hulls
 > are printed in PLA on the Elegoo OrangeStorm Giga, 3 segments split at the frames. The outdrives are now
 > fixed (no kick-up): one mount on the lid's aft deck and aft wall, the leg 3.5 mm off the rail and resting on a
 > thrust pad bonded to the transom. The current numbers are
 > in `mechanical/reports/hull_report.md` (34.3 kg design, 99 mm draft, foot bolts SF 3.2), the drawings are
-> rev D, and the reasoning is in `docs/v3/session_journal.md`. The text below is still rev C.
+> rev D, and the decisions behind it are in `docs/v3/V3_MECHANICAL.md`. The text below is still rev C.
 
 **Matthew's inputs:**
 
@@ -140,7 +153,7 @@ clean and replace any that take a set.
 
 | | Belt outdrive (baseline) | M200 + weedless |
 |---|---|---|
-| Cost for two | **~$140–200** (motors ~$45–60, pulleys, belts, shafts, bearings, hardware; printed parts) | ~$390–410 ($185–195 each + $18 prop set) |
+| Parts | Hobby outrunners, pulleys, belts, shafts, bearings, hardware; printed parts | Two M200 thrusters and a prop set |
 | Power, both drives @ 1.0 / 1.5 / 3.0 m/s | 22 / 89 / 359 W | 21 / 82 / 330 W |
 | Drive endurance @ 1.0 / 1.5 m/s | 17 h / 4.4 h | 18 h / 4.7 h |
 | Motor | Dry, above the deck, cheap hobby outrunner | Wet, flooded, marine-rated |
@@ -272,11 +285,11 @@ The resistance build-up (`propulsion.py`) sums:
 | 2.0 | 0.56 | 32.9 | 0.105 |
 | 3.0 | 0.84 | 46.8 | 0.149 |
 
-| Drive (2 per boat) | Cost | 1.0 m/s | 1.5 m/s | 3.0 m/s | Endurance @ 1.0 / 1.5 m/s | Total draft |
-|---|---|---|---|---|---|---|
-| **Belt outdrive + 110 prop** | ~$140–200 | 22 W | 89 W | 359 W | 17 h / 4 h | 132 mm |
-| M200 + 112 weedless | ~$390–410 | 21 W | 82 W | 330 W | 18 h / 5 h | 134 mm |
-| T200 ducted | ~$400 | 25 W | 104 W | 406 W | 16 h / 4 h | 115 mm |
+| Drive (2 per boat) | 1.0 m/s | 1.5 m/s | 3.0 m/s | Endurance @ 1.0 / 1.5 m/s | Total draft |
+|---|---|---|---|---|---|
+| **Belt outdrive + 110 prop** | 22 W | 89 W | 359 W | 17 h / 4 h | 132 mm |
+| M200 + 112 weedless | 21 W | 82 W | 330 W | 18 h / 5 h | 134 mm |
+| T200 ducted | 25 W | 104 W | 406 W | 16 h / 4 h | 115 mm |
 
 - **Energy:** 389 Wh of drive energy from 2× HD12.0.
 - **Electronics limit:** at an estimated 11–12 W (Pi 5 running vision + LTE), the XC5.0 pack gives

@@ -1,4 +1,4 @@
-"""Dimensioned drawing set and CAD files for the D.R.E.A.M.S boat (rev D).
+"""Dimensioned drawing set and CAD files for the D.R.E.A.M.S boat (rev E).
 
 Everything is generated from the parameters in hull_sizing.py, so re-run this after any
 change there:
@@ -9,8 +9,9 @@ Outputs:
     mechanical/cad/*.txt                         XYZ point curves for SolidWorks
                                                  (Insert > Curve > Curve Through XYZ Points)
     mechanical/cad/arch_frame_plate.dxf          cut file for the two arch frames
-Sheets: 1 general arrangement, 2 hull lines, 3 bridge + hub garage, 4 rail joint + hull
-interior, 5 belt outdrive assembly, 6 belt outdrive parts, 7 hull sections one at a time.
+Sheets: 1 general arrangement, 2 hull lines, 3 bridge + hub garage + rib bond and ring frame,
+4 rail joint + hull interior, 5 belt outdrive assembly, 6 belt outdrive parts, 7 hull sections
+one at a time.
 Third-angle, dimensions in mm. Model origin: transom, baseline, boat centreline (hull sheets:
 hull centreline; outdrive sheets: the drive's centreline, which is the hull's).
 (The file names keep "V2" so links to them still work.)
@@ -43,6 +44,7 @@ from hull_sizing import (
     load_cases,
     mass_budget,
     offset_polyline,
+    print_heights,
     rail_length,
     section,
     section_points,
@@ -53,26 +55,22 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "drawings"
 CAD = HERE / "cad"
 W, H = 431.8, 279.4  # ANSI B landscape, mm
-DATE = "2026-10-02"
-REV = "D (hub garage, packs in the hulls, fixed drives)"
+DATE = "2026-10-05"
+REV = "E (940 hulls, one-piece prints)"
 
 # drawing-only geometry, mm (not in the sizing model)
-VENT_X = 900.0  # membrane vent in the lid, bow segment (clear of the foot)
 SHOE_H = 55.0  # foot shoe fairing height above the lid deck
 LIGHTENING = ((-110.0, 25.0), (0.0, 25.0), (110.0, 25.0))  # frame holes (y, dia) in the hub span
 GARAGE_HOLES_Y = (-120.0, 120.0)  # holes in each frame's hub span for the winch and sheave brackets
 CLEAR = 0.3  # print clearance at the drip lip and the spigot
-# hull interior, proposed (mm from the transom / the hull centreline); masses are in mass_budget()
-PACK_12S = (190.0, 70.0, 70.0)  # drive pack envelope x y z, port hull, middle segment
-PACK_5S = (140.0, 45.0, 50.0)  # electronics and winch packs side by side, stbd hull, middle segment
-PACK_X = 650.0
-VESC_BOX = (70.0, 45.0, 25.0)  # each VESC, aft segment, by its outdrive
-VESC_X = 200.0
+RING = (8.0, 2.0)  # tub ring frame: depth off the wall, thickness at its tip (aft face chamfered 45 deg)
+LIMBER = (12.0, 6.0)  # notch in each ring frame at the keel, so a leak runs to the probe: width, height
+# hull interior, proposed (mm from the hull centreline); the x positions and the masses are in hull_sizing
+PACK_12S = (190.0, 70.0, 70.0)  # drive pack envelope x y z, port hull, between the frames
+PACK_5S = (140.0, 45.0, 50.0)  # electronics and winch packs side by side, stbd hull, between the frames
+VESC_BOX = (70.0, 45.0, 25.0)  # each VESC, by its outdrive
 ELEC_BOX = (140.0, 110.0, 45.0)  # carrier board (131 x 102) with the Pi 5 stacked on it, stbd hull
-ELEC_X = 330.0
 HEAT_PLATE = (230.0, 100.0, 4.0)  # 6061 plate bedded on the hull bottom under the packs, each hull
-LEAK_X = 850.0  # leak probe at the low point of the flat keel, fwd of the packs (limber holes in the bulkheads)
-CONN_X = (100.0, 810.0)  # IP68 bulkhead connectors in each lid: motor (by the bracket), bridge (in the shoe)
 # lid joint hardware
 BOSS_D = 20.0  # foot-bolt boss in a lid rib, full depth: deck to joint plane
 CBORE = (13.0, 8.0)  # counterbore up into the boss for the bolt head: dia, depth
@@ -104,12 +102,10 @@ LEG_SCREWS = ((-88.0, 0.2), (-88.0, 0.6), (-33.0, 0.4), (-33.0, 0.8))  # M3 join
 #                                                                    as a fraction of the leg below the head block
 POD_SCREWS = ((-78.0, -9.0), (-35.0, -9.0))  # M3 joining the pod halves: x, z from the prop axis
 
-# body-plan stations (mm fwd of the transom) and their colours, stern (blue) to bow (purple)
-STATION_COLOURS = {0.0: "#1f4e9c", 130.0: "#2a7fbf", 260.0: "#138f96", 390.0: "#2f9e5a", 520.0: "#5c8f16",
-                   650.0: "#9a7b00", 780.0: "#d06a0c", 910.0: "#c8412a", 1040.0: "#b0243f", 1170.0: "#9c2a8a",
-                   1250.0: "#6b3fa0", 1300.0: "#3b3b6b"}
-AFT_STATIONS = [x for x in STATION_COLOURS if x <= 520.0]
-FWD_STATIONS = [x for x in STATION_COLOURS if x > 520.0]
+# body-plan station colours, stern (blue) to bow (purple); the stations are every LOA / 10, plus one
+# near the stem (station_colours)
+COLOURS = ("#1f4e9c", "#2a7fbf", "#138f96", "#2f9e5a", "#5c8f16", "#9a7b00", "#d06a0c", "#c8412a",
+           "#b0243f", "#9c2a8a", "#6b3fa0", "#3b3b6b")
 
 GAP, OVER = 1.0, 1.5  # extension-line gap and overshoot, paper mm
 
@@ -121,7 +117,6 @@ STYLE = """<style>
 .ph{stroke:#666;stroke-width:0.18;fill:none;stroke-dasharray:5 1 1 1 1 1}
 .wl{stroke:#1a5fb4;stroke-width:0.25;fill:none;stroke-dasharray:4 1.5}
 .wlt{stroke:#1a5fb4;stroke-width:0.15;fill:none;stroke-dasharray:1.5 1.5}
-.joint{stroke:#c01c28;stroke-width:0.3;fill:none;stroke-dasharray:3 1}
 .lidj{stroke:#8a3ab9;stroke-width:0.3;fill:none;stroke-dasharray:6 1.5}
 .dim{stroke:#000;stroke-width:0.15;fill:none}
 .dimx{stroke:#000;stroke-width:0.12;fill:none}
@@ -141,7 +136,6 @@ STYLE = """<style>
 .grid{stroke:#000;stroke-width:0.18;fill:none}
 text{font-family:Arial,Helvetica,sans-serif;fill:#000}
 .blue{fill:#1a5fb4}
-.red{fill:#c01c28}
 .purple{fill:#8a3ab9}
 </style>"""
 
@@ -293,6 +287,15 @@ def stations(hull: Hull, step: float = 10.0) -> list[float]:
     return sorted(xs)
 
 
+def station_colours(hull: Hull) -> dict[float, str]:
+    """Body-plan stations (mm fwd of the transom) and their colours: every LOA / 10, which lands on
+    the keel-rise end, the taper start and the rocker start, plus one 40 mm short of the stem."""
+    loa = mm(hull.loa)
+    xs = [float(round(loa * i / 10)) for i in range(10)] + [10.0 * round((loa - 40) / 10), loa]
+    return dict(zip(xs, COLOURS))
+
+
+
 def keel(hull: Hull, x: float) -> float:
     return mm(hull.keel_z(x / 1000))
 
@@ -357,14 +360,13 @@ def naca_half(t: float, c: float, n: int = 40) -> list[tuple[float, float]]:
 
 def tub_mass(hull: Hull) -> float:
     """The bare tub's share of the hull, design margin included: shell below the joint plane,
-    its bulkheads and the tub flange with its inserts."""
+    its transom and ring frames, and the tub flange with its inserts."""
     lid, n = hull.lid, 400
     dx = hull.loa / n
     girth = sum(section(hull, (i + 0.5) * dx, lid.z)[3] for i in range(n)) * dx
     transom = section(hull, 0.0, lid.z)[0]
-    bulk = sum(section(hull, xj, lid.z - lid.bulkhead_gap)[0] for xj in hull.joints()[1:])
     shell = (girth * (hull.wall_t * hull.wall_rho + hull.skin_areal) + transom * hull.skin_areal
-             + (transom + bulk) * hull.bulkhead_t * hull.wall_rho) * (1 + hull.stiffener_frac)
+             + transom * hull.transom_t * hull.wall_rho) * (1 + hull.stiffener_frac)
     flange = (lid.flange_w * lid.flange_t - lid.groove[0] * lid.groove[1]) * rail_length(hull) * hull.wall_rho
     return (shell + flange + lid_screws(hull) * 0.0012) * (1 + MARGIN)
 
@@ -388,9 +390,17 @@ class Geo:
         self.yc = self.spacing / 2
         self.fx = [mm(v) for v in b.frame_x]
         self.xc = sum(self.fx) / 2
-        self.joints = [mm(v) for v in h.joints()][1:]
-        self.segs = [mm(v) for v in h.segment_lengths()]
-        self.ribs = " / ".join(f"J{j}" for j in h.lid.rib_joints)
+        self.stations = station_colours(h)
+        self.aft_stations = [x for x in self.stations if x <= mm(h.stern_rise_end * h.loa) + 0.5]
+        self.fwd_stations = [x for x in self.stations if x not in self.aft_stations]
+        self.rib_x = [mm(v) for v in h.rib_x()]
+        self.ribs = " / ".join(f"x {v:.0f}" for v in self.rib_x)
+        self.rings = [mm(v) for v in h.ring_x]
+        self.print_h = tuple(mm(v) for v in print_heights(h))  # tub, lid, printed on the stern
+        # inside the hulls (hull_sizing.Boat): packs between the frames, VESC by the drive, and so on
+        self.pack_x, self.vesc_x, self.elec_x = mm(b.pack_x), mm(b.vesc_x), mm(b.elec_x)
+        self.leak_x, self.vent_x = mm(b.leak_x), mm(b.vent_x)
+        self.conn_x = (mm(b.motor_conn_x), mm(b.bridge_conn_x))  # lid connectors: motor, bridge (in the shoe)
         self.frame = [(mm(y), mm(z)) for y, z in frame_outline(b, h)]
         self.frame_h, self.frame_t = mm(b.frame_h), mm(b.frame_t)
         self.frame_top = mm(b.arm_hub[1] + b.frame_h / 2)  # top of the frames across the hub
@@ -434,6 +444,7 @@ class Geo:
         self.fw, self.ft = mm(lid.flange_w), mm(lid.flange_t)
         self.lip_t, self.lip_drop = mm(lid.lip_t), mm(lid.lip_drop)
         self.rail = self.fw + self.lip_t
+        self.loa_rails = self.loa + 2 * self.rail  # the rail laps past the transom and the stem
         self.rail_z = (self.zj - self.lip_drop, self.zj + self.ft)
         self.wall = mm(h.wall_t)
         self.n_screws = lid_screws(h, b.frame_x)
@@ -441,6 +452,7 @@ class Geo:
         self.rib_depth = self.depth - self.zj
         self.boss_z = (self.zj, self.depth - self.wall)  # full depth, so the rib is never notched
         self.tub_kg = tub_mass(h)
+        self.landing = mm(b.foot_landing(h))  # flat landing in the lid deck under each foot, deepest fill
         # belt outdrive: the layout is hull_sizing.Outdrive (rev D, fixed)
         d = b.drive
         self.drive = d
@@ -716,19 +728,20 @@ def garage_aft(s: Sheet, g: Geo, R) -> None:
 def interior_boxes(g: Geo, sgn: int) -> list[tuple[str, str, float, float, float, float, float, float]]:
     """What sits in one tub (sgn -1 port, +1 stbd): (name, style, x0, x1, y0, y1, z0, z1), y from the hull CL."""
     z0 = HEAT_PLATE[2] + 12.0  # on the plate, which is bedded on the V bottom
-    boxes = [("heat plate", "metal", PACK_X - HEAT_PLATE[0] / 2, PACK_X + HEAT_PLATE[0] / 2,
+    px, vx, ex = g.pack_x, g.vesc_x, g.elec_x
+    boxes = [("heat plate", "metal", px - HEAT_PLATE[0] / 2, px + HEAT_PLATE[0] / 2,
               -HEAT_PLATE[1] / 2, HEAT_PLATE[1] / 2, 12.0, z0),
-             ("VESC", "elec", VESC_X - VESC_BOX[0] / 2, VESC_X + VESC_BOX[0] / 2, -VESC_BOX[1] / 2, VESC_BOX[1] / 2,
-              keel(g.hull, VESC_X) + 15.0, keel(g.hull, VESC_X) + 15.0 + VESC_BOX[2])]
+             ("VESC", "elec", vx - VESC_BOX[0] / 2, vx + VESC_BOX[0] / 2, -VESC_BOX[1] / 2, VESC_BOX[1] / 2,
+              keel(g.hull, vx) + 15.0, keel(g.hull, vx) + 15.0 + VESC_BOX[2])]
     if sgn < 0:
-        boxes.append(("12S drive pack", "pack", PACK_X - PACK_12S[0] / 2, PACK_X + PACK_12S[0] / 2,
+        boxes.append(("12S drive pack", "pack", px - PACK_12S[0] / 2, px + PACK_12S[0] / 2,
                       -PACK_12S[1] / 2, PACK_12S[1] / 2, z0, z0 + PACK_12S[2]))
     else:
         for yy, name in ((-26.0, "electronics pack"), (26.0, "winch pack")):
-            boxes.append((name, "pack", PACK_X - PACK_5S[0] / 2, PACK_X + PACK_5S[0] / 2,
+            boxes.append((name, "pack", px - PACK_5S[0] / 2, px + PACK_5S[0] / 2,
                           yy - PACK_5S[1] / 2, yy + PACK_5S[1] / 2, z0, z0 + PACK_5S[2]))
-        ze = keel(g.hull, ELEC_X) + 20.0
-        boxes.append(("carrier + Pi 5", "elec", ELEC_X - ELEC_BOX[0] / 2, ELEC_X + ELEC_BOX[0] / 2,
+        ze = keel(g.hull, ex) + 20.0
+        boxes.append(("carrier + Pi 5", "elec", ex - ELEC_BOX[0] / 2, ex + ELEC_BOX[0] / 2,
                       -ELEC_BOX[1] / 2, ELEC_BOX[1] / 2, ze, ze + ELEC_BOX[2]))
     return boxes
 
@@ -737,9 +750,17 @@ def hull_interior_plan(s: Sheet, g: Geo, P, yc: float, sgn: int, style: str = "h
     for _, cls, x0, x1, y0, y1, _, _ in interior_boxes(g, sgn):
         s.rect(*P(x0, yc + y0), *P(x1, yc + y1), style if style != "fill" else cls)
     k = abs(P(1, 0)[0] - P(0, 0)[0])
-    s.circle(*P(LEAK_X, yc), 4 * k, "hid" if style != "fill" else "vis")
-    for cx in CONN_X:
+    s.circle(*P(g.leak_x, yc), 4 * k, "hid" if style != "fill" else "vis")
+    for cx in g.conn_x:
         s.circle(*P(cx, yc), 8 * k, "vis")
+
+
+def ring_lines(s: Sheet, g: Geo, P, yc: float, cls: str = "hid") -> None:
+    """The tub's ring frames in plan, a line across the inside of the shell at each (y from the hull
+    CL at yc): hidden under the lid, visible looking into an open tub."""
+    for xr in g.rings:
+        w = hb(g.hull, xr) - g.wall
+        s.line(*P(xr, yc - w), *P(xr, yc + w), cls)
 
 
 def hull_interior_side(s: Sheet, g: Geo, Q, sgn: int = 1, style: str = "hid") -> None:
@@ -766,8 +787,7 @@ def sheet_ga(g: Geo) -> Sheet:
         s.poly([P(x, yc + y) for x, y in rail], "vis", closed=True)
         s.poly([P(x, yc + y) for x, y in outline], "thin", closed=True)
         s.line(*P(-175, yc), *P(g.loa + 40, yc), "ctr")
-        for xj in g.joints:
-            s.line(*P(xj, yc - hb(h, xj)), *P(xj, yc + hb(h, xj)), "hid")
+        ring_lines(s, g, P, yc)
         drive_top(s, g, P, yc)
         hull_interior_plan(s, g, P, yc, sgn)
         s.rect(*P(g.xc - g.shoe_len / 2, yc - g.shoe_w / 2), *P(g.xc + g.shoe_len / 2, yc + g.shoe_w / 2), "vis")
@@ -775,8 +795,8 @@ def sheet_ga(g: Geo) -> Sheet:
         outside = [(y, w) for y, w in g.arm_plan if g.hub_ay * 0.97 <= y <= g.yc - g.shoe_w / 2]
         pts = [P(g.xc - w, sgn * y) for y, w in outside] + [P(g.xc + w, sgn * y) for y, w in reversed(outside)]
         s.poly(pts, "vis", closed=True)
-        s.circle(*P(VENT_X, yc), 1.0, "thin")
-        s.text(*P(300, yc + 2.5), "STBD HULL" if sgn > 0 else "PORT HULL", 2.4)
+        s.circle(*P(g.vent_x, yc), 1.0, "thin")
+        s.text(*P((g.xc + g.shoe_len / 2 + g.loa) / 2, yc + 2.5), "STBD HULL" if sgn > 0 else "PORT HULL", 2.4)
     for fxx in g.fx:
         s.line(*P(fxx, -g.yc), *P(fxx, g.yc), "hid")
     s.poly([P(g.hub_x + px, py) for px, py in superellipse(g.hub_ax, g.hub_ay, g.boat.hub_e)], "vis", closed=True)
@@ -788,11 +808,11 @@ def sheet_ga(g: Geo) -> Sheet:
     bar_x = g.hub_x + g.hub_ax - 60
     s.rect(*P(bar_x - 16, -180), *P(bar_x + 16, 180), "vis")
     s.line(*P(-190, 0), *P(g.loa + 60, 0), "ctr")
-    tx = P(960, 0)[0]
-    s.leader(*P(g.hub_x, 0), tx, P(0, -150)[1], "GNSS mast (puck dashed)")
-    s.leader(*P(g.hub_x, g.whip_y), tx, P(0, 105)[1], "LTE / WiFi whips")
-    s.leader(*P(bar_x + 16, -60), tx, P(0, -70)[1], f"stereo bar ({g.cam_base:.0f} baseline)")
-    s.leader(*P(g.open_x + 30, g.sampler_y[1] - 20), tx, P(0, 35)[1], "garage: pod + Van Dorn (sheet 3)")
+    tx = P(g.hub_x + g.hub_ax + 12, 0)[0]  # labels in the tunnel, fwd of the hub
+    s.leader(*P(g.hub_x, 0), tx, P(0, -150)[1], "GNSS mast", size=2.0)
+    s.leader(*P(g.hub_x, g.whip_y), tx, P(0, 105)[1], "LTE / WiFi whips", size=2.0)
+    s.leader(*P(bar_x + 16, -60), tx, P(0, -70)[1], f"stereo bar ({g.cam_base:.0f})", size=2.0)
+    s.leader(*P(g.open_x + 30, g.sampler_y[1] - 20), tx, P(0, 35)[1], "garage (sheet 3)", size=2.0)
     s.leader(*P((g.winch[0] + g.winch[1]) / 2, -g.winch[2] + 10), P(g.winch[0] - 40, 0)[0], P(0, -150)[1],
              "winch (placeholder)", anchor="end", size=2.0)
     s.leader(*P(g.xc - 60, -g.yc + 20), P(g.xc - 330, 0)[0], P(0, -g.yc + 70)[1],
@@ -801,14 +821,16 @@ def sheet_ga(g: Geo) -> Sheet:
              "electronics + winch packs (stbd hull)", anchor="end", size=2.0)
     s.leader(*P(g.prop_xa, g.yc + g.prop_d / 2), P(-120, 0)[0], P(0, g.yc + 165)[1],
              "belt outdrive + 110 prop (sheets 5, 6)", anchor="end")
-    s.leader(*P(1000, g.yc + hb(h, 1000) + g.rail), P(1060, 0)[0], P(0, g.yc + 165)[1],
+    xr_ = 0.72 * g.loa  # rail callout, on the bow taper
+    s.leader(*P(xr_, g.yc + hb(h, xr_) + g.rail), P(xr_ + 40, 0)[0], P(0, g.yc + 165)[1],
              f"rail (lid over the gunwale), {g.rail:.1f} out", anchor="start", size=2.0)
     s.text(*P(g.loa + 25, -g.yc - 6), "FWD", 2.6, "start", bold=True)
     s.add(f'<line class="dim" x1="{P(g.loa + 25, 0)[0]:.2f}" y1="{P(0, -g.yc)[1]:.2f}" '
           f'x2="{P(g.loa + 95, 0)[0]:.2f}" y2="{P(0, -g.yc)[1]:.2f}" marker-end="url(#a)"/>')
     top = P(0, -g.yc - g.beam / 2 - g.rail)[1]
     bot = P(0, g.yc + g.beam / 2 + g.rail)[1]
-    s.dim_h(*P(0, -g.yc - hb(h, 0) - g.rail), *P(g.loa, -g.yc - hb(h, g.loa)), top - 6, g.loa)
+    s.dim_h(*P(0, -g.yc - hb(h, 0) - g.rail), *P(g.loa, -g.yc - hb(h, g.loa)), top - 6, g.loa,
+            f"{g.loa:.0f} shell ({g.loa_rails:.0f} over the rails)")
     s.dim_h(*P(g.aft_end, -g.yc - g.prop_d / 2), *P(g.loa, -g.yc - hb(h, g.loa)), top - 12,
             g.loa_all, f"{g.loa_all:.0f} incl. drives")
     s.dim_h(*P(0, g.yc + hb(h, 0) + g.rail), *P(g.fx[0], g.yc), bot + 6, g.fx[0], f"{g.fx[0]:.0f} frame")
@@ -817,7 +839,8 @@ def sheet_ga(g: Geo) -> Sheet:
     s.dim_h(*P(g.hub_x - g.hub_ax, 0), *P(g.hub_x + g.hub_ax, 0), P(0, -g.hub_ay + 45)[1], 2 * g.hub_ax)
     xr = P(g.loa, 0)[0] + 10
     width_rails = mm(g.boat.overall_width) + 2 * g.rail
-    s.dim_v(*P(g.loa - 240, -g.yc - hb(h, g.loa - 240) - g.rail), *P(g.loa - 240, g.yc + hb(h, g.loa - 240) + g.rail),
+    xw = mm(h.taper_start * h.loa)  # the widest station
+    s.dim_v(*P(xw, -g.yc - hb(h, xw) - g.rail), *P(xw, g.yc + hb(h, xw) + g.rail),
             xr + 8, width_rails, f"{width_rails:.0f} over rails ({mm(g.boat.overall_width):.0f} shells)")
     s.dim_v(*P(g.loa - 180, -g.yc), *P(g.loa - 180, g.yc), xr, g.spacing, f"{g.spacing:.0f} hull CL")
     s.dim_v(*P(g.aft_end, g.yc - g.beam / 2), *P(g.aft_end, g.yc + g.beam / 2), P(-175, 0)[0], g.beam)
@@ -836,12 +859,9 @@ def sheet_ga(g: Geo) -> Sheet:
            [Q(g.loa, keel(h, g.loa)), Q(g.loa, g.depth)], "vis", closed=True)
     s.poly([Q(x, side_tangent(h, x)) for x in xs], "thin")
     s.rect(*Q(-g.rail, g.rail_z[0]), *Q(g.loa + g.rail, g.rail_z[1]), "vis")
-    for i, xj in enumerate(g.joints, start=1):
-        s.line(*Q(xj, keel(h, xj)), *Q(xj, g.depth), "joint")
-        s.text(*Q(xj + 8, g.depth - 28), f"J{i}", 1.9, "start", cls="red")
     for z, cls in ((g.dwl, "wl"), (g.drafts[0], "wlt"), (g.drafts[2], "wlt")):
         s.line(*Q(-180, z), *Q(g.loa + 40, z), cls)
-    s.text(*Q(1060, g.dwl + 14), f"DWL {g.dwl:.0f} ({g.conds[1].total:.1f} kg)", 2.0, "start", cls="blue")
+    s.text(*Q(g.loa - 250, g.dwl + 14), f"DWL {g.dwl:.0f} ({g.conds[1].total:.1f} kg)", 2.0, "start", cls="blue")
     s.rect(*Q(g.xc - g.shoe_len / 2, g.depth), *Q(g.xc + g.shoe_len / 2, g.depth + SHOE_H), "vis")
     zc = [(sc, z) for sc, z in g.hub_side()]
     s.poly([Q(g.hub_x - g.hub_ax * sc, z) for sc, z in zc] + [Q(g.hub_x + g.hub_ax * sc, z) for sc, z in reversed(zc)],
@@ -860,8 +880,7 @@ def sheet_ga(g: Geo) -> Sheet:
     s.line(*Q(-190, g.prop_z), *Q(20, g.prop_z), "ctr")
     s.line(*Q(-200, 0), *Q(g.loa + 30, 0), "ctr")
     s.text(*Q(g.loa + 32, -4), "BL", 2.0, "start")
-    s.text(*Q(-175, 362), "J1, J2: segment joints", 2.0, "start", cls="red")
-    s.leader(*Q(900, g.rail_z[1]), Q(960, 0)[0], Q(0, 330)[1], f"rail / lid joint z {g.zj:.0f} (sheet 4)",
+    s.leader(*Q(g.loa - 290, g.rail_z[1]), Q(g.loa - 230, 0)[0], Q(0, 330)[1], f"rail / lid joint z {g.zj:.0f} (sheet 4)",
              size=2.0)
     xl = Q(-200, 0)[0] - 3
     s.dim_v(*Q(g.aft_end, 0), *Q(g.aft_end, g.dwl), xl, g.dwl)
@@ -869,7 +888,7 @@ def sheet_ga(g: Geo) -> Sheet:
             f"{g.total_draft:.0f} total draft")
     s.dim_v(*Q(0, 0), *Q(0, g.depth), xl - 14, g.depth)
     s.dim_v(*Q(0, 0), *Q(-g.rail, g.zj), xl - 21, g.zj, f"{g.zj:.0f} joint")
-    xr2 = Q(g.loa, 0)[0] + 6
+    xr2 = Q(g.loa, 0)[0] + 40
     s.dim_v(*Q(g.loa, 0), *Q(g.hub_x, g.hub_z[0]), xr2, g.hub_z[0], f"{g.hub_z[0]:.0f} hub bottom")
     s.dim_v(*Q(g.loa, 0), *Q(g.hub_x, g.hub_z[2]), xr2 + 7, g.hub_z[2], f"{g.hub_z[2]:.0f} hub top")
     s.dim_v(*Q(g.loa, 0), *Q(g.hub_x, g.mast_top), xr2 + 14, g.mast_top, f"{g.mast_top:.0f} GNSS top")
@@ -887,7 +906,7 @@ def sheet_ga(g: Geo) -> Sheet:
 
     for sgn in (-1, 1):
         yc = sgn * g.yc
-        half = section_points(h, 0.6)
+        half = section_points(h, 0.9 * h.taper_start * h.loa)  # the full section, in the parallel body
         ring = [(mm(y), mm(z)) for y, z in half] + [(-mm(y), mm(z)) for y, z in reversed(half[1:-1])]
         s.poly([R(yc + y, z) for y, z in ring], "vis", closed=True)
         t_half = section_points(h, 0.0)
@@ -931,7 +950,7 @@ def sheet_ga(g: Geo) -> Sheet:
     upper = design.total - port - stbd
     s.text(216, 20, "MODULES", 3.0, "start", bold=True)
     s.table(216, 23, ["Module", "Design kg", "Contents"], [
-        ["Port tub", f"{port:.1f}", f"{h.segments} PLA segments + bulkheads, flange with {g.n_screws} M4 inserts; "
+        ["Port tub", f"{port:.1f}", f"one-piece PLA print + ring frames, flange with {g.n_screws} M4 inserts; "
                                     "drive pack, VESC, heat plate, leak probe, thrust pad"],
         ["Stbd tub", f"{stbd:.1f}", "the same shell; electronics + winch packs, Pi 5 + carrier, VESC, heat plate"],
         ["Upper module", f"{upper:.1f}", "bridge (arch frames, arms, hub garage: winch, pod, Van Dorn; mast, "
@@ -941,8 +960,8 @@ def sheet_ga(g: Geo) -> Sheet:
     s.lines_of_text(216, 52, [
         "ASSEMBLY",
         "1. Fit each tub's heat plate, packs and electronics, the leak probe (sheet 4) and the drive's thrust pad (sheet 6).",
-        f"2. Bolt each foot to its lid from inside: {4 * len(g.bolt_y)}x M6 x {BOLT_L:.0f} up through the rib bosses, "
-        "EPDM pad between.",
+        f"2. Bond the ribs into each lid with the foot bolted up as the jig (sheet 3). Then {4 * len(g.bolt_y)}x M6 x "
+        f"{BOLT_L:.0f} up through the rib bosses hold each foot, EPDM pad between.",
         "3. Bolt each outdrive mount to its lid from inside: 4x M5 up through the aft deck, 2x through the aft wall.",
         f"4. Press the {mm(g.lid.gasket_d):.0f} mm cord into each tub's flange groove.",
         "5. Hold the bridge + lids just above the tubs, plug the lid connectors inside, lower it; the drip lips locate.",
@@ -962,7 +981,7 @@ def sheet_ga(g: Geo) -> Sheet:
 
 
 def sheet_lines(g: Geo) -> Sheet:
-    s = Sheet(2, "Demi-hull lines, lid joint plane, print segments, offsets and fillets", "1:5 / 1:2.5")
+    s = Sheet(2, "Demi-hull lines, lid joint plane, one-piece prints, offsets and fillets", "1:5 / 1:2.5")
     h = g.hull
     k = 0.2
     X0, Y0 = 38.0, 84.0
@@ -981,9 +1000,12 @@ def sheet_lines(g: Geo) -> Sheet:
     for x in range(100, int(g.loa), 100):
         s.line(*Q(x, keel(h, x)), *Q(x, g.depth), "thin")
         s.text(*Q(x, -11), f"{x}", 1.8)
-    for i, xj in enumerate(g.joints, start=1):
-        s.line(*Q(xj, keel(h, xj) - 5), *Q(xj, g.depth + 5), "joint")
-        s.text(*Q(xj, -24), f"J{i}", 2.0, cls="red")
+    for xr in g.rings:  # inside the tub: ring frames up to the joint plane; lid ribs above it
+        s.line(*Q(xr, keel(h, xr) + RING[0]), *Q(xr, g.zj - 4), "hid")
+    for xr in g.rib_x:
+        s.line(*Q(xr, g.zj), *Q(xr, g.depth - g.wall), "hid")
+    s.text(*Q(g.rings[0], g.zj - 18), "ring frames (hidden)", 1.7, "start")
+    s.text(*Q(g.rib_x[0] + 6, g.zj + 22), "lid ribs", 1.7, "start")
     for z, cls in ((g.dwl, "wl"), (g.drafts[0], "wlt"), (g.drafts[2], "wlt")):
         s.line(*Q(-40, z), *Q(g.loa + 30, z), cls)
     s.text(*Q(g.loa + 32, g.dwl - 4), f"DWL {g.dwl:.0f}", 2.0, "start", cls="blue")
@@ -992,10 +1014,9 @@ def sheet_lines(g: Geo) -> Sheet:
     s.rect(*Q(g.xc - g.foot_len / 2, g.depth), *Q(g.xc + g.foot_len / 2, g.foot_z), "ph")
     s.line(*Q(-45, 0), *Q(g.loa + 30, 0), "ctr")
     ytop = Q(0, g.depth)[1] - 10
-    marks = [0.0] + g.joints + [g.loa]
-    for a, b in zip(marks, marks[1:]):
-        s.dim_h(*Q(a, g.depth), *Q(b, g.depth), ytop, b - a)
-    s.dim_h(*Q(0, g.depth), *Q(g.loa, g.depth), ytop - 7, g.loa)
+    s.dim_h(*Q(0, g.depth), *Q(g.loa, g.depth), ytop, g.loa, f"{g.loa:.0f} shell")
+    s.dim_h(*Q(-g.rail, g.rail_z[1]), *Q(g.loa + g.rail, g.rail_z[1]), ytop - 7, g.loa_rails,
+            f"{g.loa_rails:.0f} over the rails = the lid's print height (tub {g.print_h[0]:.0f})")
     s.dim_v(*Q(0, 0), *Q(0, g.depth), Q(0, 0)[0] - 12, g.depth)
     s.dim_v(*Q(0, 0), *Q(0, g.dwl), Q(0, 0)[0] - 6, g.dwl)
     s.dim_v(*Q(0, 0), *Q(-g.rail, g.zj), Q(0, 0)[0] - 18, g.zj)
@@ -1016,15 +1037,17 @@ def sheet_lines(g: Geo) -> Sheet:
     s.poly([P(x, y) for x, y in g.rail_outline(10)], "vis", closed=True)
     s.poly([P(x, y) for x, y in g.plan_outline(10)], "thin", closed=True)
     s.line(*P(-40, 0), *P(g.loa + 30, 0), "ctr")
-    for xj in g.joints:
-        s.line(*P(xj, -hb(h, xj)), *P(xj, hb(h, xj)), "joint")
+    ring_lines(s, g, P, 0.0)
     s.rect(*P(g.xc - g.foot_len / 2, -g.foot_w / 2), *P(g.xc + g.foot_len / 2, g.foot_w / 2), "ph")
+    s.leader(*P(g.xc + g.foot_len / 2, -g.foot_w / 2 + 12), P(g.loa + 30, 0)[0], P(0, -95)[1],
+             "foot: a flat landing in the lid deck", size=1.8)
+    s.text(P(g.loa + 30, 0)[0] + 1, P(0, -95)[1] + 3.3, f"under it (fills <= {g.landing:.1f})", 1.8, "start")
     for fxx in g.fx:
         for yy in g.bolt_y:
             for sgn in (-1, 1):
                 s.circle(*P(fxx + g.bolt_dx, sgn * yy), 3.3 * k, "vis")
-    s.circle(*P(VENT_X, 0), 10 * k, "thin")
-    s.leader(*P(VENT_X + 6, 6), P(VENT_X + 50, 0)[0], P(0, 118)[1], "M12 IP68 membrane vent (in the lid)", size=2.0)
+    s.circle(*P(g.vent_x, 0), 10 * k, "thin")
+    s.leader(*P(g.vent_x + 6, 6), P(g.vent_x + 50, 0)[0], P(0, 118)[1], "M12 IP68 membrane vent (in the lid)", size=2.0)
     bolts = ", +/-".join(f"{v:.0f}" for v in g.bolt_y)
     s.leader(*P(g.fx[1] + g.bolt_dx, -g.bolt_y[-1]), P(g.fx[1] + 40, 0)[0], P(0, -132)[1],
              f"{4 * len(g.bolt_y)}x M6 per foot: frame + {g.bolt_dx:.0f}, y = +/-{bolts}", size=1.8)
@@ -1047,10 +1070,10 @@ def sheet_lines(g: Geo) -> Sheet:
     def B(y, z):
         return Xb + y * kb, Yb - z * kb
 
-    for xs_, side in ((AFT_STATIONS, -1), (FWD_STATIONS, 1)):
+    for xs_, side in ((g.aft_stations, -1), (g.fwd_stations, 1)):
         for i, x in enumerate(xs_):
             pts = section_points(h, x / 1000)
-            c = STATION_COLOURS[x]
+            c = g.stations[x]
             s.poly([B(side * mm(y), mm(z)) for y, z in pts], "vis", style=f"stroke:{c}")
             if side < 0:  # aft sections share the side; label them on their V bottoms
                 s.text(*B(-58, keel(h, x) + 58 * h.tb + 3), f"{x:.0f}", 1.8, "middle", color=c)
@@ -1078,8 +1101,8 @@ def sheet_lines(g: Geo) -> Sheet:
 
     s.text(20, 209, "OFFSETS (sharp chine; mm from transom / baseline / hull centreline)", 2.7, "start", bold=True)
     rows = []
-    for x in [0, 130, 260, 390, 520, 650, 780, 910, 1000, 1100, 1170, 1250, 1300]:
-        rows.append([f"{x}", f"{keel(h, x):.1f}", f"{chine(h, x):.1f}", f"{hb(h, x):.1f}",
+    for x in sorted(set(g.stations) | {10.0 * round(0.85 * g.loa / 10)}):  # the stations + one more on the bow
+        rows.append([f"{x:.0f}", f"{keel(h, x):.1f}", f"{chine(h, x):.1f}", f"{hb(h, x):.1f}",
                      f"{mm(h.fillet(x / 1000)[0]):.0f} / {mm(h.deck_fillet(x / 1000)):.0f}"])
     half = (len(rows) + 1) // 2
     heads = ["x", "keel z", "chine z", "half-breadth", "R chine / deck"]
@@ -1088,25 +1111,25 @@ def sheet_lines(g: Geo) -> Sheet:
 
     lid = g.lid
     gw, gd = (mm(v) for v in lid.groove)
-    segs = " / ".join(f"{v:.0f}" for v in g.segs)
     s.lines_of_text(200, 198, [
-        "CONSTRUCTION (open tub + removable lid)",
+        "CONSTRUCTION (open tub + removable lid, each printed in one piece)",
         f"- Loft the sharp-chine hull from the offsets, fillet chine R{mm(h.chine_r):.0f} and deck edge R{mm(h.deck_r):.0f} "
         f"(0.45 x half-breadth near the stem), split at the lid joint plane z {g.zj:.0f}.",
         f"- PLA on the Elegoo OrangeStorm Giga: 0.6-0.8 nozzle, 4 walls ({g.wall:.1f}), +3-5 % flow. Glass outside "
         "(200 g/m2; 2nd layer on keel, chines, stem), 2 coats epoxy inside.",
-        f"- Tub: {h.segments} segments ({segs}) split at the frames, each printed standing on its aft "
-        f"{mm(h.bulkhead_t):.1f} bulkhead (the first on the transom).",
-        f"  Bulkheads stop {mm(lid.bulkhead_gap):.0f} under the joint plane, with limber holes at their feet so a leak "
-        "runs to the probe.",
-        f"- Lid: {h.segments} segments on end; lid segments 2 and 3 stand on their {mm(lid.rib_t):.0f} mm ribs "
-        f"({g.ribs}) with the foot-bolt bosses.",
-        "- Joints J1, J2: 8 mm half-lap spigots, bonded with thickened epoxy (sheet 3). Epoxy only, slow hardener: "
-        "PLA softens ~55 C.",
+        f"- Print the tub and the lid standing on the stern: {g.print_h[0]:.0f} and {g.print_h[1]:.0f} tall incl. the rail "
+        f"(Giga: 1000). The rail laps {g.fw:.0f} / {g.rail:.1f} past",
+        f"  the transom, so support the {mm(h.transom_t):.0f} mm transom (lid: aft wall) off the bed up to the flange. "
+        "10 mm brim; slow the walls near the top.",
+        f"- Tub: ring frames at x {' / '.join(f'{v:.0f}' for v in g.rings)}, {RING[0]:.0f} deep, aft face 45 deg so "
+        "they print unsupported, a limber notch at the keel (sheet 3).",
+        f"- Lid: {mm(lid.rib_t):.0f} mm ribs at {g.ribs} with the foot-bolt bosses, printed flat and bonded in with "
+        "thickened-epoxy fillets (sheet 3).",
         f"- Rail: {g.fw:.0f} mm flanges, {mm(lid.gasket_d):.0f} mm cord in a {gw:.0f} x {gd:.1f} groove, {g.n_screws}x M4 "
         f"into heat-set inserts (sheet 4); epoxy and sand the flange: layer lines cross the gasket.",
-        "- One sealed space per hull: leak probe at the keel low point (carrier J8 port / J9 stbd), M12 vent in the lid.",
-        f"- Shell {shell_mass(h):.1f} kg per hull incl. bulkheads, ribs, stiffeners, glass, epoxy, + {lid_joint_mass(h):.1f} "
+        "- One sealed space per hull: leak probe at the keel low point (carrier J8 port / J9 stbd), M12 vent in the lid. "
+        "Epoxy only, slow hardener: PLA softens ~55 C.",
+        f"- Shell {shell_mass(h):.1f} kg per hull incl. ribs, ring frames, glass, epoxy, + {lid_joint_mass(h):.1f} "
         "kg rail. Pressure-test (<= 0.03 bar) before fitting out.",
     ], size=2.0, lead=3.2, bold_first=True)
     return s
@@ -1116,19 +1139,25 @@ def sheet_lines(g: Geo) -> Sheet:
 
 
 def lid_rib_section(s: Sheet, g: Geo, X: float, Y: float, k: float) -> None:
-    """Lid cut through the foot-bolt axes at the ribs (J1 / J2), looking forward (hull CL at X, z 250 at Y)."""
+    """Lid cut through the foot-bolt axes at the fwd rib, where the bow taper makes the deck narrowest,
+    looking forward (hull CL at X, z 250 at Y)."""
     h = g.hull
 
     def L(y, z):
         return X + y * k, Y - (z - g.depth) * k
 
-    x = (g.fx[0] + g.bolt_dx) / 1000
+    x = (g.fx[1] + g.bolt_dx) / 1000
     half = [(mm(y), mm(z)) for y, z in section_points(h, x, part="lid")]
     outer = half + [(-y, z) for y, z in reversed(half[:-1])]
     inner = offset_polyline(outer, g.wall)
     hbx = half[0][0]
     s.poly([L(y, z) for y, z in outer + list(reversed(inner))], "cut", closed=True)
     s.poly([L(y, z) for y, z in inner], "cut", closed=True)  # the rib fills the lid here
+    rd, ftop = mm(h.deck_fillet(x)), mm(h.flat_deck(x)) / 2
+    for sgn in (-1, 1):  # the flat landing: the deck built up to the foot's underside past the flat top
+        ys = [ftop + (g.foot_w / 2 - ftop) * i / 8 for i in range(9)]
+        arc = [(sgn * y, g.depth - rd + math.sqrt(max(rd * rd - (y - ftop) ** 2, 0.0))) for y in ys]
+        s.poly([L(y, z) for y, z in arc + [(sgn * g.foot_w / 2, g.depth), (sgn * ftop, g.depth)]], "cut", closed=True)
     s.rect(*L(-g.foot_w / 2, g.depth), *L(g.foot_w / 2, g.depth + g.pad_t), "rubber")
     s.rect(*L(-g.foot_w / 2, g.depth + g.pad_t), *L(g.foot_w / 2, g.foot_z), "plate")
     for sgn in (-1, 1):
@@ -1164,7 +1193,7 @@ def lid_rib_section(s: Sheet, g: Geo, X: float, Y: float, k: float) -> None:
     xl = L(-hbx - g.rail, 0)[0] - 3
     s.leader(*L(-yo, g.zj + 2), xl, L(0, g.zj - 12)[1], f"M6 x {BOLT_L:.0f} A4 + bonded seal, from below", "end", 1.9)
     s.leader(*L(-ya, g.zj + 30), xl, L(0, g.zj + 34)[1], f"4x boss {BOSS_D:.0f} dia, full depth", "end", 1.9)
-    s.leader(*L(-20, g.zj + 30), xl, L(0, g.depth - 6)[1], f"RIB {mm(g.lid.rib_t):.0f} thick (base of lid seg 2 / 3)",
+    s.leader(*L(-20, g.zj + 30), xl, L(0, g.depth - 6)[1], f"RIB {mm(g.lid.rib_t):.0f} thick, printed flat, bonded in",
              "end", 1.9)
     s.leader(*L(-ya + CBORE[0] / 2, g.zj + 4), xl, L(0, g.zj + 2)[1],
              f"counterbore {CBORE[0]:.0f} dia x {CBORE[1]:.0f} for the head", "end", 1.9)
@@ -1173,13 +1202,15 @@ def lid_rib_section(s: Sheet, g: Geo, X: float, Y: float, k: float) -> None:
              size=1.9)
     s.leader(*L(g.foot_w / 2 - 14, g.depth + 0.7), xr + 16, L(0, g.depth + 3)[1], f"EPDM pad {g.pad_t:.1f}", size=1.9)
     s.leader(*L(hbx + 6, g.zj + 2), xr + 16, L(0, g.zj + 12)[1], "rail (sheet 4)", size=1.9)
-    s.leader(*L(hbx - 1, g.zj - 16), xr + 16, L(0, g.zj - 14)[1], f"tub (bulkhead {mm(g.lid.bulkhead_gap):.0f} below)",
+    s.leader(*L(hbx - 1, g.zj - 16), xr + 16, L(0, g.zj - 14)[1], "tub (ring frame under the rib)", size=1.9)
+    s.leader(*L(g.foot_w / 2 - 2, g.depth - 0.5), xr + 16, L(0, g.depth - 7)[1], "flat landing under the foot",
              size=1.9)
+    s.text(xr + 17, L(0, g.depth - 7)[1] + 3.6, f"({g.landing:.1f} deep at its fwd corners)", 1.9, "start")
     s.text(X, L(0, g.foot_z + 28)[1] + 3.5, "arch frame (phantom)", 1.8)
 
 
 def sheet_details(g: Geo) -> Sheet:
-    s = Sheet(3, "Arch frame, foot plate, lid rib, hub garage, segment joint", "as noted")
+    s = Sheet(3, "Arch frame, foot plate, lid rib, hub garage, rib bond, ring frame", "as noted")
     # arch frame plate, 1:5, seen from ahead (y horizontal, z up)
     k = 0.2
     X0, Z0 = 112.0, 62.0
@@ -1213,11 +1244,12 @@ def sheet_details(g: Geo) -> Sheet:
            "Cut file: cad/arch_frame_plate.dxf", 1.9)
     s.view_title(X0, F(0, g.foot_z)[1] + 26, "ARCH FRAME PLATE (FROM AHEAD)", "1:5")
 
-    # lid rib at J1 / J2, 1:2.5, top right
+    # lid rib at the fwd frame, 1:2.5, top right
     kr = 0.4
     Xr, Yr = 318.0, 56.0
     lid_rib_section(s, g, Xr, Yr, kr)
-    s.view_title(Xr + 8, Yr + (g.depth - g.zj + 22) * kr + 13, f"LID RIB AT {g.ribs} (SECTION, LOOKING FWD)", "1:2.5")
+    s.view_title(Xr + 8, Yr + (g.depth - g.zj + 22) * kr + 13,
+                 f"LID RIB (SECTION AT x {g.fx[1] + g.bolt_dx:.0f}, LOOKING FWD; THE AFT RIB IS THE SAME)", "1:2.5")
 
     # foot plate, 1:4, plan (x along the hull, y across)
     k4 = 0.25
@@ -1247,7 +1279,8 @@ def sheet_details(g: Geo) -> Sheet:
     s.text(T(0, 0)[0], T(0, Wd / 2)[1] + 11, f"{g.foot_t:.0f} mm 6061. Frames (hidden) at "
            f"{g.fx[0] - g.xc:+.0f} / {g.fx[1] - g.xc:+.0f}. {4 * len(g.bolt_y)}x M6 tapped through at "
            f"frame + {g.bolt_dx:.0f}", 1.9)
-    s.text(T(0, 0)[0], T(0, Wd / 2)[1] + 14.3, "(bolts come up from inside the lid); 2x 5.5 per angle bracket", 1.9)
+    s.text(T(0, 0)[0], T(0, Wd / 2)[1] + 14.3, "(bolts come up from inside the lid); 2x 5.5 per angle bracket. It sits "
+           "on a flat landing in the lid deck", 1.9)
     s.view_title(T(0, 0)[0], T(0, Wd / 2)[1] + 20, "FOOT PLATE (PLAN, 2 req)", "1:4")
 
     ctrl = [(mm(a), mm(b)) for a, b in g.boat.arm_ctrl(g.hull)]
@@ -1339,28 +1372,60 @@ def sheet_details(g: Geo) -> Sheet:
         "sits on a bracket off the aft frame, the sheave over the opening on the garage holes in the frames.",
     ], size=1.75, lead=2.6)
 
-    # segment joint 2:1
+    # rib bond, 2:1: the lid skirt cut at mid-depth, seen from above (fwd to the right, inboard up)
     k3 = 2.0
-    Xj, Yj = 66.0, 222.0
+    Xj, Yj = 55.0, 207.0
 
-    def J(x, n):
-        return Xj + x * k3, Yj - n * k3
+    def J(u, v):
+        return Xj + u * k3, Yj - v * k3
 
-    s.poly([J(-24, 0), J(-23, 0), J(-21, -2), J(-8, -2), J(-8, 0), J(0, 0), J(0, 2), J(-24, 2)], "cut", closed=True)
-    s.poly([J(22, 2), J(0, 2), J(0, 0), J(-8, 0), J(-8, -2), J(15, -2), J(17, 0), J(22, 0)], "cut", closed=True)
-    s.rect(*J(-8, -2), *J(-5.6, -11), "cut")
-    s.poly([J(-24, 2), J(22, 2), J(22, 2.35), J(-24, 2.35)], "glass", closed=True)
-    s.text(*J(0, 8), "OUTSIDE (glass skin over the joint)", 1.8)
-    s.text(*J(-19, 4.2), "aft segment", 1.8)
-    s.text(*J(12, 4.2), "fwd segment", 1.8)
-    s.text(*J(-17, -8.5), "INSIDE", 1.8)
-    s.text(*J(-4.5, -9.5), "bulkhead / rib of the fwd segment (printed on the bed)", 1.8, "start")
-    s.leader(*J(-4, 1.8), J(-10, 0)[0], J(0, 6)[1], "8 lap, epoxy", anchor="end", size=1.9)
-    s.dim_v(*J(22, 0), *J(22, 2), J(22, 0)[0] + 3, 2.0, "2.0")
-    s.dim_v(*J(-16, -2), *J(-16, 2), J(-24, 0)[0] - 3, 4.0, "4.0")
-    s.dim_h(*J(-8, -2), *J(0, -2), J(0, -2)[1] + 4, 8)
-    s.dim_h(*J(0, -2), *J(15, -2), J(0, -2)[1] + 4, 15)
-    s.view_title(Xj, Yj + 30, "SEGMENT JOINT, TUB + LID (45° chamfers print unsupported)", "2:1")
+    rt, leg = mm(g.lid.rib_t), mm(g.lid.rib_fillet)
+    s.rect(*J(-16, -g.wall), *J(16, 0), "cut")
+    s.rect(*J(-16, -g.wall - 0.35), *J(16, -g.wall), "glass")
+    s.rect(*J(-rt / 2, 0), *J(rt / 2, 16), "cut2")
+    s.poly([J(-rt / 2 - 1.2, 16), J(-1, 16.6), J(1, 15.4), J(rt / 2 + 1.2, 16)], "thin")  # break line
+    for sgn in (-1, 1):
+        f0 = sgn * (rt / 2 + leg)
+        arc = [(f0 - sgn * leg * math.sin(math.radians(t)), leg - leg * math.cos(math.radians(t))) for t in range(0, 91, 10)]
+        s.poly([J(sgn * rt / 2, 0)] + [J(u, v) for u, v in arc], "glass", closed=True)
+    s.text(*J(-12, -7.5), "OUTSIDE", 1.8)
+    s.text(*J(-11, 13), "INSIDE", 1.8)
+    s.leader(*J(0, 12), J(19, 0)[0], J(0, 15)[1], f"RIB {rt:.0f}, PLA printed flat", size=1.8)
+    s.leader(*J(rt / 2 + 2.5, 2.5), J(19, 0)[0], J(0, 8)[1], f"thickened epoxy, {leg:.0f} legs, both faces,", size=1.8)
+    s.text(J(19, 0)[0] + 1, J(0, 8)[1] + 3.3, "along the deck and both skirts", 1.8, "start")
+    s.leader(*J(13, -1.2), J(19, 0)[0], J(0, -3)[1], f"lid skirt {g.wall:.1f} + glass outside", size=1.8)
+    s.dim_h(*J(-rt / 2, 16), *J(rt / 2, 16), J(0, 16)[1] - 3, rt)
+    s.dim_h(*J(rt / 2, 0), *J(rt / 2 + leg, 0), J(0, -g.wall)[1] + 9, leg)
+    s.view_title(Xj + 10, 232.0, "RIB BOND (LID SKIRT CUT AT MID-DEPTH, FROM ABOVE)", "2:1")
+    s.lines_of_text(17.0, 240.5, [
+        "Fit each rib with the foot bolted up through the deck and the rib bosses: the foot is the jig, so the",
+        "holes line up. Sand the PLA, fillet both faces along the deck and both skirts, then coat the inside.",
+    ], size=1.75, lead=2.6)
+
+    # tub ring frame, 2:1: the tub wall cut along the hull, inside up, fwd to the right
+    Xr2, Yr2 = 166.0, 205.0
+
+    def RF(u, v):
+        return Xr2 + u * k3, Yr2 - v * k3
+
+    dr, tr = RING
+    s.rect(*RF(-18, -g.wall), *RF(8, 0), "cut")
+    s.rect(*RF(-18, -g.wall - 0.35), *RF(8, -g.wall), "glass")
+    s.poly([RF(0, 0), RF(0, dr), RF(-tr, dr), RF(-tr - dr, 0)], "cut", closed=True)
+    s.add(f'<line class="dim" x1="{RF(-16, 12)[0]:.2f}" y1="{RF(0, 12)[1]:.2f}" x2="{RF(-4, 12)[0]:.2f}" '
+          f'y2="{RF(0, 12)[1]:.2f}" marker-end="url(#a)"/>')
+    s.text(RF(-10, 12)[0], RF(0, 12)[1] - 1.2, "print grows fwd", 1.7)
+    s.leader(*RF(-tr - dr / 2 + 0.6, dr / 2 - 0.6), RF(8, 0)[0] + 9, RF(0, 10)[1], "aft face 45°:", size=1.8)
+    s.text(RF(8, 0)[0] + 10, RF(0, 10)[1] + 3.3, "prints without", 1.8, "start")
+    s.text(RF(8, 0)[0] + 10, RF(0, 10)[1] + 5.8, "supports", 1.8, "start")
+    s.dim_v(*RF(0, 0), *RF(0, dr), RF(0, 0)[0] + 4, dr, f"{dr:.0f}")
+    s.dim_h(*RF(-tr, dr), *RF(0, dr), RF(0, dr)[1] - 3, tr, f"{tr:.0f}")
+    s.text(*RF(-6, -6.5), f"tub wall {g.wall:.1f}", 1.8)
+    s.view_title(Xr2 - 4, 232.0, "TUB RING FRAME (SECTION ALONG THE HULL)", "2:1")
+    s.lines_of_text(140.0, 240.5, [
+        f"At x {' / '.join(f'{v:.0f}' for v in g.rings)}, all the way round inside the tub,",
+        f"up to the joint plane. {LIMBER[0]:.0f} x {LIMBER[1]:.0f} limber notch at the keel.",
+    ], size=1.75, lead=2.6)
 
     s.text(222, 179, "HARDWARE (whole boat)", 2.8, "start", bold=True)
     s.table(222, 182, ["Qty", "Item"], [
@@ -1372,16 +1437,17 @@ def sheet_details(g: Geo) -> Sheet:
         [f"{2 * g.n_screws}", f"M4 x 12 A4 pan head + washer, and M4 x {INSERT[1]:.1f} brass heat-set insert (rails)"],
         ["2", f"{mm(g.lid.gasket_d):.0f} mm EPDM / silicone cord, {g.rail_len:.2f} m (one loop per tub)"],
         ["1", "Hub cowl, 2 arm fairings, 2 foot shoes (printed PLA, painted light)"],
+        ["4", f"Lid rib, {mm(g.lid.rib_t):.0f} mm PLA printed flat, 100 % round the bosses; 2 bonded into each lid"],
         ["1", "Garage: winch bracket off the aft frame, sheave bracket, printed docking cone"],
         ["2", "Belt outdrive, complete (sheets 5, 6)"],
         ["2", "M12 IP68 membrane vent (one per lid)"],
-        ["4", f"IP68 bulkhead connector in the lids: motor (x {CONN_X[0]:.0f}) and bridge (x {CONN_X[1]:.0f}), per hull"],
+        ["4", f"IP68 bulkhead connector in the lids: motor (x {g.conn_x[0]:.0f}) and bridge (x {g.conn_x[1]:.0f}), per hull"],
         ["2", "Leak probe at each tub's keel low point (carrier J8 port / J9 stbd)"],
-    ], [12, 108], 1.95, 3.5)
+    ], [12, 108], 1.95, 3.3)
 
     lc_worst = max(g.lcs, key=lambda lc: lc.moment)
     zsec = g.boat.frame_t * g.boat.frame_h**2 / 6
-    bolt_sf, rib_sf, rail_sf = (cap / load for _, _, load, cap, _ in g.checks)
+    bolt_sf, rib_sf, bond_sf, rail_sf = (cap / load for _, _, load, cap, _ in g.checks)
     s.lines_of_text(347, 182, [
         "LOAD PATH",
         "Each frame is a portal fixed at its feet.",
@@ -1390,7 +1456,8 @@ def sheet_details(g: Geo) -> Sheet:
         f"SF {276e6 / (lc_worst.moment / zsec):.1f} on 6061-T6 yield.",
         f"Foot: pivots on its far edge; the {4 * len(g.bolt_y)}",
         f"M6 in the rib bosses hold it: SF {bolt_sf:.1f}.",
-        f"Lid rib carries it to the rail: SF {rib_sf:.1f}.",
+        f"Lid rib carries it to the rail: SF {rib_sf:.1f};",
+        f"its bonded ends: SF {bond_sf:.1f}.",
         f"Rail: 3 M4 inserts per frame: SF {rail_sf:.1f}.",
         "Nothing goes through a tub: all",
         "hardware bolts to the lids.",
@@ -1516,8 +1583,8 @@ def sheet_lid_hull(g: Geo) -> Sheet:
     s.view_title(90.0, 160.0, "RAIL: LID OVER THE GUNWALE (SECTION THROUGH A SCREW)", "4:1")
     h = g.hull
 
-    # plan of each tub, 1:7, packs and electronics filled
-    k = 1 / 7
+    # plan of each tub, 1:6, packs and electronics filled
+    k = 1 / 6
     X0 = 226.0
     for row, (sgn, name) in enumerate(((-1, "PORT TUB"), (1, "STBD TUB"))):
         Yc = 40.0 + 58.0 * row
@@ -1528,10 +1595,9 @@ def sheet_lid_hull(g: Geo) -> Sheet:
         s.poly([P(x, y) for x, y in g.rail_outline(10)], "thin", closed=True)
         s.poly([P(x, y) for x, y in g.plan_outline(10)], "vis", closed=True)
         s.line(*P(-30, 0), *P(g.loa + 20, 0), "ctr")
-        for xj in g.joints:
-            s.line(*P(xj, -hb(h, xj)), *P(xj, hb(h, xj)), "joint")
+        ring_lines(s, g, P, 0.0, "thin")
         hull_interior_plan(s, g, P, 0.0, sgn, style="fill")
-        s.circle(*P(VENT_X, 0), 6 * k, "thin")
+        s.circle(*P(g.vent_x, 0), 6 * k, "thin")
         s.text(*P(-40, 4), name, 2.3, "end", bold=True)
         for nm, _, x0, x1, y0, y1, _, _ in interior_boxes(g, sgn):
             if nm == "heat plate":
@@ -1539,23 +1605,26 @@ def sheet_lid_hull(g: Geo) -> Sheet:
             s.leader(*P((x0 + x1) / 2, y1 if sgn > 0 or nm != "VESC" else y0),
                      P((x0 + x1) / 2 + 40, 0)[0], P(0, (hb(h, x0) + 30) * (1 if nm != "electronics pack" else -1.33))[1],
                      nm, size=1.8)
-        s.leader(*P(LEAK_X, 4 * sgn), P(LEAK_X + 60, 0)[0], P(0, (hb(h, LEAK_X) + 30) * (1 if sgn < 0 else -1.4))[1],
-                 f"leak probe ({'J8' if sgn < 0 else 'J9'})", size=1.8)
+        s.leader(*P(g.leak_x, 4 * sgn), P(g.leak_x + 60, 0)[0],
+                 P(0, (hb(h, g.leak_x) + 30) * (1 if sgn < 0 else -1.4))[1], f"leak probe ({'J8' if sgn < 0 else 'J9'})",
+                 size=1.8)
         if row == 0:
-            for cx, lab in zip(CONN_X, ("motor", "bridge")):
+            s.leader(*P(g.rings[-1], hb(h, g.rings[-1]) - 8), P(g.rings[-1] + 45, 0)[0], P(0, hb(h, g.rings[-1]) + 30)[1],
+                     "ring frames", size=1.8)
+            for cx, lab in zip(g.conn_x, ("motor", "bridge")):
                 s.leader(*P(cx, -6), P(cx + 30, 0)[0], P(0, -hb(h, cx) - 42)[1], f"lid connector: {lab}", size=1.8)
     yb = 40.0 + 58.0 + (g.beam / 2 + g.rail) * k + 5
 
     def PB(x, y):
         return X0 + x * k, 98.0 + y * k
 
-    s.dim_h(*PB(0, g.beam / 2), *PB(VESC_X, g.beam / 2), yb, VESC_X)
-    s.dim_h(*PB(0, g.beam / 2), *PB(ELEC_X, g.beam / 2), yb + 5, ELEC_X)
-    s.dim_h(*PB(0, g.beam / 2), *PB(PACK_X, g.beam / 2), yb + 10, PACK_X, f"{PACK_X:.0f} packs")
-    s.dim_h(*PB(0, g.beam / 2), *PB(LEAK_X, g.beam / 2), yb + 15, LEAK_X, f"{LEAK_X:.0f} probe")
-    s.view_title(X0 + g.loa * k / 2, yb + 23, "INSIDE THE TUBS (PLAN, PROPOSED)", "1:7")
+    s.dim_h(*PB(0, g.beam / 2), *PB(g.vesc_x, g.beam / 2), yb, g.vesc_x)
+    s.dim_h(*PB(0, g.beam / 2), *PB(g.elec_x, g.beam / 2), yb + 5, g.elec_x)
+    s.dim_h(*PB(0, g.beam / 2), *PB(g.pack_x, g.beam / 2), yb + 10, g.pack_x, f"{g.pack_x:.0f} packs")
+    s.dim_h(*PB(0, g.beam / 2), *PB(g.leak_x, g.beam / 2), yb + 15, g.leak_x, f"{g.leak_x:.0f} probe")
+    s.view_title(X0 + g.loa * k / 2, yb + 23, "INSIDE THE TUBS (PLAN, PROPOSED)", "1:6")
 
-    # section through the middle segment of each tub, 1:4, looking forward
+    # section through each tub at the packs, 1:4, looking forward
     kb = 0.25
     for col, (sgn, name) in enumerate(((-1, "port"), (1, "stbd"))):
         Xc, Yb = 262.0 + 82.0 * col, 228.0
@@ -1563,7 +1632,7 @@ def sheet_lid_hull(g: Geo) -> Sheet:
         def B(y, z, Xc=Xc, Yb=Yb):
             return Xc + y * kb, Yb - z * kb
 
-        half = [(mm(y), mm(z)) for y, z in section_points(h, PACK_X / 1000)]
+        half = [(mm(y), mm(z)) for y, z in section_points(h, g.pack_x / 1000)]
         ring = half + [(-y, z) for y, z in reversed(half[1:-1])]
         s.poly([B(y, z) for y, z in ring], "vis", closed=True)
         inner = offset_polyline(ring + ring[:1], g.wall)
@@ -1572,15 +1641,15 @@ def sheet_lid_hull(g: Geo) -> Sheet:
         s.line(*B(-g.beam / 2 - 15, g.dwl), *B(g.beam / 2 + 15, g.dwl), "wl")
         s.line(*B(0, -8), *B(0, g.depth + 8), "ctr")
         for nm, cls, x0, x1, y0, y1, z0, z1 in interior_boxes(g, sgn):
-            if x0 <= PACK_X <= x1:
+            if x0 <= g.pack_x <= x1:
                 s.rect(*B(y0, z0), *B(y1, z1), cls)
-        bed = [(-HEAT_PLATE[1] / 2, 12.0), (-HEAT_PLATE[1] / 2, keel(h, PACK_X) + HEAT_PLATE[1] / 2 * h.tb + 1),
-               (0, keel(h, PACK_X) + 2), (HEAT_PLATE[1] / 2, keel(h, PACK_X) + HEAT_PLATE[1] / 2 * h.tb + 1),
-               (HEAT_PLATE[1] / 2, 12.0)]
+        kx = keel(h, g.pack_x)
+        bed = [(-HEAT_PLATE[1] / 2, 12.0), (-HEAT_PLATE[1] / 2, kx + HEAT_PLATE[1] / 2 * h.tb + 1),
+               (0, kx + 2), (HEAT_PLATE[1] / 2, kx + HEAT_PLATE[1] / 2 * h.tb + 1), (HEAT_PLATE[1] / 2, 12.0)]
         s.poly([B(y, z) for y, z in bed], "glass", closed=True)
-        s.text(Xc, B(0, g.depth)[1] - 3, f"{name} tub at x {PACK_X:.0f}", 1.9)
-    s.lines_of_text(226.0, 151.0, [
-        "SECTIONS AT x 650, looking fwd, 1:4: the heat plate is bedded on thickened epoxy (blue) on the",
+        s.text(Xc, B(0, g.depth)[1] - 3, f"{name} tub at x {g.pack_x:.0f}", 1.9)
+    s.lines_of_text(226.0, 155.0, [
+        f"SECTIONS AT x {g.pack_x:.0f}, looking fwd, 1:4: the heat plate is bedded on thickened epoxy (blue) on the",
         "V bottom, the packs sit on the plate. DWL dashed blue, lid joint purple.",
     ], size=1.8, lead=2.7)
 
@@ -1592,12 +1661,12 @@ def sheet_lid_hull(g: Geo) -> Sheet:
         "- Winch pack (stbd) -> carrier's fail-safe winch kill -> up the stbd arm -> winch in the hub garage.",
         "- Pod tether (RS-485 + pack voltage) from carrier J2 -> up the stbd arm -> the winch's slip ring.",
         "- Mast (GNSS, LTE, WiFi), stereo cameras, e-stop -> down the stbd arm. Leak probes: J8 port, J9 stbd.",
-        "- Motor wires: outdrive -> lid connector at x 100 -> that hull's VESC.",
+        f"- Motor wires: outdrive -> lid connector at x {g.conn_x[0]:.0f} -> that hull's VESC.",
         "",
         "HEAT AND WATER",
         "- VESCs and packs sit on 6061 plates bedded on the hull bottom, so the water takes the heat; PLA",
         "  softens ~55 C. Log the hull air temperature (the carrier's SHT45s).",
-        "- Limber holes at the bulkhead feet send any leak to the probe at x 850, forward of the packs.",
+        f"- Limber notches in the ring frames let a leak run along the keel to the probe at x {g.leak_x:.0f}, fwd of the packs.",
         "- Lifting a lid: unscrew the rail, raise it ~100 mm on the connector slack, unplug inside, lift away.",
     ], size=1.95, lead=3.15, bold_first=True)
     return s
@@ -1657,7 +1726,7 @@ def sheet_drive_assembly(g: Geo) -> Sheet:
     s.text(*Q(xe + 4, g.dwl - 2), f"DWL {g.dwl:.0f}", 1.9, "start", cls="blue")
     s.line(*Q(-176, 0), *Q(xe + 2, 0), "ctr")
     s.text(*Q(xe + 4, -2), "BL", 1.9, "start")
-    s.rect(*Q(CONN_X[0] - 8, g.depth), *Q(CONN_X[0] + 8, g.depth + 14), "metal")  # motor-wire connector
+    s.rect(*Q(g.conn_x[0] - 8, g.depth), *Q(g.conn_x[0] + 8, g.depth + 14), "metal")  # motor-wire connector
     drive_side(s, g, Q, k, detail=True)
     # centre lines and the section mark
     s.line(*Q(-176, g.prop_z), *Q(-8, g.prop_z), "ctr")
@@ -1677,7 +1746,7 @@ def sheet_drive_assembly(g: Geo) -> Sheet:
             (7, (g.motor_x[0] + 8, g.motor_z + 14), (-60, 362)), (8, (g.belt_x - 5, g.motor_z + 8), (-150, 340)),
             (9, (g.belt_x + 4, 80), (-10, 80)), (10, (g.bearings[1][0] + 2, g.prop_z + 6), (bx, 55)),
             (11, (g.collar[0] + 2, g.prop_z + 4), (30, 50)), (12, (g.prop_xa + 8, g.prop_z + 40), (bx, 95)),
-            (13, (CONN_X[0], g.depth + 12), (95, 300))]:
+            (13, (g.conn_x[0], g.depth + 12), (95, 300))]:
         s.balloon(*Q(x, z), *Q(lx, lz), no)
     # ordinates: x from the transom, z from the baseline
     ordinates_x(s, Q, [(g.bracket_x, g.depth, f"{g.bracket_x:.0f}"), (g.cover_x[1], g.top_z, f"{g.cover_x[1]:.0f}"),
@@ -1785,7 +1854,7 @@ def sheet_drive_assembly(g: Geo) -> Sheet:
          f"axis {g.prop_z:.0f}", ""],
         ["Prop hub 20 / disc 110 / nylock", f"{g.prop_xa:.0f} to {g.prop_xf:.0f} / {g.nut_x[0]:.0f}",
          f"{g.prop_z:.0f} +/- {g.prop_d / 2:.0f}", ""],
-        ["Motor-wire connector (lid deck)", f"{CONN_X[0]:.0f}", f"{g.depth:.0f}", "0"],
+        ["Motor-wire connector (lid deck)", f"{g.conn_x[0]:.0f}", f"{g.depth:.0f}", "0"],
     ]
     s.text(288.0, 100.0, "KEY POINTS (mm; x fwd of the transom, z above the baseline, y off the hull CL)", 2.3,
            "start", bold=True)
@@ -1998,7 +2067,7 @@ def sheet_drive_parts(g: Geo) -> Sheet:
         ["10", "2", "625-2RS bearing, stainless (5 x 16 x 5): they run wet"],
         ["11", "1", "Shaft collar, 5 mm bore, 10 OD x 5, set screw"],
         ["12", "1", f"Prop {g.prop_d:.0f} (props/toroidal_..._RH_shaft stbd, _LH_ port) + washer + M5 nylock A4"],
-        ["13", "1", f"IP68 bulkhead connector, 3-pin, in the lid's aft deck at x {CONN_X[0]:.0f}"],
+        ["13", "1", f"IP68 bulkhead connector, 3-pin, in the lid's aft deck at x {g.conn_x[0]:.0f}"],
         ["-", "", "6x M5 x 20 A4 + washers (4 up through the deck, 2 through the aft wall), 3 mm Al backing plates"],
         ["-", "", "6x M5 heat-set inserts in the mount; 2x M4 x 40 A4 + nylocks across the socket"],
         ["-", "", "~12x M3 A4 + inserts (leg/pod halves, cover); 2x M4 x 8 (motor plate foot)"],
@@ -2021,9 +2090,11 @@ def sheet_drive_parts(g: Geo) -> Sheet:
         "MODELING ORDER (SolidWorks)",
         "1. Drive assembly layout sketch on the Front plane: transom (x 0), deck (z 250), belt plane, motor and",
         "   prop axes. Origin = transom / baseline / hull CL, like the hull.",
-        "2. Mount: extrude the side profile +/-17 (head block); add the deck and wall flanges +/-44 and the",
-        "   platform +/-35; cut the socket (leg section + 0.2), the belt slot and the holes.",
-        "3. Leg + pod: section A-A at z 38 extruded to 245; pod revolved on the prop axis; combine, cut the",
+        f"2. Mount: extrude the side profile +/-{g.body_w / 2:.0f} (head block); add the deck and wall flanges "
+        f"+/-{g.bracket_w / 2:.0f} and the",
+        f"   platform +/-{g.head_w / 2:.0f}; cut the socket (leg section + 0.2), the belt slot and the holes.",
+        f"3. Leg + pod: section A-A at z {g.leg_z[0]:.0f} extruded to {g.leg_z[1]:.0f}; pod revolved on the prop axis; "
+        "combine, cut the",
         "   pockets, split on y = 0. Mirror the half for the other side.",
         "4. Pad, plate, cover; then mate everything fixed and run Interference Detection.",
     ], size=1.85, lead=2.75, bold_first=True)
@@ -2098,7 +2169,7 @@ def sheet_sections(g: Geo) -> Sheet:
         return half + [(-y, z) for y, z in reversed(half[1:-1])]
 
     # 3D sketch: cabinet oblique, the far (stbd) side drawn up and to the right at 30 deg, half scale
-    k3, X3, Y3 = 0.15, 34.0, 72.0
+    k3, X3, Y3 = 0.18, 34.0, 72.0
     ca, sa = 0.5 * math.cos(math.radians(30)), 0.5 * math.sin(math.radians(30))
 
     def obl(x, y, z):
@@ -2110,16 +2181,16 @@ def sheet_sections(g: Geo) -> Sheet:
         s.poly([obl(x, sgn * hb(h, x), g.depth - mm(h.deck_fillet(x / 1000))) for x in xs], "thin", style=wire)
     s.poly([obl(x, 0, keel(h, x)) for x in xs], "thin", style=wire)
     s.poly([obl(x, 0, g.depth) for x in xs], "thin", style=wire)
-    for i, x in enumerate(STATION_COLOURS):  # stern first: the nearer slices draw over the farther
-        c = STATION_COLOURS[x]
+    for i, x in enumerate(g.stations):  # stern first: the nearer slices draw over the farther
+        c = g.stations[x]
         s.poly([obl(x, y, z) for y, z in ring(x)], "vis", closed=True, style=f"stroke:{c};fill:{c};fill-opacity:0.16")
         s.text(*obl(x, 0, g.depth + 24 + 30 * (i % 2)), f"{x:.0f}", 1.9, bold=True, color=c)
     s.text(*obl(0, -hb(h, 0), -38), "TRANSOM", 1.9)
     s.text(*obl(g.loa + 25, 0, keel(h, g.loa) + 40), "BOW", 1.9, "start")
     ya = obl(0, 0, -45)[1]
-    s.add(f'<line class="dim" x1="{obl(900, 0, 0)[0]:.2f}" y1="{ya:.2f}" x2="{obl(1150, 0, 0)[0]:.2f}" '
+    s.add(f'<line class="dim" x1="{obl(0.69 * g.loa, 0, 0)[0]:.2f}" y1="{ya:.2f}" x2="{obl(0.88 * g.loa, 0, 0)[0]:.2f}" '
           f'y2="{ya:.2f}" marker-end="url(#a)"/>')
-    s.text(obl(1025, 0, 0)[0], ya - 1.2, "FWD", 1.9, bold=True)
+    s.text(obl(0.79 * g.loa, 0, 0)[0], ya - 1.2, "FWD", 1.9, bold=True)
     s.view_title(obl(g.loa / 2, 0, 0)[0], Y3 + 16, "WHERE EACH SLICE IS (ONE HULL)", "sketch, not to scale")
 
     xa0, xt0, xr0 = (mm(v * h.loa) for v in (h.stern_rise_end, h.taper_start, h.rocker_start))
@@ -2144,8 +2215,8 @@ def sheet_sections(g: Geo) -> Sheet:
     ], size=2.1, lead=3.35, bold_first=True)
 
     k5 = 1 / 6
-    for n, x in enumerate(STATION_COLOURS):
-        c = STATION_COLOURS[x]
+    for n, x in enumerate(g.stations):
+        c = g.stations[x]
         cx, y0 = 50.0 + 67.0 * (n % 6), 103.0 + 62.0 * (n // 6)
         base = y0 + 10.5 + g.depth * k5
 
@@ -2182,7 +2253,7 @@ def main() -> None:
               sheet_drive_parts(g), sheet_sections(g)]
     OUT.mkdir(exist_ok=True)
     pages = "".join(f'<div class="page">{s.svg(len(sheets))}</div>' for s in sheets)
-    html = ("<!DOCTYPE html><html><head><meta charset='utf-8'><title>DREAMS drawings, rev D</title>"
+    html = ("<!DOCTYPE html><html><head><meta charset='utf-8'><title>DREAMS drawings, rev E</title>"
             "<style>@page{size:17in 11in;margin:0}body{margin:0}"
             ".page{width:17in;height:11in;page-break-after:always;overflow:hidden}"
             ".page svg{display:block}</style></head><body>" + pages + "</body></html>")

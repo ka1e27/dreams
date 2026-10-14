@@ -1,16 +1,17 @@
-"""D.R.E.A.M.S hull, bridge and joint sizing calculator (rev D).
+"""D.R.E.A.M.S hull, bridge and joint sizing calculator (rev E).
 
-Modelled on the EvoLogics Sonobot 5 (05.2024 guide: 1300 mm long, 920 mm wide, 120 mm
+Styled on the EvoLogics Sonobot 5 (05.2024 guide: 1300 mm long, 920 mm wide, 120 mm
 draft, < 27 kg): two pontoon hulls and a gull-wing bridge that arches from hull to hull.
-Rev D puts the batteries and electronics inside the hulls, on aluminium plates on the hull
-bottoms, and turns the hub at the crown of the arch into a garage: the winch sits in it, and
-the pod and its Van Dorn water sampler pull up into it through an opening in the hub floor,
-clear of the water. The antennas stay on top. Each hull is an open printed tub with a
-removable lid: the lid's rail flange laps over the tub's gunwale flange on a gasket cord and
-screws down. The bridge feet bolt to the lids from underneath, a V1-style belt outdrive sits
-on each lid's aft deck, and the wiring goes through the lids. Tubs and lids are printed in PLA
-on the Elegoo OrangeStorm Giga (800 x 800 x 1000 mm), three segments each, split at the
-frame stations, then glassed outside and epoxy-coated inside.
+The batteries and electronics sit inside the hulls, on aluminium plates on the hull bottoms,
+and the hub at the crown of the arch is a garage: the winch sits in it, and the pod and its
+Van Dorn water sampler pull up into it through an opening in the hub floor, clear of the
+water. The antennas stay on top. Each hull is an open printed tub with a removable lid: the
+lid's rail flange laps over the tub's gunwale flange on a gasket cord and screws down. The
+bridge feet bolt to the lids from underneath, a V1-style belt outdrive sits on each lid's aft
+deck, and the wiring goes through the lids. Rev E shortens the hulls to 940 mm (975 mm over
+the rails) so each tub and each lid prints in one piece, standing on its stern, on the Elegoo
+OrangeStorm Giga (800 x 800 x 1000 mm) with 25 mm to spare. They are PLA, glassed outside
+and epoxy-coated inside; the lid ribs under the arch frames are printed flat and bonded in.
 
 Stdlib only:
     python mechanical/hull_sizing.py                        # report for the design in this file
@@ -31,11 +32,13 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 G = 9.81
 RHO_WATER = 1000.0  # fresh water (Muddy River). Sea water (1025) floats ~2.5 % higher.
 NU_WATER = 1.14e-6  # kinematic viscosity at 15 C, m^2/s
+FRAME_X = (0.335, 0.595)  # the two arch frames, m fwd of the transom; the lid ribs and the packs sit
+#                           under them. Set for level trim: move Boat.hub_x and winch_env with them
 
 
 # ---- Hull geometry ---------------------------------------------------------------------------
@@ -62,18 +65,21 @@ class Lid:
     screw_pitch_near: float = 0.060
     screw_pullout: float = 1200.0  # N, M4 brass heat-set insert in PLA (pull-test your prints)
     spigot: tuple[float, float] = (0.006, 0.002)  # locating lip inside the tub wall: drop x thickness
-    rib_t: float = 0.008  # lid ribs under the frames (printed base walls of lid segments 2 and 3)
-    rib_joints: tuple[int, ...] = (1, 2)  # the ribs sit on joints J1 / J2, under the arch frames
-    bulkhead_gap: float = 0.005  # tub bulkheads stop this far under the joint plane (one gasket loop)
-    print_strength: float = 45e6  # Pa, printed PLA stressed in the plane of its layers (the rib is
-    #                               its segment's bed face); pull-test a coupon from the Giga
+    rib_t: float = 0.008  # lid ribs under the frames: printed flat on their own, then bonded in (a
+    #                       transverse wall can't print inside a lid that prints on end)
+    rib_x: tuple[float, ...] = FRAME_X  # one rib under each arch frame
+    rib_fillet: float = 0.010  # thickened-epoxy fillet leg, both faces of each rib, along deck and skirts
+    rib_bond: float = 4e6  # Pa, shear on those fillets (epoxy on sanded PLA, conservative); test a coupon
+    print_strength: float = 45e6  # Pa, printed PLA stressed in the plane of its layers (the rib
+    #                               prints flat, so its bending runs along them); pull-test a coupon
 
 
 @dataclass
 class Hull:
     """One demi-hull."""
 
-    loa: float = 1.30  # m. Sonobot 5: 1300 mm
+    loa: float = 0.94  # m at the shell; the rail laps 17.5 mm past the transom and the stem, so the
+    #                    boat is 975 over the rails, and that is the lid's print height (Sonobot 5: 1300)
     beam: float = 0.22  # m, outside the shell (the rail adds 17.5 mm a side above the waterline)
     depth: float = 0.25  # m, baseline to deck
     deadrise_deg: float = 12.0
@@ -86,44 +92,30 @@ class Hull:
     stern_rise: float = 0.04  # m, keel height at the transom (shrinks the immersed transom)
     stern_rise_end: float = 0.40  # fraction of LOA where the straight aft keel rise ends
     stem_flat: float = 0.010  # m, width of the flat stem face (don't loft to a knife edge)
-    # construction: an open tub of 3 printed segments split at the frame stations, each standing
-    # on its aft bulkhead (the first on the transom), bonded with thickened epoxy, glassed
-    # outside and epoxy-coated inside; the lid is 3 more segments printed on end the same way
-    # (lid segments 2 and 3 stand on the ribs under the frames)
-    split_x: tuple[float, ...] = (0.52, 0.78)  # segment joints J1 / J2, at the arch frames
+    # construction: the tub and the lid each print in one piece standing on the stern, glassed
+    # outside and epoxy-coated inside. No bulkheads or joints along the length: printed-in ring
+    # frames with 45 deg chamfers stiffen the tub (they print unsupported), and the lid ribs are
+    # printed flat and bonded in
+    ring_x: tuple[float, ...] = (0.12, 0.335, 0.595, 0.77)  # tub ring frames, two under the arch
+    #                                                         frames, clear of the heat plates
     wall_t: float = 0.0024  # m, printed shell (4 perimeters x 0.6 mm nozzle)
     wall_rho: float = 1240.0  # kg/m^3, PLA (softens ~55-60 C: paint it light, keep it out of hot cars)
     skin_areal: float = 0.45  # kg/m^2, 200 g/m^2 glass + epoxy on the outside
     seal_areal: float = 0.20  # kg/m^2, two coats of epoxy on the inside
-    bulkhead_t: float = 0.0024  # m, tub bulkhead at the aft end of every segment
+    transom_t: float = 0.004  # m, the tub's transom and the lid's aft wall: the bed faces, and the
+    #                           thrust pad and the outdrive's wall bolts bear on them
     stiffener_frac: float = 0.15  # stringers + chamfered ring frames, fraction of shell mass
     printer: tuple[float, float, float] = (0.800, 0.800, 1.000)  # Elegoo OrangeStorm Giga, x y z
+    print_margin: float = 0.025  # keep each print this far under the printer's height (975 of 1000)
     lid: Lid = field(default_factory=Lid)
 
     @property
     def tb(self) -> float:
         return math.tan(math.radians(self.deadrise_deg))
 
-    @property
-    def segments(self) -> int:
-        return len(self.split_x) + 1
-
-    def segment_lengths(self) -> list[float]:
-        ends = list(self.joints()) + [self.loa]
-        return [b - a for a, b in zip(ends, ends[1:])]
-
-    @property
-    def segment_length(self) -> float:
-        """The longest segment: the one that sets the print height."""
-        return max(self.segment_lengths())
-
-    def joints(self) -> list[float]:
-        """x of each segment's aft face (transom first); each carries a tub bulkhead."""
-        return [0.0] + list(self.split_x)
-
     def rib_x(self) -> list[float]:
         """x of the lid ribs that take the bridge feet."""
-        return [self.joints()[j] for j in self.lid.rib_joints]
+        return list(self.lid.rib_x)
 
     def flat_deck(self, x: float) -> float:
         """Width of the flat top between the deck-edge radii at station x."""
@@ -313,7 +305,7 @@ def draft_for(hull: Hull, volume_per_hull: float) -> Hydro:
 
 
 def shell_mass(hull: Hull, n: int = 400) -> float:
-    """Printed tub + lid shells, outside glass, inside epoxy, tub bulkheads, lid ribs and
+    """Printed tub + lid shells, outside glass, inside epoxy, transoms, lid ribs and
     stiffeners, one hull."""
     dx = hull.loa / n
     skin = deck = 0.0
@@ -323,16 +315,28 @@ def shell_mass(hull: Hull, n: int = 400) -> float:
         deck += hull.flat_deck(x) * dx
     lid = hull.lid
     transom = section(hull, 0.0, hull.depth)[0]  # tub transom + the lid's aft end wall
-    bulkheads = sum(section(hull, xj, lid.z - lid.bulkhead_gap)[0] for xj in hull.joints()[1:])
     ribs = sum(section(hull, x, hull.depth)[0] - section(hull, x, lid.z)[0] for x in hull.rib_x())
     mass = (
         skin * (hull.wall_t * hull.wall_rho + hull.skin_areal + hull.seal_areal)
         + transom * (hull.skin_areal + hull.seal_areal)
         + deck * (hull.wall_t * hull.wall_rho + hull.seal_areal)
-        + (transom + bulkheads) * hull.bulkhead_t * hull.wall_rho
+        + transom * hull.transom_t * hull.wall_rho
         + ribs * lid.rib_t * hull.wall_rho
     )
     return mass * (1 + hull.stiffener_frac)
+
+
+def shell_lcg(hull: Hull, n: int = 400) -> float:
+    """x of the shell's mass centre (skin, glass, epoxy and deck), m fwd of the transom."""
+    dx = hull.loa / n
+    m = mx = 0.0
+    for i in range(n):
+        x = (i + 0.5) * dx
+        w = (section(hull, x, hull.depth)[3] * (hull.wall_t * hull.wall_rho + hull.skin_areal + hull.seal_areal)
+             + hull.flat_deck(x) * (hull.wall_t * hull.wall_rho + hull.seal_areal))
+        m += w
+        mx += w * x
+    return mx / m
 
 
 def rail_length(hull: Hull, n: int = 400) -> float:
@@ -342,7 +346,7 @@ def rail_length(hull: Hull, n: int = 400) -> float:
     return 2 * side + 2 * hull.half_beam(0.0) + hull.stem_flat
 
 
-def lid_screws(hull: Hull, frame_x: tuple[float, ...] = (0.52, 0.78)) -> int:
+def lid_screws(hull: Hull, frame_x: tuple[float, ...] = FRAME_X) -> int:
     """M4 screws round one rail: normal pitch, closer within 150 mm of each frame (both sides)."""
     lid = hull.lid
     near = 2 * len(frame_x) * 0.30  # rail length within +/-150 mm of a frame, both sides
@@ -355,26 +359,35 @@ def lid_joint_mass(hull: Hull) -> float:
     area = (2 * lid.flange_w * lid.flange_t - lid.groove[0] * lid.groove[1]
             + lid.lip_t * (lid.flange_t + lid.lip_drop) + lid.spigot[0] * lid.spigot[1])
     rail = rail_length(hull)
-    bosses = 4 * len(lid.rib_joints) * math.pi / 4 * 0.020**2 * (hull.depth - lid.z)  # full depth
+    bosses = 4 * len(lid.rib_x) * math.pi / 4 * 0.020**2 * (hull.depth - lid.z)  # full depth
     screws = lid_screws(hull) * (0.0019 + 0.0012 + 0.0004)  # M4 x 12 A4 pan head, brass insert, washer
     return (area * rail + bosses) * hull.wall_rho + screws + rail * 0.008  # cord ~8 g/m
 
 
+def print_heights(hull: Hull) -> tuple[float, float]:
+    """Tub and lid as printed on the stern: the shell's length plus the rail flanges that lap past
+    the transom and the stem (the tub's flange, and the lid's flange + drip lip), m."""
+    lid = hull.lid
+    return hull.loa + 2 * lid.flange_w, hull.loa + 2 * (lid.flange_w + lid.lip_t)
+
+
 def print_fit(hull: Hull) -> tuple[bool, str]:
-    """Tub and lid segments print standing on end: section in x-y of the bed, length in z."""
+    """Tub and lid each print in one piece standing on the stern: section in x-y of the bed,
+    length in z, kept `print_margin` under the printer's height."""
     px, py, pz = hull.printer
     lid = hull.lid
     width = hull.beam + 2 * (lid.flange_w + lid.lip_t)  # over the rail
     tub_h, lid_h = lid.z, hull.depth - lid.z + lid.lip_drop
+    tub_z, lid_z = print_heights(hull)
 
     def fits(a: float, b: float) -> bool:
         return max(a, b) <= px - 0.010 and min(a, b) <= py - 0.010
 
-    ok = fits(width, tub_h) and fits(width, lid_h) and hull.segment_length <= pz - 0.010
-    lengths = " / ".join(f"{v * 1000:.0f}" for v in hull.segment_lengths())
-    return ok, (f"{hull.segments} segments each ({lengths} mm, printed on end); tub "
-                f"{width * 1000:.0f} x {tub_h * 1000:.0f}, lid {width * 1000:.0f} x {lid_h * 1000:.0f} mm "
-                f"sections on a {px * 1000:.0f} x {py * 1000:.0f} x {pz * 1000:.0f} mm build volume")
+    ok = fits(width, tub_h) and fits(width, lid_h) and max(tub_z, lid_z) <= pz - hull.print_margin + 1e-9
+    return ok, (f"one piece each, on the stern: tub {width * 1000:.0f} x {tub_h * 1000:.0f} x "
+                f"{tub_z * 1000:.0f} tall, lid {width * 1000:.0f} x {lid_h * 1000:.0f} x {lid_z * 1000:.0f} tall "
+                f"(limit {(pz - hull.print_margin) * 1000:.0f} on a {px * 1000:.0f} x {py * 1000:.0f} x "
+                f"{pz * 1000:.0f} mm build volume)")
 
 
 # ---- Boat layout and the arched bridge -------------------------------------------------------
@@ -484,8 +497,8 @@ class Outdrive:
 class Boat:
     overall_width: float = 0.92  # m, hull side to hull side (the rails add 35 mm). Sonobot 5: 920
     # arch frames: two 1/4" 6061-T6 plates, laser or waterjet cut, standing in the
-    # transverse plane over the lid ribs (and tub bulkheads) at 520 and 780 mm
-    frame_x: tuple[float, float] = (0.52, 0.78)
+    # transverse plane over the lid ribs (and the tub's ring frames)
+    frame_x: tuple[float, float] = FRAME_X
     frame_t: float = 0.00635  # 1/4" plate
     frame_h: float = 0.050  # depth of the plate section
     frame_lightening: float = 0.25  # fraction of plate area removed by holes
@@ -498,8 +511,11 @@ class Boat:
     # inside the lid through full-depth bosses in the lid ribs under each frame (heads in
     # counterbores, so the rib is never notched), through the deck, into the foot plate.
     foot_len: float = 0.30  # foot plate along x, centred between the frames
-    foot_w: float = 0.14  # foot plate across the hull; may overhang the flat deck ~1 mm deep
+    foot_w: float = 0.14  # foot plate across the hull; where it overhangs the flat deck, the lid has a
+    #                       flat landing under it (foot_landing)
     foot_t: float = 0.006
+    landing_max: float = 0.005  # deepest flat landing under a foot (where it overhangs the deck's flat
+    #                             top onto the deck-edge radius) that still counts as a fit
     pad_t: float = 0.0015  # EPDM pad between foot and lid deck: seals the bolt holes
     foot_bolt_y: tuple[float, ...] = (0.040, 0.062)  # bolts each side of the hull CL, at each frame
     foot_bolt_dx: float = 0.010  # bolts sit this far fwd of each frame; the 20 mm bosses clear the joint face
@@ -507,10 +523,10 @@ class Boat:
     #                                    (printed-plastic yield; PLA is no weaker than PETG here, but it
     #                                    creeps when warm). Boss shear-out ~16 kN, A4 bolt ~9 kN. Pull-test one.
     drive: Outdrive = field(default_factory=Outdrive)
-    # hub and its lens-shaped cowl. Rev D: the hub holds no electronics (they're in the hulls);
-    # it's the garage. The winch sits behind the aft frame, and the pod and its Van Dorn sampler
-    # pull up through an opening in the hub floor between the frames, under a sheave.
-    hub_x: float = 0.61  # cowl centre, m fwd of transom
+    # hub and its lens-shaped cowl. The hub holds no electronics (they're in the hulls); it's the
+    # garage. The winch sits behind the aft frame, and the pod and its Van Dorn sampler pull up
+    # through an opening in the hub floor between the frames, under a sheave.
+    hub_x: float = 0.425  # cowl centre, m fwd of transom (40 mm aft of the frames' midpoint)
     hub_half: tuple[float, float] = (0.28, 0.20)  # cowl half-length (x), half-width (y)
     hub_z: tuple[float, float, float] = (0.31, 0.44, 0.55)  # cowl bottom, belt line, top
     hub_e: float = 4.5  # plan-view superellipse exponent of the cowl
@@ -518,7 +534,7 @@ class Boat:
     garage_lip: float = 0.007  # cowl floor left round the opening (and clear of each frame)
     sheave: tuple[float, float] = (0.500, 0.050)  # tether sheave over the opening's centre: z, dia
     stow_gap: float = 0.030  # sheave bottom to the top of the stowed pod (bridle + strain relief)
-    winch_env: tuple[float, float, float, float, float] = (0.360, 0.500, 0.080, 0.372, 0.470)
+    winch_env: tuple[float, float, float, float, float] = (0.175, 0.315, 0.080, 0.372, 0.470)
     #            winch envelope (placeholder until the drum is sized): x0, x1, +/- y, z0, z1
     pod_env: tuple[float, float, float] = (0.110, 0.080, 0.160)  # V1-style pod x y z (placeholder)
     sampler: tuple[float, float] = (0.141, 0.210)  # horizontal Van Dorn, 5 in PVC: OD, length over the seals
@@ -526,6 +542,23 @@ class Boat:
     mast_top: float = 0.82  # top of the GNSS puck. Sonobot 5: 805 mm construction height
     camera_z: float = 0.53  # stereo bar on the front of the dome
     camera_baseline: float = 0.32  # m, as calibrated (pi5/cv/calibration.npz)
+    # inside the hulls, m fwd of the transom (the drawings take the boxes' sizes from drawings.py).
+    # The packs and their heat plates sit between the frames, at pack_x.
+    vesc_x: float = 0.17  # each VESC, by its outdrive
+    elec_x: float = 0.30  # carrier + Pi 5, stbd hull, just aft of the packs
+    leak_x: float = 0.64  # leak probe on the flat keel, fwd of the packs and clear of the bridge connector
+    vent_x: float = 0.69  # M12 membrane vent in the lid deck, fwd of the foot shoe
+    motor_conn_x: float = 0.10  # IP68 lid connector for the motor wires, just fwd of the mount
+
+    @property
+    def pack_x(self) -> float:
+        """The packs and their heat plates: midway between the frames."""
+        return sum(self.frame_x) / 2
+
+    @property
+    def bridge_conn_x(self) -> float:
+        """IP68 lid connector for the bridge cables: 10 mm fwd of the foot plate, inside the shoe."""
+        return sum(self.frame_x) / 2 + self.foot_len / 2 + 0.010
 
     def spacing(self, hull: Hull) -> float:
         """Hull centreline-to-centreline spacing."""
@@ -540,6 +573,21 @@ class Boat:
         if over <= 0:
             return 0.0
         return rd - math.sqrt(rd * rd - over * over) if over < rd else hull.depth
+
+    def foot_landing(self, hull: Hull, n: int = 30) -> float:
+        """Deepest fill (m) of the flat landing printed into the lid deck under each foot. Where the
+        foot overhangs the flat top onto the deck-edge radius, the deck is built up flat to the
+        foot's underside, so the whole plate bears. Deepest at the forward corners, on the bow taper;
+        hull.depth means the foot overhangs the hull side."""
+        x0 = sum(self.frame_x) / 2 - self.foot_len / 2
+        worst = 0.0
+        for i in range(n + 1):
+            x = x0 + self.foot_len * i / n
+            over = (self.foot_w - hull.flat_deck(x)) / 2
+            rd = hull.deck_fillet(x)
+            if over > 0:
+                worst = max(worst, rd - math.sqrt(rd * rd - over * over) if over < rd else hull.depth)
+        return worst
 
     def hub_scale(self, z: float) -> float:
         """Plan scale of the cowl at height z: flat bottom with a rounded edge, widest at the
@@ -691,21 +739,24 @@ def mass_budget(hull: Hull, boat: Boat | None = None) -> list[Item]:
     boat = boat or Boat()
     hx = boat.hub_x
     fx = sum(boat.frame_x) / 2
-    mid = sum(hull.split_x) / 2  # the middle segment, between the frames
+    px = boat.pack_x
     ox, _, _ = boat.garage_opening()
     sz = sum(boat.stowed()) / 2
     wx0, wx1, _, wz0, wz1 = boat.winch_env
     wx, wz = (wx0 + wx1) / 2, (wz0 + wz1) / 2
+    sx = shell_lcg(hull)
     return [
         # in the hulls, on aluminium plates on the hull bottoms (the water sinks the heat)
-        Item("Drive pack 12S ~10 Ah (port hull, middle segment)", 2.70, "hulls", mid, 0.055),
-        Item("Electronics pack 5S2P (stbd hull, middle segment)", 0.85, "hulls", mid, 0.045),
-        Item("Winch pack 5S (stbd hull, middle segment)", 0.70, "hulls", mid, 0.045),
-        Item("Pi 5 on the carrier PCB (Teensy 4.1), radios, RC rx, regulators (stbd hull, aft)", 0.70, "hulls", 0.33, 0.060),
-        Item("VESC x2, one per hull by its outdrive", 0.40, "hulls", 0.20, 0.050),
-        Item("Fuses, switches, 12 AWG wiring", 0.40, "hulls", 0.45, 0.100),
-        Item("Aluminium heat plates on the hull bottoms x2", 0.40, "hulls", 0.45, 0.025),
-        Item("IP68 bulkhead connectors / glands in the lids", 0.15, "hulls", 0.40, hull.depth),
+        Item("Drive pack 12S ~10 Ah (port hull, between the frames)", 2.70, "hulls", px, 0.055),
+        Item("Electronics pack 5S2P (stbd hull, between the frames)", 0.85, "hulls", px, 0.045),
+        Item("Winch pack 5S (stbd hull, between the frames)", 0.70, "hulls", px, 0.045),
+        Item("Pi 5 on the carrier PCB (Teensy 4.1), radios, RC rx, regulators (stbd hull, aft)", 0.70, "hulls",
+             boat.elec_x, 0.060),
+        Item("VESC x2, one per hull by its outdrive", 0.40, "hulls", boat.vesc_x, 0.050),
+        Item("Fuses, switches, 12 AWG wiring", 0.40, "hulls", (boat.vesc_x + px) / 2, 0.100),
+        Item("Aluminium heat plates on the hull bottoms x2", 0.40, "hulls", px, 0.025),
+        Item("IP68 bulkhead connectors / glands in the lids", 0.15, "hulls",
+             (boat.motor_conn_x + boat.bridge_conn_x) / 2, hull.depth),
         # bridge: arch, hub garage, mast
         Item("Hub cowl (printed PLA, painted light)", 0.60, "center", hx, boat.hub_z[1]),
         Item("Garage: winch bracket, sheave, docking cone", 0.35, "center", ox, 0.43),
@@ -721,13 +772,14 @@ def mass_budget(hull: Hull, boat: Boat | None = None) -> list[Item]:
         Item("Arm fairings + foot shoes (printed PLA)", 0.70, "center", fx, 0.35),
         Item("Foot plates x2 (6 mm 6061, lightened) + 4 angle brackets", 1.00, "center", fx, boat.foot_z),
         # hull structure and drives
-        Item("Hull tubs + lids x2 (printed PLA, glassed + sealed)", 2 * shell_mass(hull), "hulls", 0.62, 0.12),
+        Item("Hull tubs + lids x2 (printed PLA in one piece each, glassed + sealed)", 2 * shell_mass(hull),
+             "hulls", sx, 0.12),
         Item("Lid joints x2 (rail flanges, gasket cord, M4 screws + inserts)", 2 * lid_joint_mass(hull),
-             "hulls", 0.62, hull.lid.z),
+             "hulls", sx, hull.lid.z),
         Item("Foot bolting x2 (16 M6 x 60 A4 + bonded seals, EPDM pads)", 0.45, "hulls", fx, hull.depth),
-        Item("Belt outdrives x2 (outrunner, tilt head, bracket, leg, belt, shaft, prop)",
+        Item("Belt outdrives x2 (outrunner, mount, leg, belt, shaft, prop)",
              2 * boat.drive.mass, "hulls", *boat.drive.cg),
-        Item("Leak probes (carrier J8 / J9), vents, fasteners, cable clips", 0.30, "hulls", 0.60, 0.20),
+        Item("Leak probes (carrier J8 / J9), vents, fasteners, cable clips", 0.30, "hulls", boat.leak_x, 0.20),
     ]
 
 
@@ -749,8 +801,7 @@ class Condition:
 
 
 def condition(name: str, items: list[Item], margin: float, extra_center_kg: float = 0.0,
-              extra_x: float | None = None, extra_z: float = 0.45) -> Condition:
-    extra_x = Boat().hub_x if extra_x is None else extra_x
+              extra_x: float = 0.0, extra_z: float = 0.45) -> Condition:
     m = sum(i.kg for i in items)
     mx = sum(i.kg * i.x for i in items)
     mz = sum(i.kg * i.z for i in items)
@@ -768,12 +819,13 @@ def condition(name: str, items: list[Item], margin: float, extra_center_kg: floa
 
 
 def conditions(hull: Hull, boat: Boat | None = None) -> list[Condition]:
+    boat = boat or Boat()
     items = mass_budget(hull, boat)
     light = [i for i in items if not i.name.startswith("Pod sensor growth") and i.name != SAMPLE_ITEM]
     return [
         condition("Light (no growth, no sample, no margin)", light, 0.0),
         condition("Design (budget + margin)", items, MARGIN),
-        condition("Max (design + 5 kg on the bridge)", items, MARGIN, extra_center_kg=5.0),
+        condition("Max (design + 5 kg on the bridge)", items, MARGIN, extra_center_kg=5.0, extra_x=boat.hub_x),
     ]
 
 
@@ -821,11 +873,11 @@ def load_cases(boat: Boat, hull: Hull, cond: Condition, hydro: Hydro, loads: Loa
     return [lc1, lc2, lc3, lc4]
 
 
-def foot_station(boat: Boat, hull: Hull, moment: float, lift: float) -> tuple[float, float, float]:
+def foot_station(boat: Boat, hull: Hull, moment: float, lift: float, x_rib: float) -> tuple[float, float, float]:
     """One frame station of one foot carrying `moment` (N m, about the hull axis) and `lift`
     (N, pulling the foot off the lid). The foot pivots on its far edge; the M6 bolts in the
-    lid-rib bosses hold it down. The rib spans between the rail screw lines. Returns the worst
-    bolt tension (N), the rib bending moment (N m) and the larger rail reaction (N)."""
+    lid-rib bosses hold it down. The rib at x_rib spans between the rail screw lines. Returns the
+    worst bolt tension (N), the rib bending moment (N m) and the larger rail reaction (N)."""
     c = boat.foot_w / 2
     ys = list(boat.foot_bolt_y) + [-y for y in boat.foot_bolt_y]
     levers = [c + y for y in ys]
@@ -833,7 +885,7 @@ def foot_station(boat: Boat, hull: Hull, moment: float, lift: float) -> tuple[fl
     bolts = [moment * v / s2 + lift / len(ys) for v in levers]
     heel = sum(bolts) - lift  # the foot's far edge presses down on the lid
     loads = list(zip(ys, bolts)) + [(-c, -heel)]  # on the rib, upward +
-    a = hull.half_beam(hull.rib_x()[0]) + hull.lid.screw_y
+    a = hull.half_beam(x_rib) + hull.lid.screw_y
     r_plus = -sum(f * (y + a) for y, f in loads) / (2 * a)
     r_minus = -sum(f for _, f in loads) - r_plus
     m_rib = max(abs(r_minus * (y + a) + sum(f * (y - yi) for yi, f in loads if yi < y))
@@ -845,17 +897,18 @@ RAIL_SHARE = 3  # rail screws that share a frame's reaction (60 mm pitch, +/-90 
 
 
 def joint_checks(boat: Boat, hull: Hull, lcs: list[LoadCase]) -> list[tuple[str, str, float, float, str]]:
-    """Worst case over LC2-LC4 for each link between a foot and its tub:
-    (joint, governing case, load, capacity, units)."""
+    """Worst case over LC2-LC4, and over the ribs (the fwd one is on the bow taper), for each link
+    between a foot and its tub: (joint, governing case, load, capacity, units)."""
     _, lc2, lc3, lc4 = lcs
     cases = [(lc2, lc2.moment, 0.0), (lc3, lc3.moment, lc3.shear), (lc4, 0.0, lc4.shear)]
     lid = hull.lid
     d = hull.depth - lid.z
     z_rib = lid.rib_t * d * d / 6
-    worst = {"bolt": (0.0, ""), "rib": (0.0, ""), "rail": (0.0, "")}
-    for lc, m, lift in cases:
-        b, mr, r = foot_station(boat, hull, m, lift)
-        for key, val in (("bolt", b), ("rib", mr / z_rib), ("rail", r / RAIL_SHARE)):
+    bond = d * (lid.rib_t + 2 * lid.rib_fillet)  # fillets at each end of a rib, on the skirt
+    worst = {"bolt": (0.0, ""), "rib": (0.0, ""), "rail": (0.0, ""), "bond": (0.0, "")}
+    for (lc, m, lift), x_rib in ((c, x) for c in cases for x in hull.rib_x()):
+        b, mr, r = foot_station(boat, hull, m, lift, x_rib)
+        for key, val in (("bolt", b), ("rib", mr / z_rib), ("rail", r / RAIL_SHARE), ("bond", r / bond)):
             if val > worst[key][0]:
                 worst[key] = (val, lc.name.split(" ")[0])
     n_bolts = 2 * 2 * len(boat.foot_bolt_y)
@@ -864,6 +917,8 @@ def joint_checks(boat: Boat, hull: Hull, lcs: list[LoadCase]) -> list[tuple[str,
          worst["bolt"][0], boat.foot_bolt_rating, "N"),
         (f"Lid rib under each frame ({lid.rib_t * 1000:.0f} mm PLA, {d * 1000:.0f} deep)", worst["rib"][1],
          worst["rib"][0], lid.print_strength, "Pa"),
+        (f"Rib-end bond to the skirt (epoxy fillets, {lid.rib_fillet * 1000:.0f} mm legs)", worst["bond"][1],
+         worst["bond"][0], lid.rib_bond, "Pa"),
         (f"Rail screws beside a frame (M4 inserts, {RAIL_SHARE} share)", worst["rail"][1],
          worst["rail"][0], lid.screw_pullout, "N"),
     ]
@@ -917,8 +972,7 @@ def foot_bolt_sf(hull: Hull, boat: Boat, design: Condition, h: Hydro) -> float:
     over = math.sqrt(max(rd * rd - (rd - 0.001) ** 2, 0.0))
     w = min(boat.foot_w, hull.flat_deck(x) + 2 * over)
     edge = w / 2 - 0.008
-    trimmed = Boat(overall_width=boat.overall_width, foot_w=w,
-                   foot_bolt_y=tuple(sorted({max(edge - 0.022, 0.012), edge})))
+    trimmed = replace(boat, foot_w=w, foot_bolt_y=tuple(sorted({max(edge - 0.022, 0.012), edge})))
     lcs = load_cases(trimmed, hull, design, h, Loads())
     bolt = joint_checks(trimmed, hull, lcs)[0]
     return bolt[3] / bolt[2]
@@ -950,15 +1004,21 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
     hd = draft_for(hull, design.total / RHO_WATER / 2)
     fits, fit_note = print_fit(hull)
     rail = hull.beam + 2 * (lid.flange_w + lid.lip_t)
+    xf = sum(boat.frame_x) / 2 - boat.foot_len / 2
+    flats = [hull.flat_deck(xf + boat.foot_len * i / 10) for i in range(11)]
+    landing = boat.foot_landing(hull)
     print("\n## Demi-hull particulars\n")
     print(table(["Parameter", "Value"], [
-        ["LOA (hull)", f"{hull.loa * 1000:.0f} mm"],
+        ["LOA", f"{hull.loa * 1000:.0f} mm at the shell, {(hull.loa + 2 * (lid.flange_w + lid.lip_t)) * 1000:.0f} "
+                f"mm over the rails"],
         ["Beam", f"{hull.beam * 1000:.0f} mm at the shell, {rail * 1000:.0f} mm over the rail"],
         ["Depth, baseline to deck", f"{hull.depth * 1000:.0f} mm"],
         ["Bottom", f"{hull.deadrise_deg:.0f} deg deadrise, chine R{min(hull.chine_r, 0.45 * hull.beam / 2) * 1000:.0f}, "
                    f"deck edge R{min(hull.deck_r, 0.45 * hull.beam / 2) * 1000:.0f}"],
-        ["Construction", f"open tub + removable lid, joint plane z {lid.z * 1000:.0f} "
+        ["Construction", f"open tub + removable lid, each printed in one piece; joint plane z {lid.z * 1000:.0f} "
                          f"({(lid.z - hd.draft) * 1000:.0f} mm above the DWL)"],
+        ["Inside", "tub ring frames at x " + " / ".join(f"{v * 1000:.0f}" for v in hull.ring_x)
+                   + "; lid ribs (printed flat, bonded in) at x " + " / ".join(f"{v * 1000:.0f}" for v in hull.rib_x())],
         ["Rail (lid over the gunwale)", f"{lid.flange_w * 1000:.0f} mm flanges {lid.flange_t * 1000:.0f} + "
                                         f"{lid.flange_t * 1000:.0f} thick, {lid.lip_t * 1000:.1f} lip, "
                                         f"{lid.gasket_d * 1000:.0f} mm cord, {lid_screws(hull, boat.frame_x)} x M4 "
@@ -970,9 +1030,11 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
         ["Enclosed volume", f"{enclosed * 1000:.1f} L per hull (tub + lid)"],
         ["Shell mass (est.)", f"{shell_mass(hull):.2f} kg per hull + {lid_joint_mass(hull):.2f} kg lid joint"],
         ["Print", f"{fit_note} -> {'fits' if fits else 'DOES NOT FIT'}"],
-        ["Foot on the lid deck", f"{hull.flat_deck(sum(boat.frame_x) / 2) * 1000:.0f} mm flat top under a "
-                                 f"{boat.foot_w * 1000:.0f} mm foot, deck falls {boat.foot_drop(hull) * 1000:.1f} mm "
-                                 f"at its edges -> {'fits (EPDM pad takes it up)' if boat.foot_drop(hull) <= 0.001 else 'DOES NOT FIT: narrow the foot or flatten the deck'}"],
+        ["Foot on the lid deck", f"{min(flats) * 1000:.0f}-{max(flats) * 1000:.0f} mm flat top under a "
+                                 f"{boat.foot_w * 1000:.0f} mm foot (narrowest at its fwd end, on the bow taper); a flat "
+                                 f"landing printed into the lid deck fills the deck-edge radius under it, at most "
+                                 f"{landing * 1000:.1f} mm deep -> "
+                                 f"{'fits' if landing <= boat.landing_max else 'DOES NOT FIT: narrow the foot or move the frames aft'}"],
         ["LWL at design draft", f"{hd.lwl * 1000:.0f} mm"],
         ["Slenderness LWL / vol^(1/3)", f"{hd.lwl / hd.volume ** (1 / 3):.2f}"],
         ["Prismatic coefficient Cp", f"{hd.cp:.2f}"],
@@ -1035,8 +1097,7 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
     hub_bottom = boat.hub_z[0]
     print(table(["Parameter", "Value"], [
         ["Frames", f"2x 1/4\" 6061-T6 plate, {boat.frame_h * 1000:.0f} mm deep, at x = "
-                   f"{boat.frame_x[0] * 1000:.0f} / {boat.frame_x[1] * 1000:.0f} mm (over the lid ribs at "
-                   + " / ".join(f"J{j}" for j in hull.lid.rib_joints) + ")"],
+                   f"{boat.frame_x[0] * 1000:.0f} / {boat.frame_x[1] * 1000:.0f} mm (over the lid ribs)"],
         ["Frame span / length", f"{s * 1000:.0f} mm foot to foot, {arch_len * 1000:.0f} mm along the arch"],
         ["Frame blank", f"{(max(p[0] for p in outline) - min(p[0] for p in outline)) * 1000:.0f} x "
                         f"{(max(p[1] for p in outline) - min(p[1] for p in outline)) * 1000:.0f} mm, "
@@ -1059,7 +1120,7 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
         ["Mast top (GNSS)", f"{boat.mast_top * 1000:.0f} mm above baseline"],
     ]))
     if any(abs(a - b) > 0.02 for a, b in zip(boat.frame_x, hull.rib_x())):
-        print("\n**WARNING: the arch frames are not over the lid ribs (Lid.rib_joints vs Boat.frame_x).**")
+        print("\n**WARNING: the arch frames are not over the lid ribs (Lid.rib_x vs Boat.frame_x).**")
 
     print("\n## Frame loads (per frame, design condition)\n")
     lcs = load_cases(boat, hull, design, h, loads)
@@ -1075,7 +1136,10 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
     rows = []
     for name, case, load, cap, unit in joint_checks(boat, hull, lcs):
         scale, u = (1e6, "MPa") if unit == "Pa" else (1.0, "N")
-        rows.append([name, case, f"{load / scale:.0f} {u}", f"{cap / scale:.0f} {u}", f"{cap / load:.1f}"])
+        def num(v: float) -> str:
+            return f"{v:.1f}" if v < 10 else f"{v:.0f}"
+
+        rows.append([name, case, f"{num(load / scale)} {u}", f"{num(cap / scale)} {u}", f"{cap / load:.1f}"])
     print(table(["Joint", "Case", "Load", "Capacity", "SF"], rows))
     drive = boat.drive
     print(f"\nThe foot pivots on its far edge and the bolts hold the near side down; each lid rib "

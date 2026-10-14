@@ -1,4 +1,4 @@
-"""D.R.E.A.M.S resistance, propeller and motor sizing (rev D).
+"""D.R.E.A.M.S resistance, propeller and motor sizing (rev E).
 
 Uses the hull and mass model in hull_sizing.py. Stdlib only:
     python mechanical/propulsion.py               # report
@@ -170,7 +170,8 @@ def selftest() -> None:
 
 # ---- Resistance build-up -------------------------------------------------------------------
 
-FORM_FACTOR = 1.25  # (1+k) for a demi-hull at s/L ~ 0.55, incl. viscous interference
+FORM_FACTOR = 1.25  # (1+k) for a demi-hull at s/L ~ 0.55-0.75, incl. viscous interference; the
+#                     940 mm hull is stubby (LWL / vol^(1/3) ~ 3.8), so its real (1+k) may be higher
 SERVICE_MARGIN = 0.15  # weed, fouling, chop, steering
 THRUST_DEDUCTION = 0.05
 WAKE_FRACTION = 0.03
@@ -245,18 +246,17 @@ class Propulsor:
     bollard_w: float  # electrical power at that point, W
     kappa: float  # motor x drive x blade efficiency at cruise (the non-ideal factor)
     immersion: float  # required immersion of the envelope top below the waterline, m
-    cost: str = ""  # both drives, USD, 2026
 
 
 # Belt outdrive (baseline): ~380 KV 4108-size outrunner, 1:1 HTD 3M belt, 110 mm prop. Bollard
 # is an estimate: 30 A motor limit -> ~0.75 N m -> ~55 N from a 110 x 75 prop (B-series K_T/K_Q).
 # kappa 0.46: hobby outrunner ~0.85 x belt + wet bearings ~0.93 x blade ~0.6. Test it on the stand.
 BELT_OUTDRIVE = Propulsor("Belt outdrive, 110 mm prop (baseline)", 0.110, 0.110, 55.0, 230,
-                          0.46, 0.2 * 0.110, "$140-200")
+                          0.46, 0.2 * 0.110)
 # Blue Robotics published data (16 V): weedless 5.63 kgf; T200 5.25 kgf; both 390 W max.
 M200_WEEDLESS = Propulsor("M200 + weedless prop (BlueBoat drive)", 0.112, 0.112, 5.63 * G, 390,
-                          0.50, 0.2 * 0.112, "$390-410")
-T200 = Propulsor("T200 ducted thruster", 0.076, 0.100, 5.25 * G, 390, 0.45, 0.015, "~$400")
+                          0.50, 0.2 * 0.112)
+T200 = Propulsor("T200 ducted thruster", 0.076, 0.100, 5.25 * G, 390, 0.45, 0.015)
 CANDIDATES = (BELT_OUTDRIVE, M200_WEEDLESS, T200)
 DRIVE_WH = 12 * 3.7 * 10 * 0.9  # one 12S ~10 Ah pack (V3's drive rail) for both VESCs, 90 % usable
 
@@ -319,7 +319,7 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
     print("\n## Candidate drives (2 per boat)\n")
     rows = []
     for p in CANDIDATES:
-        cells = [p.name, p.cost, f"{p.d * 1000:.0f}", f"{2 * p.bollard_n:.0f}"]
+        cells = [p.name, f"{p.d * 1000:.0f}", f"{2 * p.bollard_n:.0f}"]
         for r in (res[speeds.index(1.0)], r15, r30):
             thrust = r.total / 2 / (1 - THRUST_DEDUCTION)
             va = r.speed * (1 - WAKE_FRACTION)
@@ -329,7 +329,7 @@ def report(hull: Hull | None = None, boat: Boat | None = None) -> None:
         p15 = 2 * power_at(p, r15.total / 2 / (1 - THRUST_DEDUCTION), 1.5 * (1 - WAKE_FRACTION))
         cells += [f"{DRIVE_WH / p1:.0f} / {DRIVE_WH / p15:.0f}", f"{total_draft(p, h.draft) * 1000:.0f}"]
         rows.append(cells)
-    print(table(["Drive", "Cost (2)", "Prop mm", "Bollard N (both)", "W @1.0", "W @1.5", "W @3.0",
+    print(table(["Drive", "Prop mm", "Bollard N (both)", "W @1.0", "W @1.5", "W @3.0",
                  "Hours @1.0 / 1.5", "Total draft mm"], rows))
     thrust3 = r30.total / 2 / (1 - THRUST_DEDUCTION)
     print(f"\nAt 3.0 m/s each drive must push {thrust3:.0f} N. Drive energy {DRIVE_WH:.0f} Wh "
