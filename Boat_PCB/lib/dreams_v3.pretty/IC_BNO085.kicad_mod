@@ -388,7 +388,7 @@
 		(uuid "9ede1707-bea3-4eed-a2c5-0f19035d3a7a")
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/lib/dreams_v3.3dshapes/BNO085.step"
+	(model "${KIPRJMOD}/../lib/dreams_v3.3dshapes/BNO085.step"
 		(offset
 			(xyz 0 0 0)
 		)

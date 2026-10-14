@@ -3,7 +3,7 @@
 >
 > The "KiCad?" and "Link" columns are now history. Every part resolves from the project library or
 > from stock KiCad; see
-> [`Boat_PCB_V3/lib/README.md`](../../Boat_PCB/Boat_PCB_V3/lib/README.md).
+> [`Boat_PCB/lib/README.md`](../../Boat_PCB/lib/README.md).
 >
 > If this disagrees with [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) or the KiCad files, those win.
 > For example, the board fits **two** INA228s, not three, and the GPS lands on a JST-XH cable

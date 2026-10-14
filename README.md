@@ -17,9 +17,10 @@ dashboards, the cloud pipeline, and the V2 board with its docs.
 ## Layout
 
 ```
-Boat_PCB/Boat_PCB_V3/     KiCad 10 project: schematic, layout, project-local library
+Boat_PCB/Boat_PCB_V3/     KiCad 10 project: schematic and layout of the V3 carrier
 Boat_PCB/Pod_PCB_V3/      the pod board (XIAO ESP32-S3 on the winch tether)
 Boat_PCB/Boat_PCB_V3_1/   V3.1 starter carrier: Pi 5 + one Pico 2, an interim board
+Boat_PCB/lib/             the dreams_v3 KiCad library all three boards share
 docs/v3/                  design brief, planning record, BOM, V3.1 notes
 CLAUDE.md                 working notes for Claude Code
 ```

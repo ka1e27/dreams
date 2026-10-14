@@ -1,14 +1,15 @@
-# `Boat_PCB_V3/lib` — project-local KiCad library
+# `Boat_PCB/lib` — shared KiCad library
 
-Self-contained symbol + footprint library for the V3 board, so a fresh clone resolves every part with
+Self-contained symbol + footprint library for the V3 boards, so a fresh clone resolves every part with
 no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 
 - `dreams_v3.kicad_sym` — **59 symbols**
 - `dreams_v3.pretty/` — **59 footprints**
 - `dreams_v3.3dshapes/` — 2 STEP models
 
-The pod project (`../../Pod_PCB_V3/`) and the V3.1 starter carrier (`../../Boat_PCB_V3_1/`) use this
-library too: their lib tables point here through `${KIPRJMOD}/../Boat_PCB_V3/lib/`.
+The carrier (`../Boat_PCB_V3/`), the pod (`../Pod_PCB_V3/`) and the V3.1 starter carrier
+(`../Boat_PCB_V3_1/`) all use it: each board's lib tables point here through `${KIPRJMOD}/../lib/`.
+It lived in `Boat_PCB_V3/lib/` until 2026-10-14.
 
 ## Rev E: two Picos on the V3 carrier (2026-10-13)
 
@@ -101,7 +102,7 @@ out" are all still current — those are the part worth keeping.
     pads. The square pad 1 still marks pin 1.
   - `D_DO-35`: the silk `K` is gone. The cathode band marks polarity, and the letter collided with J14.
 
-Registered via project-local `sym-lib-table` / `fp-lib-table` beside `Boat_PCB_V3.kicad_pro`, using
+Registered via each project's own `sym-lib-table` / `fp-lib-table` (beside its `.kicad_pro`), using
 `${KIPRJMOD}`-relative paths so the library travels with the repo.
 
 **Validation performed:** every symbol renders under `kicad-cli sym export svg` (11/11); every
@@ -195,13 +196,13 @@ copied library files themselves remain under their original terms.
 
 ## 3D models
 
-`IC_BNO085` and `XDCR_BH1750FVI-TR` point at `${KIPRJMOD}/lib/dreams_v3.3dshapes/`; both STEP files
+`IC_BNO085` and `XDCR_BH1750FVI-TR` point at `${KIPRJMOD}/../lib/dreams_v3.3dshapes/`; both STEP files
 are present. The nine stock footprints use `${KICAD10_3DMODEL_DIR}` and resolve from the install.
 
 Two were repaired: the fabcloud XIAO footprint referenced a **Seeed XIAO-nRF52840** model — the wrong
 module, complete with a 180° rotation tuned for it — and that reference was removed, since a wrong
 model silently misleads mechanical fit checks. `Teensy41` pointed at an undefined `${KICAD_USER_DIR}`
-and was retargeted to `${KIPRJMOD}/lib/dreams_v3.3dshapes/Teensy_4.1_Assembly.STEP`; drop XenGi's
+and was retargeted to `${KIPRJMOD}/../lib/dreams_v3.3dshapes/Teensy_4.1_Assembly.STEP`; drop XenGi's
 19 MB STEP there if you want it. `BMP390`, `MODULE_XIAO_ESP32_S3` and `SeeedStudio_XIAO_ESP32S3` have
 no model — SnapEDA did not ship one for those.
 

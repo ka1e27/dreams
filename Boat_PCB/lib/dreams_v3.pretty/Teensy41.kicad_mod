@@ -1109,7 +1109,7 @@
 		(uuid "5fe47778-4e69-44c5-9452-fa84200c0ab0")
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/lib/dreams_v3.3dshapes/Teensy_4.1_Assembly.STEP"
+	(model "${KIPRJMOD}/../lib/dreams_v3.3dshapes/Teensy_4.1_Assembly.STEP"
 		(offset
 			(xyz 0 0 0.762)
 		)

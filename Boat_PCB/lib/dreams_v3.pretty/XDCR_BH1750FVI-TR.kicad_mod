@@ -214,7 +214,7 @@
 		(uuid "92076e52-17c8-4846-9668-62c93f710657")
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/lib/dreams_v3.3dshapes/BH1750FVI-TR.step"
+	(model "${KIPRJMOD}/../lib/dreams_v3.3dshapes/BH1750FVI-TR.step"
 		(offset
 			(xyz 0 0 0)
 		)

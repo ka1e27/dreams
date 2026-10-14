@@ -6,7 +6,7 @@ need: current sensing, the I²C mux and its sensors, the radar stepper and the w
 carrier now uses two Picos as well (rev E, 2026-10-13, with its own pin map), and this board keeps a
 header for a second one.
 
-- **Files:** `Boat_PCB/Boat_PCB_V3_1/`, KiCad 10. It uses the carrier's `lib/`.
+- **Files:** `Boat_PCB/Boat_PCB_V3_1/`, KiCad 10. It uses the shared library in `Boat_PCB/lib/`.
 - **Board:** 98 × 67 mm, 2 layers, 1.6 mm FR-4, GND poured on both sides. The tall parts (the Pico,
   both Pololu modules, the 2nd-Pico header and every capacitor), the SMD parts and the SHT41 module are
   on the underside, so nothing under the Pi is taller than about 9 mm. 75 footprints (21 underneath),

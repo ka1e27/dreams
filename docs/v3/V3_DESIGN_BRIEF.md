@@ -88,7 +88,7 @@ plane too — take it J14 GND → J16 GND on the outer pours.
 - **Specify passives properly in Value:** `100nF 50V X7R`, `22pF 50V C0G`, `1 %`. A generic disc
   could be Y5V and lose 80 % of its capacitance over temperature and DC bias.
 
-**Library.** `Boat_PCB/Boat_PCB_V3/lib/` already holds a built `dreams_v3` symbol library, 34
+**Library.** `Boat_PCB/lib/` already holds a built `dreams_v3` symbol library, 34
 footprints and the 3D models. Reuse it. Most parts come from stock KiCad libraries; the ones that
 needed downloading were **TCA9548A, BNO085 and INA228**.
 
@@ -152,7 +152,7 @@ both.**
 
 ## 5. The pod (test phase)
 
-Schematic and rev B layout: `Boat_PCB/Pod_PCB_V3/`. It shares the carrier's `lib/`. The pod
+Schematic and rev B layout: `Boat_PCB/Pod_PCB_V3/`. It uses the shared `Boat_PCB/lib/`. The pod
 rides the winch tether and profiles the water column to about 20 m. This round is for testing in
 freshwater, so it uses cheap hobby sensors rather than lab-grade ones.
 
