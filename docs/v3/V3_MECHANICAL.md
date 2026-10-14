@@ -1,10 +1,11 @@
-# V3 mechanical design: Matthew's rev D
+# V3 mechanical design: Matthew's rev E (940 mm hulls)
 
-Matthew's hull, bridge and drive design, from 2026-09-26 to 2026-10-02. The design tools are in
-`mechanical/`, with their drawings, renders and props, beside two design docs
-(`docs/hull_and_crossbeam_sizing.md` and `docs/solidworks_modeling_guide.md`). The tools have moved on
-to rev E (2026-10-05: 940 mm hulls, each tub and lid printed in one piece); this file keeps rev D's
-decisions, numbers and open questions.
+Matthew's hull, bridge and drive design. Rev D (2026-09-26 to 10-02) set the layout; rev E
+(2026-10-05) shortened the hulls to **940 mm** so each tub and lid prints in one piece on the Giga.
+The design tools are in `mechanical/` at rev E, with their drawings, renders and props, beside
+`docs/hull_and_crossbeam_sizing.md`, `docs/solidworks_modeling_guide.md` and
+`docs/hull_printing_and_sealing.md`. This file keeps the decisions, the numbers (rev E's wherever
+the shorter hull changed them) and the open questions.
 
 **Status: proposal.** Matthew's own status line was "nothing here is locked". Every number below is
 an estimate from his design model (`mechanical/hull_sizing.py` and `propulsion.py`), not a test.
@@ -12,25 +13,25 @@ Where a newer decision disagrees, §1 says so, and the newer decision wins.
 
 ## 1. Newer decisions that override rev D
 
-Settle these before anyone models the boat in CAD from the rev D drawings.
+Rev E took up the first row; the rest still need carrying into the model and the CAD.
 
 | Topic | Rev D says | Now | What it means |
 |---|---|---|---|
-| **Hull length and printing** | 1300 mm hulls, each tub and lid in 3 segments (520 / 260 / 520 mm), split at the frames, printed on end on the Giga (800 × 800 × 1000 mm) | Each hull printed in one piece on the Giga, **985 mm long** (Kyle, 2026-10-14, to confirm) | 985 mm fits the Giga on end with 15 mm to spare. But rev D's layout is drawn for 1300 mm, and Matthew's model says a 985 mm hull sits deeper, leaves less payload and needs ~45 % more power at cruise (§5.5). Move the frames, hub and packs to suit, and re-run trim and the SF checks, before CAD |
-| **Sealing** | Glassed outside (200 g/m² E-glass, a second layer on keel, chines and stem), 2 coats of epoxy inside | Epoxy only, no fibreglass, on the first boat (Kyle, 2026-10-14) | Use the printing and epoxy steps in §5.1 without the glass. Rev D used the glass to cover the segment seams, so the soak test matters more |
+| **Hull length and printing** | 1300 mm hulls, each tub and lid in 3 segments (520 / 260 / 520 mm), split at the frames, printed on end on the Giga (800 × 800 × 1000 mm) | **940 mm hulls** (975 mm over the rails), each tub and lid printed in one piece, stern down, on the Giga (Matthew's rev E, 2026-10-05; the SolidWorks model on the website matches; Kyle confirmed 940 mm on 2026-10-14) | Done in rev E: the bridge moved 185 mm aft for level trim (frames at x 335 / 595, hub at 425), printed-in ring frames replace the segment bulkheads, and every check was re-run (§3). The shorter hull costs payload and power: +4 kg before the lid joint is within 60 mm of the water (rev D +15), and ~144 W for both drives at 1.5 m/s (rev D 94 W), so cruise near 1.3 m/s (~92 W) (§5.5) |
+| **Sealing** | Glassed outside (200 g/m² E-glass, a second layer on keel, chines and stem), 2 coats of epoxy inside | Epoxy only, no fibreglass, on the first boat (Kyle, 2026-10-14) | Use the printing and epoxy steps in §5.1 without the glass. Rev E has no segment seams to cover, but the soak test still matters. Matthew's `docs/hull_printing_and_sealing.md` weighs the sealing options |
 | **Outdrive mount** | Printed ABS for now; mill a 6061 one later | Motor mounts machined from metal (Kyle, 2026-10-14) | Go straight to the metal version of the mount in §4.3 |
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
 | **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | The carrier (rev F) uses two Pico 2s; the V3.1 starter uses one | The boat starts on V3.1 (next row) |
-| **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **V3.1: one 10S 10 Ah Li-ion pack** (30–42 V, ~360 Wh) runs everything. **Full V3: two 10S 10 Ah packs in parallel,** plus an optional 4S Li-ion backup for the electronics (Kyle, 2026-10-14). Carrier rev F is built for this (§1.1) | Redo the mass budget and trim for the packs, and pick their hulls. Rough run time on the 985 mm hull (§5.5), from ~325 Wh usable per pack and counting ~35 W of electronics (about 2 A at 15–21 V, brief §2): V3.1 ~5 h at 1.0 m/s and ~1.9 h at 1.5 m/s; full V3 about double |
-| **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Kyle's figure leaves more headroom than rev D's estimate |
+| **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **V3.1: one 10S 10 Ah Li-ion pack** (30–42 V, ~360 Wh) runs everything. **Full V3: two 10S 10 Ah packs in parallel,** plus an optional 4S Li-ion backup for the electronics (Kyle, 2026-10-14). Carrier rev F is built for this (§1.1) | Redo the mass budget and trim for the packs, and pick their hulls. Rough run time on the 940 mm hull, from ~325 Wh usable per pack and counting ~35 W of electronics (about 2 A at 15–21 V, brief §2): V3.1 ~5 h at 1.0 m/s, ~2.6 h at 1.3 m/s and ~1.8 h at 1.5 m/s; full V3 about double |
+| **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Rev E's shorter hull needs ~144 W at 1.5 m/s and ~434 W at 3 m/s for both drives, inside Kyle's 200–300 W per side |
 | **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | On the 10S pack, 200 KV gives ~7,200 rpm unloaded at 36 V nominal and ~6,000 near empty (30 V). Rev D needs ~3,900 rpm at the prop for 3 m/s through its 1:1 belt, so there's headroom. Rev D's 150–200 KV range was for 12S, which is ~185–245 KV at 10S, so 200 KV sits inside it. The controller's 8–60 V (3–13S) covers 10S, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
 | **Test site** | Muddy River as the design target (Matthew, 2026-09-30) | Confirmed with CRWA: water temperature and depth on the Muddy River where people can't walk; water testing from the thaw, about March 2027; CRWA only uses data from sensors that meet NIST standards (Kyle, 2026-10-14) | Agrees. Any sensor upgrade in §6 has to meet the NIST rule |
 
 ### 1.1 Two 10S packs on the carrier (rev F)
 
-Rev E was designed for a 12S drive pack plus two separate 15–21 V packs, and its electronics and
-winch inputs couldn't take 10S (24 V TVSs, a -40 V winch P-FET, a pod built for 12–21 V on the
-tether). Rev F (2026-10-14, Kyle's picks) fixes that:
+Carrier rev E was designed for a 12S drive pack plus two separate 15–21 V packs, and its electronics
+and winch inputs couldn't take 10S (24 V TVSs, a -40 V winch P-FET, a pod built for 12–21 V on the
+tether). Carrier rev F (2026-10-14, Kyle's picks) fixes that:
 
 - **One 10S bus.** The two packs join in parallel and feed the drives, J13 (electronics) and J14
   (winch). Join them only at matching voltage.
@@ -65,63 +66,67 @@ The details are in `Boat_PCB/CLAUDE.md` and `docs/v3/V3_DESIGN_BRIEF.md`.
 - **No winter testing this season.** The December road-salt study and the winter notes in §6.4 wait
   for the 2027–28 winter. Checking our sensors against CRWA's loggers can probably be done by hand.
 
-## 3. Rev D at a glance
+## 3. Rev E at a glance (rev D for comparison)
 
-| | Value |
-|---|---|
-| Hulls | 1300 × 220 × 250 mm each (255 over the rail), 700 mm apart on centre, 480 mm clear tunnel, 920 mm overall (955 over the rails) |
-| Hull shape | 12° deadrise, R50 chine and deck edge; bow taper from 650 mm forward of the transom; keel rocker from 910 mm (stem keel +100 mm); keel rises to +40 mm at the transom from 520 mm |
-| Volume | 51.6 L enclosed per hull; 103 kg of buoyancy with both hulls just under |
-| Mass | 34.3 kg design (bridge 12.9, hulls 21.4, with 10 % growth margin); 28.4 kg light; 39.3 kg with 5 kg more on the bridge |
-| How it floats (design) | Draft 99 mm, freeboard 151 mm, 91 mm to the lid joint, trim +1 mm (bow down), 0.47 kg per mm of sinkage |
-| Payload | +15 kg before the lid joint gets within 60 mm of the water; +43 kg before it's awash |
-| Stability | GM_T 1.57 m, 9.2 N·m per degree of heel; the leeward rail goes in at 15°, the windward hull lifts at 16° |
-| Strength (target SF 3) | Arch frames 5.0 (hulls pitching out of phase, 2 g), foot bolts 3.2, lid rib 4.3, rail screws 4.4 |
-| Draft with props | ~132 mm (the props hang below the keel line) |
-| Resistance, both hulls | 6.6 N at 1.0 m/s, 21.5 N at 1.5 m/s, 49.4 N at 3.0 m/s (15 % service margin) |
-| Drive power, both | ~23 W at 1.0 m/s, ~94 W at 1.5 m/s, ~381 W at 3.0 m/s |
-| Endurance | ~17 h at 1.0 m/s, ~4 h at 1.5 m/s, from ~400 Wh (one 12S ~10 Ah pack for both drives, 90 % usable). The plan is now one 10S pack for everything (§1) |
+| | Rev E (940 mm, now) | Rev D (1300 mm) |
+|---|---|---|
+| Hulls | 940 × 220 × 250 mm each (975 mm and 255 mm over the rail), 700 mm apart on centre, 480 mm clear tunnel, 920 mm overall | 1300 mm long, same section and spacing |
+| Printing | Tub and lid each in one piece, stern down (970 / 975 mm tall on the Giga's 1000 mm) | 3 segments each, split at the frames |
+| Hull shape | 12° deadrise, R50 chine and deck edge; bow taper from 470 mm forward of the transom; keel rocker from 658 mm (stem keel +100 mm); keel rises to +40 mm at the transom from 376 mm | The same fractions of a 1300 mm hull |
+| Volume | 37.3 L per hull; 75 kg of buoyancy with both hulls just under | 51.6 L; 103 kg |
+| Mass (design, 10 % margin) | 31.2 kg (bridge 12.9, hulls 18.2); 25.5 kg light; 36.2 kg with 5 kg more on the bridge | 34.3 kg |
+| How it floats (design) | Draft 118 mm, freeboard 132 mm, 72 mm to the lid joint, trim −1 mm, 0.34 kg per mm of sinkage | Draft 99 mm, 91 mm to the lid joint |
+| Payload | +4 kg before the lid joint is within 60 mm of the water; +25 kg before it's awash | +15 kg; +43 kg |
+| Stability | GM_T 1.22 m, 6.5 N·m per degree; leeward rail in at 12°, windward hull lifts at 20° | GM_T 1.57 m, 9.2 N·m/° |
+| Strength (target SF 3) | Arch frames 7.3, foot bolts 4.9, lid rib 6.6, rib bond 11.7, rail screws 6.2 | Frames 5.0, foot bolts 3.2, lid rib 4.3, rail 4.4 |
+| Draft with props | ~132 mm | ~132 mm |
+| Resistance, both hulls | 8.3 N at 1.0 m/s, 31.6 N at 1.5 m/s, 55.5 N at 3.0 m/s | 6.6 / 21.5 / 49.4 N |
+| Drive power, both | ~28 W at 1.0 m/s, ~144 W at 1.5 m/s, ~434 W at 3.0 m/s | ~23 / 94 / 381 W |
+| Endurance (400 Wh, drives only) | ~14 h at 1.0 m/s, ~4.3 h at 1.3 m/s, ~3 h at 1.5 m/s | ~17 h; ~4 h at 1.5 |
 
-The current numbers are in `mechanical/reports/hull_report.md` and `propulsion_report.md` on the
-branch. Robot arm mass is **not** in the budget (§7).
+The current numbers are in `mechanical/reports/hull_report.md` and `propulsion_report.md`. They
+still assume rev D's three packs; the plan is now 10S (§1). Robot arm mass is **not** in the budget (§7).
 
-## 4. How rev D is built
+## 4. How it's built (rev E)
 
 ### 4.1 Hulls and the lid joint
 
-- **Tub plus lid.** The joint plane is 190 mm above the baseline, 91 mm above the design waterline.
-  The lid laps over the tub on a flange, like a shoebox lid: a friction skirt can't seal 2.85 m of
-  printed edge, but a flange clamped on a gasket can.
+- **Tub plus lid, each one print.** The joint plane is 190 mm above the baseline, 72 mm above the
+  design waterline. The lid laps over the tub on a flange, like a shoebox lid: a friction skirt
+  can't seal 2.14 m of printed edge, but a flange clamped on a gasket can. Printed-in ring frames
+  stiffen the tub at x 120 / 335 / 595 / 770, and the two lid ribs under the bridge (x 335 / 595)
+  are printed flat and bonded in.
 - **Joint:** 15 mm flanges, 5 mm thick each. A 3 mm EPDM or silicone cord sits in a 5 × 2.2 mm
   groove, so it's squeezed 27 % when the flanges touch: the groove sets the squeeze, the joint can't
-  be over-tightened, and hard flange contact keeps it stiff. 37 × M4 × 12 A4 pan heads per hull go
+  be over-tightened, and hard flange contact keeps it stiff. 30 × M4 × 12 A4 pan heads per hull go
   into brass heat-set inserts outboard of the gasket (100 mm pitch, 60 mm near the frames), so the
   holes are on the wet side and need no sealing. A 2.5 mm drip lip covers the joint and locates the
   lid; a 6 × 2 mm spigot under the lid is a second barrier.
-- **Inside:** the 12S drive pack in the port hull's middle segment; the electronics and winch packs
+- **Inside:** the 12S drive pack in the port hull between the frames; the electronics and winch packs
   and the Pi 5 with its carrier in the starboard hull; a VESC by each outdrive. Packs and VESCs sit
   on aluminium heat plates on the hull bottoms, so the water sinks the heat; keep them off the
   walls. Wiring enters only through IP68 bulkhead connectors in the lids. A leak probe at each
   hull's lowest point and a membrane vent in each lid.
-- **Shell mass:** ~4.6 kg per hull plus ~1.0 kg for the lid joint.
+- **Shell mass:** ~3.4 kg per hull plus ~0.8 kg for the lid joint.
 
 ### 4.2 Arched bridge and the hub garage
 
 - **Two 1/4 in 6061-T6 arch frames**, 50 mm deep, laser or waterjet cut from
-  `mechanical/cad/arch_frame_plate.dxf`, at 520 and 780 mm forward of the transom,
-  right over 8 mm ribs in the lids. 700 mm foot to foot.
+  `mechanical/cad/arch_frame_plate.dxf`, at 335 and 595 mm forward of the transom (rev D: 520 /
+  780), right over 8 mm ribs in the lids. 700 mm foot to foot. A flat landing printed into the lid
+  deck carries each foot over the bow taper.
 - **Feet:** a 300 × 140 × 6 mm 6061 plate each side, on a 1.5 mm EPDM pad on the lid deck. 8 × M6
   × 60 A4 per foot come up from inside the lid through full-depth Ø20 bosses in the rib, so the rib
   is never notched. No latches. The M6s are good for ~9 kN; the printed bosses and inserts govern,
   so pull-test a boss and an insert from the printer that makes them.
-- **Hub:** a printed cowl, 560 × 400 mm, 310–550 mm above the baseline, centred 610 mm forward. Its
-  underside is 211 mm above the waterline. GNSS on a mast to 820 mm, LTE and Wi-Fi whips, the
+- **Hub:** a printed cowl, 560 × 400 mm, 310–550 mm above the baseline, centred 425 mm forward. Its
+  underside is 192 mm above the waterline. GNSS on a mast to 820 mm, LTE and Wi-Fi whips, the
   e-stop, and the stereo camera bar on the front.
 - **The hub is the garage.** It holds the winch, a sheave over a 240 × 301 mm opening in the hub
   floor, and a cone that stops the pod swinging. The pod and a 2 L horizontal Van Dorn pull up
-  through the opening (30 / 70 mm to spare) and stow with their bottoms 186 mm above the waterline,
+  through the opening (30 / 70 mm to spare) and stow with their bottoms 167 mm above the waterline,
   so nothing hangs in the tunnel. The IP67 electronics box of rev C is gone. The winch envelope
-  (x 360–500, z 372–470) is a placeholder.
+  (x 175–315, z 372–470) is a placeholder.
 
 ### 4.3 Fixed belt outdrive
 
@@ -129,12 +134,12 @@ branch. Robot arm mass is **not** in the budget (§7).
   wall (a 6 mm flange, 2 × M5 through the wall). Its head block clamps the leg's top (40 mm socket,
   2 × M4 across) and carries the motor plate and the cover. 13 parts per drive.
 - **A thrust pad takes the forward thrust.** It's bonded to the transom (2 mm EPDM face), and the
-  leg's nose rests on it. At 55 N of thrust the pad takes 131 N and the mount 76 N, and the leg
-  bends 6.5 N·m at the pad instead of 11.2 N·m at the mount. Reverse thrust hangs on the mount's
+  leg's nose rests on it. At 55 N of thrust the pad takes 119 N and the mount 64 N, and the leg
+  bends 5.5 N·m at the pad instead of 10.1 N·m at the mount. Reverse thrust hangs on the mount's
   bolts. Nothing bolts to the tub, so the drive lifts away with the lid.
 - **Geometry:** the leg's leading edge runs 3.5 mm outside the rail, which is what stops it going
   closer; the tightest gap is the wall flange, 2 mm over the rail. The motor sits just behind the
-  transom. Motor axis 300 mm and prop axis 22 mm above the baseline: a 205-tooth HTD 3M-9 belt (615
+  transom. Motor axis 300 mm and prop axis 41 mm above the baseline: a 193-tooth HTD 3M-9 belt (579
   mm) on 20T pulleys. The drive overhangs the transom by 161 mm.
 - **Belt:** at 3 m/s it runs ~3880 rpm and ~0.40 N·m per drive, near a 9 mm belt's rating on a 20T
   pulley. Use a 15 mm belt for long fast runs; cruise at 1.5 m/s is well inside it.
@@ -152,22 +157,25 @@ branch. Robot arm mass is **not** in the budget (§7).
 - Test it on the thrust stand (`mechanical/props/thrust_stand.pdf`) against a plain 110 mm RC prop
   on the same drive, at about 5, 10 and 25 N per drive.
 
-## 5. Building notes from rev D
+## 5. Building notes
 
 ### 5.1 Printed PLA hulls: printing and sealing
 
+- **Read `docs/hull_printing_and_sealing.md` first** (Matthew, 2026-10-08): how to print the
+  one-piece tubs and lids watertight and seal them without brushed epoxy outside. Its sealing and
+  glass options aren't picked yet. The notes below are rev D's.
 - 0.6–0.8 mm nozzle, at least 4 walls (~2.4 mm), +3–5 % flow and a hot nozzle for layer fusion.
-- Bond segment joints with thickened epoxy. Two coats of epoxy inside. Epoxy only, never polyester.
+- Two coats of epoxy inside. Epoxy only, never polyester. Rev E has no segment joints to bond.
 - **Mix small batches with slow hardener.** Epoxy's exotherm can pass PLA's 55–60 °C softening point.
 - The tub prints on end, so layer lines cross the rail gasket: epoxy-coat and sand the flange and
   groove, or use closed-cell EPDM foam tape.
 - XPS blocks in the bow and stern bays keep a holed hull afloat.
 - Before fitting anything, float each hull for 24 h, or pressurize it gently (≤ 0.03 bar on a water
   manometer) with soapy water on the seams. Before the full build, print, seal and soak a test
-  segment for a week.
+  piece for a week.
 - PLA softens at 55–60 °C: paint it a light colour and never leave it in a hot car. It also gets
   brittle in the cold.
-- ~4.4 kg of PLA per hull (tub, lid, rail), roughly 33–80 h of printing per hull.
+- Rev E's printed shell is ~3.4 kg per hull, plus ~0.8 kg of rail flanges, gasket and screws (rev D: ~4.6 + 1.0).
 - Is PLA the only option on the Giga? Its 300 °C hotend prints PETG (softens ~80 °C). ASA and ABS
   warp badly at this size without an enclosure.
 
@@ -180,7 +188,7 @@ Print 100 % only around bolts, with a slicer modifier.
 
 ### 5.3 Robot arm placement
 
-Kyle's arm (~9–10 kg) only works between the arch frames. At 1000 or 1200 mm forward it trims the
+Rev D's numbers. Kyle's arm (~9–10 kg) only works between the arch frames. At 1000 or 1200 mm forward it trims the
 bow down 160 or 230 mm, and at 1200 the foot-bolt SF falls to 2.1. Reaching out, it heels the boat
 3° (arm CG 0.3 m outboard) to 8.5° (0.6 m out with 2 kg at 0.9 m). Its base bolts to the frames, not
 the printed cowl. It would need its own pack and fuse and a cable to the Pi (USB or Ethernet), since
@@ -192,33 +200,18 @@ With the arm aboard, 152 mm (6 in) hulls fail (45 mm to the lid joint), 190 mm i
 220 mm keeps +7 kg of payload and 250 mm +13 kg. 6 in hulls have 16 % less drag but their 84 mm flat
 deck doesn't take the 140 mm feet. Hence 220 mm.
 
-### 5.5 Hull length check: 985 mm (2026-10-14)
+### 5.5 What the 940 mm hull costs
 
-Matthew's model, run at 985 mm with the same gear aboard and the hull shape scaled to the new
-length, at rev D's 220 mm beam and two wider ones for comparison. Only the shell's mass changes. The
-trim, the layout and the strength checks were **not** re-run: the frames, hub and packs are still
-placed for a 1300 mm hull.
+From Matthew's rev E reports:
 
-| | 1300 × 220 (rev D) | 985 × 220 | 985 × 250 | 985 × 300 |
-|---|---|---|---|---|
-| Enclosed volume per hull | 51.6 L | 39.1 L | 44.2 L | 52.7 L |
-| Design mass | 34.3 kg | 31.9 kg | 32.4 kg | 33.4 kg |
-| Draft | 99 mm | 116 mm | 108 mm | 98 mm |
-| To the lid joint (limit 60 mm) | 91 mm | 74 mm | 82 mm | 92 mm |
-| Payload before the joint is within 60 mm | +15 kg | +5 kg | +9 kg | +15 kg |
-| With Kyle's arm (+9.9 kg), to the lid joint | 70 mm | **47 mm, fails** | **58 mm, fails** | 71 mm |
-| Both drives at 1.0 / 1.5 / 3.0 m/s | 23 / 94 / 381 W | 27 / 138 / 429 W | 28 / 156 / 449 W | 31 / 192 / 498 W |
-| Endurance at 1.5 m/s (400 Wh) | 4.2 h | 2.9 h | 2.6 h | 2.1 h |
-
-- At 220 mm wide, a 985 mm hull still floats with 74 mm to the lid joint, but only +5 kg of payload
-  is left, so the arm no longer fits.
-- Cruise at 1.5 m/s takes ~45 % more power (138 vs 94 W). The shorter hull runs at Froude number
-  0.48 instead of 0.42, close to the hump, and endurance drops from ~4.2 h to ~2.9 h.
-- Wider hulls buy the freeboard back but cost more power: at 300 mm the freeboard matches rev D's,
-  at about twice its cruise power.
-- At 3 m/s both drives need ~430 W, inside Kyle's 200–300 W per side.
-- The 190 mm joint height and the 60 mm limit are rev D's. A higher lid joint changes the freeboard
-  rows, not the power.
+- **Payload:** 37.3 L per hull instead of 51.6 L, so the design load floats at 118 mm and leaves
+  only +4 kg before the lid joint comes within 60 mm of the water (rev D +15). Kyle's ~10 kg arm no
+  longer fits as the hulls are (§7).
+- **Power:** the shorter hull runs at Froude number 0.49 at 1.5 m/s, on its wave-drag hump. Both
+  drives need ~144 W there (rev D 94 W), so cruise near 1.3 m/s (~92 W).
+- **Strength goes up:** the bridge's lever arms are shorter, so every SF is 4.9 or more.
+- A wider hull buys payload back at a cost in power. A quick run on the rev D model at 985 mm
+  (2026-10-14) put 300 mm hulls at rev D's freeboard for about twice its cruise power.
 
 ## 6. Water sampling and sensors
 
@@ -326,15 +319,16 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
 
 ## 7. Open questions
 
-- **Hull length:** confirm 985 mm, then lay the frames, hub and packs out for it and re-run trim and
-  the SF checks (§1, §5.5).
+- **Hull spacing:** the SolidWorks model on the website (`Boat.V2.1`) has the 940 mm hulls 500 mm apart
+  on centre (733 mm overall), but rev E's model and its loads use 700 mm (920 mm overall). Settle
+  which, and re-run the model if it's 500.
 - **Fitting the picked motor** (§1). The 5048 200KV replaces rev C's 380 KV pick. Raise the
   motor axis ~5 mm in the outdrive drawings so the can clears the cover, confirm the motor's shaft
   diameter for the pulley bore, and set both controllers to 10S and the same limits in VESC
   Tool, since they share the CAN bus.
 - **Does Kyle's arm go on the boat?** With water samples on the winch and sediment on the pod, the
-  arm is left with surface grabs. Without it the boat is ~10 kg lighter. With it, rev D still has
-  +15 kg of payload, but the foot bolting may need backing plates or M8 to keep SF ≥ 3.
+  arm is left with surface grabs. Without it the boat is ~10 kg lighter. With it: rev D had +15 kg
+  of payload, but rev E has +4 kg, so the arm doesn't fit on 940 × 220 hulls as they are.
 - **The winch's line pull** isn't known; the garage opening has to pass the pod and the bottle.
 - **The pod's real size,** against the 240 × 301 mm opening.
 - **CRWA:** which analytes and volumes (they size the bottle), how often they want samples, whether
@@ -342,7 +336,7 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
   Dorn still get the triple rinse (~0.5 L more, so a ~2.5 L tube).
 - **Muddy River site data:** depths, bridge and culvert clearances, launch points, where it ices.
 - **Tests before relying on the numbers:** bond a thrust pad on a sealed PLA coupon and load it
-  (the 131 N); pull-test a printed rib boss and a heat-set insert; soak a sealed test segment for a
+  (119 N in rev E); pull-test a printed rib boss and a heat-set insert; soak a sealed test piece for a
   week; confirm the outdrive's thrust on the stand.
 
 ## 8. The design tools (`mechanical/`)
