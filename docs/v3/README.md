@@ -1,12 +1,14 @@
 # `docs/v3/`: V3 hardware design knowledge
 
 This folder covers the V3 carrier board in `Boat_PCB/Boat_PCB_V3/`, the pod board in
-`Boat_PCB/Pod_PCB_V3/` (brief §5), and the reasons they are built the way they are.
+`Boat_PCB/Pod_PCB_V3/` (brief §5), and the reasons they are built the way they are. The hull,
+bridge and drive design is in `V3_MECHANICAL.md`.
 
 | File | What it is |
 |---|---|
 | **[`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md)** | **Start here.** Locked decisions, the current budget, part choices with their reasons, and the layout mistakes the first attempt made |
 | [`V3_1_STARTER_CARRIER.md`](V3_1_STARTER_CARRIER.md) | The V3.1 starter carrier (`Boat_PCB/Boat_PCB_V3_1/`): an interim Pi 5 + Pico 2 board. Power, pin map, connectors, bring-up checks |
+| [`V3_MECHANICAL.md`](V3_MECHANICAL.md) | Matthew's rev D hull, bridge and outdrive proposal (from `feature/mechanical-rev-d`): what's decided, the numbers, the sampling plan, open questions, and which newer decisions override it |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
 | [`../../Boat_PCB/lib/README.md`](../../Boat_PCB/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
