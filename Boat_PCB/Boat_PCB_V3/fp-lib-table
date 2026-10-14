@@ -1,4 +1,4 @@
 (fp_lib_table
   (version 7)
-  (lib (name "dreams_v3")(type "KiCad")(uri "${KIPRJMOD}/lib/dreams_v3.pretty")(options "")(descr "D.R.E.A.M.S V3 project footprints"))
+  (lib (name "dreams_v3")(type "KiCad")(uri "${KIPRJMOD}/../lib/dreams_v3.pretty")(options "")(descr "D.R.E.A.M.S V3 footprints, shared by all three boards"))
 )

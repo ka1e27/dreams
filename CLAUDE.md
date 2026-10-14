@@ -7,9 +7,10 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 
 | | |
 |---|---|
-| `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic, layout, project-local library in `lib/` |
-| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev B layout. Uses the carrier's `lib/` |
-| `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Uses the carrier's `lib/`; notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
+| `Boat_PCB/Boat_PCB_V3/` | V3 carrier board: KiCad 10 schematic and layout |
+| `Boat_PCB/Pod_PCB_V3/` | V3 pod board, test phase: schematic and rev B layout. Uses `Boat_PCB/lib/` |
+| `Boat_PCB/Boat_PCB_V3_1/` | V3.1 starter carrier (interim): Pi 5 + one Pico 2, 10S pack, CAN, RC, GPS, Qwiic, pod tether. Uses `Boat_PCB/lib/`; notes in `docs/v3/V3_1_STARTER_CARRIER.md` |
+| `Boat_PCB/lib/` | The `dreams_v3` KiCad library (symbols, footprints, 3D models) all three boards share; per-part notes in its README |
 | `docs/v3/V3_DESIGN_BRIEF.md` | **Read first.** Locked hardware decisions, current budget, part choices, layout traps |
 | `docs/v3/README.md` | Index of the other design docs, and the V2 ↔ V3 contrast table |
 
