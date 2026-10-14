@@ -1,15 +1,15 @@
-"""Version the shared stylesheet and script URLs (styles.css?v=..., site.js?v=...).
+"""Version the shared stylesheet and script URLs (styles.css?v=..., site.js?v=..., boat-explorer.js?v=...).
 
 GitHub Pages lets browsers cache files for 10 minutes, so right after a deploy a page can load
 with the previous stylesheet. A content hash in the URL makes every change fetch fresh files.
-Run after editing styles.css or site.js:  python -I tools/stamp.py
+Run after editing styles.css, site.js or boat-explorer.js:  python -I tools/stamp.py
 """
 import hashlib
 import re
 from pathlib import Path
 
 SITE = Path(__file__).resolve().parents[1]
-VER = {name: hashlib.sha1((SITE / name).read_bytes()).hexdigest()[:8] for name in ("styles.css", "site.js")}
+VER = {name: hashlib.sha1((SITE / name).read_bytes()).hexdigest()[:8] for name in ("styles.css", "site.js", "boat-explorer.js")}
 PAGES = sorted(SITE.glob("*.html")) + [SITE / "tools" / "build-log.template.html"]
 
 for page in PAGES:
