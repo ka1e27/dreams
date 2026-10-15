@@ -7,7 +7,8 @@
 (() => {
   const PLANNER = 'https://dreamsv1.kylegtran2007.workers.dev/';
   const DEMO = 'demo/v2-dashboard/';
-  const PROJECT = { name: 'D.R.E.A.M.S', email: 'DREAMSboatproject@gmail.com' };   // the project's official inbox
+  const PROJECT = { name: 'D.R.E.A.M.S', email: 'DREAMSboatproject@gmail.com',     // the project's official inbox
+                    instagram: 'https://www.instagram.com/dreams.boat.project/' };
   const CONTACTS = [
     { name: 'Kyle Tran', email: 'tran.kyl@northeastern.edu', site: 'https://ka1e27.github.io/Portfolio/' },
     { name: 'Matthew Hong', email: 'hong.matt@northeastern.edu', site: 'https://matthewhong29.github.io/' }
@@ -106,6 +107,7 @@
           <li><a href="index.html#field">Field-test videos</a></li></ul></div>
         <div><h2>Contact</h2><ul>
           ${[PROJECT, ...CONTACTS].map(c => `<li><a href="mailto:${c.email}">${c.name}\u00a0· ${c.email}</a></li>`).join('')}
+          <li><a href="${PROJECT.instagram}" target="_blank" rel="noopener">Instagram · @dreams.boat.project ↗</a></li>
           ${CONTACTS.map(c => `<li><a href="${c.site}" target="_blank" rel="noopener">${c.name.split(' ')[0]}'s portfolio ↗</a></li>`).join('')}</ul></div>
       </div>
       <div class="foot-base"><span>© 2026 D.R.E.A.M.S</span><a href="#main">Back to top ↑</a></div>

@@ -450,7 +450,9 @@ p, li, dd { text-wrap: pretty; }
 .logos { display: flex; flex-wrap: wrap; gap: 16px; }
 .logos:empty { display: none; }
 .logos a, .logos div { display: grid; place-items: center; width: 220px; height: 120px; padding: 22px; border-radius: 18px; background: var(--white); box-shadow: var(--shadow); }
-.logos img { max-height: 60px; width: auto; filter: grayscale(1); opacity: .85; }
+.logos img { max-height: 60px; width: auto; filter: grayscale(1); opacity: .85; transition: filter .2s, opacity .2s; }
+.logos a:hover img, .logos a:focus-visible img { filter: none; opacity: 1; }
+.sponsor-logo img { display: block; width: min(260px, 100%); height: auto; }
 
 .founders { display: grid; gap: 22px; }
 .founder { display: grid; grid-template-columns: 320px 1fr; gap: 56px; padding: 36px; background: var(--white); border-radius: 28px; box-shadow: var(--shadow); }

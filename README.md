@@ -4,6 +4,7 @@ Autonomous survey catamaran: CV-based obstacle avoidance, environmental sensing,
 telemetry to a web dashboard.
 
 **Website:** https://ka1e27.github.io/dreams/ (the boat, the build log and weekly updates). Its source is in [`website/`](website/).
+**Instagram:** [@dreams.boat.project](https://www.instagram.com/dreams.boat.project/).
 
 ## Status: V3, starting from scratch
 
@@ -99,5 +100,7 @@ V3 contradicts V2 on purpose. Don't try to reconcile the two. See
 [`docs/v3/README.md`](docs/v3/README.md) for the full table.
 
 ## Sponsors
+
+<a href="https://www.pcbway.com/"><img src="website/img/partners/pcbway.png" alt="PCBWay" width="220"></a>
 
 [PCBWay](https://www.pcbway.com/) sponsors the project's circuit boards.
