@@ -11,7 +11,7 @@ apply here too, and the firmware-facing pin maps are there (§5 carrier, §6 V3.
 
 | Board | Folder | Rev | Baseline as of | Size | Footprints | ERC | DRC | Unconnected | Parity |
 |---|---|---|---|---|---|---|---|---|---|
-| Carrier | `Boat_PCB_V3/` | F, 10S power | 2026-10-14 | 130.6 × 101.5 mm | 141; 8 on the underside: A2, U15, D12, J18, both Picos, SW1, SW2 | 0 | 0 | 0 | 0 |
+| Carrier | `Boat_PCB_V3/` | F, 10S power, condensed | 2026-10-15 | 130.6 × 95.5 mm | 140; 8 on the underside: A2, U15, D12, J18, both Picos, SW1, SW2 | 0 | 0 | 0 | 0 |
 | V3.1 starter carrier | `Boat_PCB_V3_1/` | A | 2026-10-12 | 98 × 67 mm, 2 layers | 75; 21 on the underside | 0 | 0 | 0 | 0 |
 | Pod | `Pod_PCB_V3/` | B | 2026-09-29 | 48 × 63 mm | | 0 | 0 | 0 | 0 |
 
@@ -67,9 +67,37 @@ through-hole pad (a placement search, `fpsearch.py` in the rev F pipeline, check
   (SHDN, VIN, GND, VOUT), body to the east over C1's leads.
 - **D12** (B360B) on the underside at (19.5, 31.75), beside the old trunk, anode north.
 - **D13** (B360B) on top at (24.6, 58.05), right of A2's pin labels, cathode north.
-- **J18** (4S backup, JST-VH) on the underside at (33.5, 81.0): its plug goes in from below. Nowhere
-  on top near A2 clears A2's underside courtyard, and Q1's heatsink keep-out (x 48.1–63.7,
-  y 10.9–27.6, on User.Comments) rules out the free top area by the winch.
+- **U6 (the BMP390 breakout) came off** later the same day, with its tracks. Mux CH2 and Pico B
+  GP6 are free; its area went to J1 and J4 when the board was condensed (next section).
+- **J18** (4S backup, JST-VH) on the underside: its plug goes in from below. Nowhere on top near
+  A2 clears A2's underside courtyard, and Q1's heatsink keep-out (x 48.1–63.7, y 10.9–27.6, on
+  User.Comments) rules out the free top area by the winch. The condensing moved it (next section).
+
+### Placement (rev F, condensed: 2026-10-15)
+
+With U6 gone, the bottom edge came up 6 mm (101.5 → 95.5 mm, 6% less area). The width is set by
+the Pi and the three XT60s, so it stays.
+
+- **The bottom strip** (J5–J10, the names above them, R45–R48) moved up 6.0 mm (the resistors
+  5.4 mm). J10 also moved 3.6 mm left, off Pico A's pad rows, and R53 moved with it.
+- **A1** moved up 1.9 mm. Its top pin row (y 73.85) can't come closer to A2 underneath, which
+  leaves 0.2 mm between A1's courtyard and the JST row. So "STEPPER" stands vertical between J5
+  and J6, and J5's reference is on the back.
+- **J1 (GPS) and J4 (SHT45 external) left the bottom-right corner.** The Pi's USB jacks hang
+  over that corner, so nothing over 10 mm tall can go there. Both went to U6's old spot, turned
+  90°: J1 at x 40.5–47.3 / y 51.3–69.8, J4 at x 47.8–54.6 / y 53.8–67.3. R49/R50 (the GPS series
+  resistors) stayed between the Pico rows, so GPS_TX_EXT/RX_EXT run across.
+- **Around them:** F3 and C32 sit under A2's edge (F3's pads clear it by 1 mm) and U12 sits over A2
+  (SMD only there). F2 sits right above the resistor row, R55 below J4, C16 beside U7, and
+  R39/R57/R56 are stacked above R47.
+- **J18** (underside) has its pins at (45.49, 75.25) and (49.45, 75.25), under the gap between J1
+  and the resistor row. It's the only underside spot with no top through-hole leads inside its body.
+- **MH3/MH4** are in the new bottom corners at y 91.8. SW2 moved above the right Pi standoff
+  (y 56.2–65.8) and SW1 into SW2's old spot, which leaves room for MH3. The Picos' USB ends now
+  sit at the bottom edge.
+- **Copper:** everything that touched a moved part was re-routed. Freerouting did most of it; the
+  maze router did CH4_SDA/SCL, IMU_BOOTN, +15V to A1, J18 to D13 and the two reset links.
+  Tracks went 4105 → 4439 mm and vias 119 → 141.
 
 ### Copper you can't see from the top
 
@@ -80,8 +108,10 @@ through-hole pad (a placement search, `fpsearch.py` in the rev F pipeline, check
 - The +VELEC trunk (B.Cu) now jogs from (16.16, 27.64) to D12's anode, and D12's cathode returns to
   (18.68, 39.51) under the GND via at (17.5, 33.7) and round D8. From there down to A2's VIN pins it
   is +VLOGIC.
-- J18's +VBACKUP runs on B.Cu up to two vias at (26.0, 62.6) and (26.0, 63.9), then on top to D13.
-- The In2 +5V zone has a strip under both Picos' USB ends for D10/D11.
+- J18's +VBACKUP is one 1.0 mm top-side track from J18 pin 2, over A2, to D13 (no vias).
+- The In2 +5V zone has a strip under both Picos' USB ends for D10/D11. Since the condensing, its
+  notch over A1 ends at y 72 (A1 pin 2 is +3V3), and the old F3 block (x 34–56, y 76–86.5) is
+  +3V3 again (R55), with a tab left for C32's +5V pad.
 
 ### Locked copper: keep it if you re-route
 
@@ -91,13 +121,15 @@ through-hole pad (a placement search, `fpsearch.py` in the rev F pipeline, check
 - U2's A0/A1 GND via.
 - The PICO_B_RUN lane past the right Pi standoff.
 - Rev D's fan-outs at U4, U7, U8, U10, U11 and U13.
-- The hand-routed (maze) runs of IMU_INT, CH4_SDA/SCL, CH6_SDA, INA_ALERT and STEP_EN.
+- The hand-routed (maze) runs of IMU_INT, CH4_SDA/SCL, CH6_SDA, INA_ALERT and IMU_BOOTN. STEP_EN
+  is router copper since the condensing.
 - The whole Pi link: PI_TX, PI_RX, PICO_A_TX, PICO_A_RX, PI_RST_A/B, Q3/Q4's GND vias and their
   drain runs to PICO_A_RUN and PICO_B_RUN.
 - CAN_TX, re-routed round R66/R67.
 - Rev F's hand-placed power runs: the +VELEC jog to D12 and the +VLOGIC return, C1 to U15's VIN,
-  U15's +15V to C25 (B.Cu down x 9.4) and up the left edge to the In2 via, and J18 to D13. They thread
-  between through-hole pads with about 0.3 mm to spare, so a router won't find them again.
+  U15's +15V to C25 (B.Cu down x 9.4), C25 to A1's VMOT, up the left edge to the In2 via, and
+  J18 to D13. They thread between through-hole pads with about 0.3 mm to spare, so a router won't
+  find them again. The condensing re-routed the reset buttons' links (maze) too.
 
 ## V3.1 starter carrier (rev A)
 

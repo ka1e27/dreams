@@ -34,7 +34,8 @@
 > **Updated 2026-10-14 (rev F, 10S power):** the carrier now runs from 10S Li-ion. New: 1× Pololu D36V6F15
 > (U15, `Pololu_D36V6F5`), 2× Diodes Inc. B360B (D12, D13, `D_SMB`), 1× JST-VH 2-pin (J18, the 4S backup).
 > Changed: D3/D4 SMBJ24A → SMBJ43A, Q1 IPP120P04P4L-03 → Vishay SUP90P06-09L, C1/C2/C26 → 100 µF 63 V,
-> R60 10k → 22k. The 12S, M18 and 15–21 V figures below are rev E and earlier.
+> R60 10k → 22k. Removed the same day: the BMP390 breakout (U6), since depth comes from the sonar.
+> The 12S, M18 and 15–21 V figures below are rev E and earlier.
 >
 > **Updated 2026-10-13 (rev E):** the Teensy 4.1 below was replaced by two Raspberry Pi Pico 2s. Fit:
 > 2× Raspberry Pi Pico 2 (the H version has the headers on), 4× 1×20 female header, 8.5 mm (one pair

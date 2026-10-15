@@ -40,7 +40,7 @@ def figure(with_legend):
     fig = (
         '      <figure class="annotated reveal">\n'
         '        <div class="board-top">\n'
-        '          <picture><source type="image/webp" srcset="media/v3-carrier-top.webp"><img src="media/v3-carrier-top.png" alt="Top view of the D.R.E.A.M.S V3 carrier board, rev F, with numbered callouts" width="1800" height="1399" loading="lazy"></picture>\n'
+        '          <picture><source type="image/webp" srcset="media/v3-carrier-top.webp"><img src="media/v3-carrier-top.png" alt="Top view of the D.R.E.A.M.S V3 carrier board, rev F, with numbered callouts" width="1800" height="1316" loading="lazy"></picture>\n'
         f'          <ol class="pins" aria-label="Board callouts">{pins}</ol>\n'
         '        </div>\n'
         '        <figcaption class="label board-cap">V3 carrier board · rev F · top view · tap a number</figcaption>\n'

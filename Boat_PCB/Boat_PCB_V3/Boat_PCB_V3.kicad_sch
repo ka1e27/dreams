@@ -691,336 +691,6 @@
 				)
 				(embedded_fonts no)
 			)
-		(symbol "dreams_v3:BMP390"
-			(pin_names
-				(offset 1.016)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "U"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Value" "BMP390"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Footprint" "dreams_v3:BMP390"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "BMP390 barometric pressure BREAKOUT BOARD (not the bare chip) - 8-pin 2.54mm THT header: VIN 3V0 GND SCL SDO SDA CS INT. Carries a BMP390/BMP390L die; same I2C registers either way."
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "MF" "Bosch Sensortec"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Package" "WFLGA-10 Bosch Sensortec"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Price" "None"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "SnapEDA_Link" "https://www.snapeda.com/parts/BMP390/Bosch/view-part/?ref=snap"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "MP" "BMP390"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Purchase-URL" "https://www.snapeda.com/api/url_track_click_mouser/?unipart_id=6293781&manufacturer=Bosch Sensortec&part_name=BMP390&search_term=bmp390"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Availability" "In Stock"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(property "Check_prices" "https://www.snapeda.com/parts/BMP390/Bosch/view-part/?ref=eda"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(justify bottom)
-				)
-			)
-			(symbol "BMP390_0_0"
-				(rectangle
-					(start -38.1 -7.62)
-					(end 12.7 27.94)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type background)
-					)
-				)
-				(text "BMP390"
-					(at -25.4 17.78 0)
-					(effects
-						(font
-							(size 5.08 5.08)
-						)
-						(justify left bottom)
-					)
-				)
-				(pin bidirectional line
-					(at -25.4 -12.7 90)
-					(length 5.08)
-					(name "3V0"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "3V0"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -12.7 90)
-					(length 5.08)
-					(name "CS"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "CS"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin power_in line
-					(at -20.32 -12.7 90)
-					(length 5.08)
-					(name "GND"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "GND"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin bidirectional line
-					(at 5.08 -12.7 90)
-					(length 5.08)
-					(name "INT"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "INT"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin bidirectional line
-					(at -15.24 -12.7 90)
-					(length 5.08)
-					(name "SCL"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "SCL"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin bidirectional line
-					(at -5.08 -12.7 90)
-					(length 5.08)
-					(name "SDA"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "SDA"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at -10.16 -12.7 90)
-					(length 5.08)
-					(name "SDO"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "SDO"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-				(pin power_in line
-					(at -30.48 -12.7 90)
-					(length 5.08)
-					(name "VIN"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-					(number "VIN"
-						(effects
-							(font
-								(size 1.016 1.016)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "dreams_v3:BNO085"
 				(pin_names
 					(offset 1.016)
@@ -13385,7 +13055,7 @@
 		)
 		(uuid "adfa4f49-cc42-4e7f-bd7b-11f29030fea5")
 	)
-	(text "I2C PULL-UPS  -  4.7k pair on every used TCA9548A channel except CH2, where the BMP390 breakout (U6) has its own (a mux isolates the channels, so the upstream pair does not serve them)"
+	(text "I2C PULL-UPS  -  4.7k pair on every used TCA9548A channel (a mux isolates the channels, so the upstream pair does not serve them). CH2 is free: the BMP390 (U6) came off in rev F"
 		(exclude_from_sim no)
 		(at 15.00 543.76 0)
 		(effects
@@ -14264,92 +13934,6 @@
 			(project "Boat_PCB_V3"
 				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
 					(reference "U5")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "dreams_v3:BMP390")
-		(at 163.83 184.15 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "8b8c0207-817b-4fa9-b0ac-641287fca901")
-		(property "Reference" "U6"
-			(at 125.73 152.21 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Value" "BMP390 breakout"
-			(at 125.73 200.35 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Footprint" "dreams_v3:BMP390"
-			(at 125.73 184.15 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(property "Datasheet" ""
-			(at 125.73 184.15 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
-			)
-		)
-		(pin "3V0"
-			(uuid "a1134e09-c227-40e7-8c20-2f8810e282c3")
-		)
-		(pin "CS"
-			(uuid "99b51c51-2ee1-47da-bde0-fccefac24101")
-		)
-		(pin "GND"
-			(uuid "fcd0d00b-8122-401a-9f48-5974b373ed7a")
-		)
-		(pin "INT"
-			(uuid "80b7800e-e44c-413f-9c72-78c38094e44e")
-		)
-		(pin "SCL"
-			(uuid "e5afc501-bd98-498d-8c7e-1d3b0d6d0831")
-		)
-		(pin "SDA"
-			(uuid "c79229c8-d00a-4dca-a23d-90031d3f9f30")
-		)
-		(pin "SDO"
-			(uuid "6d4816fc-a6f3-4de3-bc2d-343a5aa42b47")
-		)
-		(pin "VIN"
-			(uuid "4a76ca97-58f7-4db3-b5bd-ee0ca7db87ea")
-		)
-		(instances
-			(project "Boat_PCB_V3"
-				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
-					(reference "U6")
 					(unit 1)
 				)
 			)
@@ -20301,68 +19885,6 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 143.51 196.85 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "6f648271-f027-4c98-81d8-0c9be9d0f9db")
-		(property "Reference" "#PWR039"
-			(at 143.51 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "GND"
-			(at 143.51 199.85 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 143.51 196.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 143.51 196.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "66a04ac3-e493-472b-925a-0322dfd4dd26")
-		)
-		(instances
-			(project "Boat_PCB_V3"
-				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
-					(reference "#PWR039")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:GND")
 		(at 143.51 359.41 270)
 		(unit 1)
 		(body_style 1)
@@ -21596,68 +21118,6 @@
 			(project "Boat_PCB_V3"
 				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
 					(reference "#PWR059")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:+3V3")
-		(at 133.35 196.85 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "f5a51179-1b37-465b-8077-4e6ba1d492a1")
-		(property "Reference" "#PWR060"
-			(at 133.35 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 133.35 199.85 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 133.35 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 133.35 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "3c5eab5b-d4bc-45fe-87bd-0b1605730ef8")
-		)
-		(instances
-			(project "Boat_PCB_V3"
-				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
-					(reference "#PWR060")
 					(unit 1)
 				)
 			)
@@ -24113,28 +23573,6 @@
 		)
 		(uuid "1b2c7f93-6a07-4209-9688-48e688145f0f")
 	)
-	(label "CH2_SDA"
-		(at 128.27 48.26 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "fbe0a5b1-7594-43d4-bbcb-43edbdea5f76")
-	)
-	(label "CH2_SCL"
-		(at 128.27 45.72 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "4982c417-de32-4140-b5d4-ff4b5d46a11f")
-	)
 	(label "CH3_SDA"
 		(at 128.27 53.34 0)
 		(fields_autoplaced yes)
@@ -25999,163 +25437,6 @@
 			(justify left bottom)
 		)
 		(uuid "c94f6781-500d-420e-ae01-c7e7a24d10a6")
-	)
-	(label "CH2_SDA"
-		(at 158.75 196.85 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "ad0c24a6-a9de-43be-ae0d-9b135f4c3a5e")
-	)
-	(label "CH2_SCL"
-		(at 148.59 196.85 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "0933ef8d-69c3-4d13-a7f3-fc93d7943151")
-	)
-	(symbol
-		(lib_id "power:+3V3")
-		(at 163.83 196.85 180)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "a47d628d-0f52-49c5-926f-7e6bb1788268")
-		(property "Reference" "#PWR121"
-			(at 163.83 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "+3V3"
-			(at 163.83 199.85 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 163.83 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 163.83 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "30c16065-f2a3-4352-835f-28397d700287")
-		)
-		(instances
-			(project "Boat_PCB_V3"
-				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
-					(reference "#PWR121")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 153.67 196.85 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "66a20aea-6db8-482b-b90d-b59254346cc5")
-		(property "Reference" "#PWR122"
-			(at 153.67 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "GND"
-			(at 153.67 199.85 0)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 153.67 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 153.67 193.85 0)
-			(hide yes)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "c815e835-70a1-4d7a-b43d-a587741f3271")
-		)
-		(instances
-			(project "Boat_PCB_V3"
-				(path "/65fc2e28-ff07-41a4-bcb4-f0a408ab31ad"
-					(reference "#PWR122")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(label "BMP_INT"
-		(at 168.91 196.85 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "e23b4674-def8-4ea5-a048-87dd3c33099c")
 	)
 	(label "CH3_SDA"
 		(at 187.96 172.72 0)
@@ -35611,10 +34892,6 @@
 		(at 177.80 45.72)
 		(uuid "bd6312e1-db17-4cf9-b552-f4b7deab0c78")
 	)
-	(no_connect
-		(at 138.43 196.85)
-		(uuid "e83b1bab-d96d-411b-8fd0-64ce7fd97fdd")
-	)
 	(label "TETHER_A"
 		(at 589.28 62.23 180)
 		(fields_autoplaced yes)
@@ -36758,17 +36035,6 @@
 		)
 		(uuid "1f8662dc-f1d0-50c3-93f3-0a67a448f12f")
 	)
-	(label "BMP_INT"
-		(at 937.26 120.65 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right bottom)
-		)
-		(uuid "a7c8e30c-afff-5c28-8ca8-c5c0b1e67a3d")
-	)
 	(label "INA_ALERT"
 		(at 937.26 123.19 180)
 		(fields_autoplaced yes)
@@ -37883,7 +37149,7 @@
 				)
 			)
 		)
-		(property "Description" "Pico B, sensor MCU: Raspberry Pi Pico 2 (RP2350) on two 1x20 sockets under the carrier, C++ (Arduino-Pico or the Pico SDK), USB cable to the Pi. GP4/GP5 GPS (UART1), GP6 BMP390 INT, GP7 INA228 ALERT, GP8/GP9 BNO085 INT/RST, GP10/GP11 link to Pico A (PIO UART), GP12/GP13 I2C0 to the TCA9548A, GP14 mux reset, GP16/GP17 pod RS-485 (UART0, through U13), GP18 RS-485 DE, GP19/GP20 ADXL375 INT1/INT2. Its own 3V3 pin stays unconnected: Pico A's 3V3 feeds the board rail, and two regulator outputs are never tied. VSYS through D11."
+		(property "Description" "Pico B, sensor MCU: Raspberry Pi Pico 2 (RP2350) on two 1x20 sockets under the carrier, C++ (Arduino-Pico or the Pico SDK), USB cable to the Pi. GP4/GP5 GPS (UART1), GP7 INA228 ALERT, GP8/GP9 BNO085 INT/RST, GP10/GP11 link to Pico A (PIO UART), GP12/GP13 I2C0 to the TCA9548A, GP14 mux reset, GP16/GP17 pod RS-485 (UART0, through U13), GP18 RS-485 DE, GP19/GP20 ADXL375 INT1/INT2. Its own 3V3 pin stays unconnected: Pico A's 3V3 feeds the board rail, and two regulator outputs are never tied. VSYS through D11."
 			(at 960.12 120.65 0)
 			(hide yes)
 			(do_not_autoplace no)
@@ -39976,6 +39242,18 @@
 			(justify left top)
 		)
 		(uuid "2fc0815e-8f75-58ca-99b8-8b2f2c31a160")
+	)
+	(no_connect
+		(at 128.27 45.72)
+		(uuid "039a04d4-4710-5701-8ccf-2ad5de170d0f")
+	)
+	(no_connect
+		(at 128.27 48.26)
+		(uuid "28ebde75-9126-5359-8a2d-743ee307dead")
+	)
+	(no_connect
+		(at 937.26 120.65)
+		(uuid "adafa6bf-27f8-58e3-9f89-7813c298040d")
 	)
 	(sheet_instances
 		(path "/"

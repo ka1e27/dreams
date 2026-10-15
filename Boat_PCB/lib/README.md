@@ -45,8 +45,8 @@ It lived in `Boat_PCB_V3/lib/` until 2026-10-14.
 - `Pololu_D36V50F5`'s pin-name texts are keep-upright. At 270° that flips them onto the pads, so the
   V3.1 board turns keep-upright off on its own copy; the library is unchanged.
 
-The board is **fully placed and routed**: 126 footprints on a 130.6 × 101.5 mm 4-layer board (rev D,
-2026-09-28).
+The board is **fully placed and routed**: 140 footprints on a 130.6 × 95.5 mm 4-layer board (rev F,
+condensed 2026-10-15).
 
 See [`../../../docs/v3/V3_DESIGN_BRIEF.md`](../../../docs/v3/V3_DESIGN_BRIEF.md) for the decisions,
 the current budget and the layout traps found the hard way on the first attempt.
@@ -140,7 +140,7 @@ Also present, not targeted by any symbol: `D_SOD-123` (schottky), plus two alter
 
 ## Read these before laying out
 
-**`BMP390` is a BREAKOUT BOARD, not the bare chip.** 8 through-hole pads on 2.54 mm pitch —
+**`BMP390` is a BREAKOUT BOARD, not the bare chip.** No board uses it since carrier rev F (2026-10-14); the note stays for reuse. 8 through-hole pads on 2.54 mm pitch —
 VIN · 3V0 · GND · SCL · SDO · SDA · CS · INT — body about 23.5 × 14 mm. SnapEDA labels its
 Description "10-WFLGA", which is the *chip's* package and is misleading. **This part is not on the
 stencil/hot-air list** that `V3_PCB_SESSION_CONTEXT.md` puts it on. If you switch to direct-solder

@@ -51,7 +51,7 @@ Raspberry Pi 5 ─ navigation, mission logic, CV, cloud link      Python (not ye
   │    ├─ STEP/DIR ─────────► A4988 radar-bar stepper
   │    └─ GPIO / ADC ───────► WS2812 status LED · hull leak L/R · 10S pack divider
   ├─ Pico B (U14, Pico 2) ─ sensors                             C++ (not yet written)
-  │    ├─ I²C0 via TCA9548A ─► SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
+  │    ├─ I²C0 via TCA9548A ─► SHT45 ×2, BNO085, ADXL375, BH1750, INA228 ×2; GPS compass on ch 7
   │    ├─ UART1 ────────────► GPS (M10-25Q)
   │    └─ RS-485 (UART0) ───► pod tether (XIAO ESP32-S3, own board), through U13
   └─ Pico A ↔ Pico B: a UART link (A's UART1, B's PIO UART); Pico B reaches the Pi through it
@@ -219,7 +219,6 @@ Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the re
 | Pin | Use |
 |---|---|
 | GP4 / GP5 | GPS (UART1 TX / RX) |
-| GP6 | BMP390 INT |
 | GP7 | INA228 ALERT |
 | GP8 / GP9 | BNO085 INT / RST |
 | GP10 / GP11 | Pico A link TX / RX (PIO UART) |
@@ -228,7 +227,7 @@ Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the re
 | GP16 / GP17 | Pod RS-485 (UART0) |
 | GP18 | RS-485 DE |
 | GP19 / GP20 | ADXL375 INT1 / INT2 |
-| Free | Its ADC pins, and GP0–GP3, GP15, GP21, GP22 |
+| Free | Its ADC pins, and GP0–GP3, GP6, GP15, GP21, GP22 |
 
 ### 5.4 Buses and sensing
 
@@ -257,8 +256,8 @@ Pico's BOOTSEL and tap its reset for the UF2 bootloader (the Pi can pulse the re
 ### 5.5 Mounting
 
 Each Pico hangs about 15 mm under the carrier on its sockets, more with a USB plug in, so mount the
-carrier at least 20 mm off its base. The Picos' USB ends face the board's bottom edge, under the Pi's
-USB ports: plug in a short right-angle micro-USB cable when you need one.
+carrier at least 20 mm off its base. The Picos' USB ends sit at the board's bottom edge, under the
+Pi's USB ports: plug in a short right-angle micro-USB cable when you need one.
 
 ## 6. V3.1 starter carrier: firmware reference
 

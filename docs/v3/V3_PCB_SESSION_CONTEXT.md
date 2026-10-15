@@ -19,6 +19,8 @@
 >   - The link is one RS-485 pair, not a raw UART.
 >   - The sensor set is a DFRobot test-phase list.
 >   - See [`V3_DESIGN_BRIEF.md`](V3_DESIGN_BRIEF.md) §5 and `Boat_PCB/Pod_PCB_V3/`.
+> - **The BMP390 below came off in rev F (2026-10-14).** Its surface baseline for the pod's pressure depth isn't
+>   needed: depth comes from the fish-finder sonar.
 > - **The Teensy below is superseded (2026-10-13).** Rev E of the carrier runs two Raspberry Pi
 >   Pico 2s instead: Pico A for control (CAN on the PIO, SBUS, winch, stepper, LED, leak, pack ADC),
 >   Pico B for sensors (the I²C mux, GPS, the pod RS-485). So the Teensy concurrency model (1) no

@@ -9,7 +9,7 @@
     ],
     "side": "bottom",
     "x": 0.8652,
-    "y": 0.6305
+    "y": 0.6701
   },
   {
     "id": "pi5",
@@ -20,7 +20,7 @@
     ],
     "side": "top",
     "x": 0.5923,
-    "y": 0.397
+    "y": 0.4219
   },
   {
     "id": "can",
@@ -33,19 +33,19 @@
     ],
     "side": "top",
     "x": 0.6681,
-    "y": 0.1182
+    "y": 0.1256
   },
   {
     "id": "mux",
     "label": "I²C sensor multiplexer",
-    "detail": "TCA9548A splits one I²C bus into 8 channels: IMU, accelerometer, barometer, light sensor, two humidity sensors, power monitors, GPS compass.",
+    "detail": "TCA9548A splits one I²C bus into 8 channels: IMU, accelerometer, light sensor, two humidity sensors, power monitors, GPS compass.",
     "refs": [
       "U2",
       "J4"
     ],
     "side": "top",
     "x": 0.7531,
-    "y": 0.5086
+    "y": 0.5406
   },
   {
     "id": "pod-link",
@@ -57,7 +57,7 @@
     ],
     "side": "top",
     "x": 0.9153,
-    "y": 0.1547
+    "y": 0.1644
   },
   {
     "id": "gps",
@@ -67,8 +67,8 @@
       "J1"
     ],
     "side": "top",
-    "x": 0.7575,
-    "y": 0.9606
+    "x": 0.3361,
+    "y": 0.6335
   },
   {
     "id": "sbus",
@@ -79,8 +79,8 @@
       "F3"
     ],
     "side": "top",
-    "x": 0.3199,
-    "y": 0.9606
+    "x": 0.3201,
+    "y": 0.9571
   },
   {
     "id": "power-in",
@@ -93,7 +93,7 @@
     ],
     "side": "top",
     "x": 0.1627,
-    "y": 0.0601
+    "y": 0.0639
   },
   {
     "id": "power-monitors",
@@ -107,7 +107,7 @@
     ],
     "side": "top",
     "x": 0.1053,
-    "y": 0.2044
+    "y": 0.2172
   },
   {
     "id": "winch-kill",
@@ -120,7 +120,7 @@
     ],
     "side": "top",
     "x": 0.356,
-    "y": 0.1734
+    "y": 0.1843
   },
   {
     "id": "backup",
@@ -131,7 +131,7 @@
       "D13"
     ],
     "side": "bottom",
-    "x": 0.2718,
-    "y": 0.798
+    "x": 0.3637,
+    "y": 0.7885
   }
 ]
