@@ -19,7 +19,7 @@ blow-by-blow, run `git show v2-final:docs/v3/v3_review_2026-08-05.md`.
 | Drive | **VESCs as CAN nodes** (IDs 1, 2) via **TJA1051T/3** | No MCP2515: CAN runs on Pico A's PIO (can2040). The /3 part keeps the logic side at 3.3 V |
 | Packs | **Two 10S 10 Ah Li-ion in parallel**: one 10S bus (30–42 V) for the drives, electronics and winch. Optional **4S backup** on J18 | Rev F (2026-10-14). Kyle's pick: one pack type for V3.1 and V3. The drive side is voltage-sense only (see §3). The backup only keeps the 5 V side up (Pi, Picos, sensors, radios) while the 10S bus is off |
 | Pod | **Seeed XIAO ESP32-S3** on its **own board** | Moved off the carrier; tether is one **RS-485 pair** + 2× power. The link runs half duplex through a ±70 V fault-protected THVD2410 (U13). The power pair carries **15 V** from U15 through F1 (since rev F), and the pod makes its own 5 V |
-| Sensors | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on Pico B's I²C0 |
+| Sensors | SHT45 ×2, BNO085, ADXL375, BH1750, 2× INA228 | All behind a **TCA9548A** mux on Pico B's I²C0. The BMP390 came off in rev F (2026-10-14): its one job, a surface baseline for the pod's pressure depth, went when depth moved to the sonar. Mux CH2 and Pico B GP6 are free |
 | Power | **One 10S bus, three fused feeds** — drive (off-board) / electronics (J13) / winch (J14) | Per-pack BMS protection; fusing is off-board. On the board: 43 V TVSs (D3, D4), a -60 V winch P-FET (Q1), 63 V bulk caps, U15 (Pololu D36V6F15) for +15V, and the D12/D13 diode-OR into the 5 V buck |
 | Winch kill | **High-side P-FET, fail-safe OFF** | Gate pulled to source by R34; de-energised = open |
 | Passives | **THT** | Reworkability, by builder preference |
@@ -43,7 +43,7 @@ k = 0.048 external, **0.024 internal**.
 | Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
 | Electronics feed (J13, 10S) | 5 A fuse; real load ≈ **1 A** | Pololu D36V50F5 buck (through D12) + U15 (A4988 stepper and pod) |
 | `+15V` rail | **0.6 A** | U15's ceiling: the pod takes ≈ 0.13 A, so the stepper gets ≈ 0.45 A |
-| 4S backup (J18) | ≈ **2.3 A** worst case | The D36V50F5 at full load from 12 V, through D13 (B360B, 3 A) and two vias |
+| 4S backup (J18) | ≈ **2.3 A** worst case | The D36V50F5 at full load from 12 V, through D13 (B360B, 3 A) and one 1 mm top-side track, no vias |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
 | `+3V3` rail | **0.3 A** | Pico A's 3V3 pin (the RT6150 on the Pico, shared with the RP2350 itself) |
 | Pod branch (F1) | **0.40 A hold**, fed from `+15V` | Bel Fuse 0ZRE0040FF1A PTC. At 15 V the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short. The feed runs on In2: 0.8 mm along the top edge, ≈ 0.6 A at a 10 °C rise on 0.5 oz. Since rev F it carries U15's +15V, not the pack |

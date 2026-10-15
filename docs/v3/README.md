@@ -11,7 +11,7 @@ bridge and drive design is in `V3_MECHANICAL.md`.
 | [`V3_MECHANICAL.md`](V3_MECHANICAL.md) | Matthew's rev E hull, bridge and outdrive proposal (940 mm hulls) (the design tools are in `mechanical/`): what's decided, the numbers, the sampling plan, open questions, and which newer decisions override it |
 | [`V3_PCB_SESSION_CONTEXT.md`](V3_PCB_SESSION_CONTEXT.md) | Design intent from the August 2026 planning session, and what it left open |
 | [`DREAMS_V3_parts_footprints.md`](DREAMS_V3_parts_footprints.md) | The BOM as planned, with sourcing links |
-| [`../../Boat_PCB/lib/README.md`](../../Boat_PCB/lib/README.md) | Per-part warnings for the project library: the BMP390 breakout, the ADXL375 pinout, the BNO085 straps |
+| [`../../Boat_PCB/lib/README.md`](../../Boat_PCB/lib/README.md) | Per-part warnings for the project library: the ADXL375 pinout, the BNO085 straps, the (now unused) BMP390 breakout |
 
 The two planning files were written outside this repo. They are stored verbatim under a scope note.
 If they disagree with the brief or the KiCad files, the brief and the KiCad files win.
@@ -42,7 +42,7 @@ someone. These are two different boats, not discrepancies to fix.
 | Drive | Direct servo PWM to AM32/BLHeli ESCs | VESCs as CAN nodes (IDs 1 and 2) via TJA1051, no MCP2515 |
 | Packs | Milwaukee M18 | Two 10S 10 Ah Li-ion in parallel, one bus for drive, electronics and winch (rev F); optional 4S backup for the 5 V side |
 | Pod | RP2040 Pico, UART through a slip ring | XIAO ESP32-S3 on its own board (`Boat_PCB/Pod_PCB_V3/`); the tether is one RS-485 pair plus 15 V from the carrier's U15 |
-| Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, BMP390, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
+| Sensors | SHT41 ×2, BNO085 | SHT45 ×2, BNO085, ADXL375, BH1750, INA228 ×2, all behind a TCA9548A |
 | Pack voltage | 56k/10k (×6.6) dividers into the Pico's ADC | Electronics and winch feeds through the INA228s; the 10S bus through J11 and one 220k/13k, 1 % divider into Pico A's ADC0 |
 | Pi 5 GPIO | Drove the radar-bar stepper | Carries +5 V, a UART to Pico A and a reset line to each Pico; the stepper moved to Pico A |
 
