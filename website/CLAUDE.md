@@ -1,6 +1,6 @@
 # D.R.E.A.M.S website: notes for Claude Code sessions
 
-Static site for the D.R.E.A.M.S autonomous survey boat. It lives in the `website/` folder of the D.R.E.A.M.S repo (ka1e27/dreams), and paths below are relative to `website/`. It's live at https://ka1e27.github.io/dreams/: the "Deploy website" GitHub Actions workflow publishes `website/` whenever a push to `main` changes it. Team: Kyle Tran and Matthew Hong (co-founders), Nolan Ting and Caleb Kong. Kyle and Matthew both push to this repo.
+Static site for the D.R.E.A.M.S autonomous survey boat. It lives in the `website/` folder of the D.R.E.A.M.S repo (ka1e27/dreams), and paths below are relative to `website/`. It's live at https://ka1e27.github.io/dreams/: the "Deploy website" GitHub Actions workflow publishes `website/` whenever a push to `main` changes it. Team: Kyle Tran and Matthew Hong (co-founders), Nolan Ting, Caleb Kong and Logan Chen (marketing). Kyle and Matthew both push to this repo.
 
 **The repo-wide rules in the root `CLAUDE.md` apply to every change here.** Two matter most for the site: what must never be published (§4.1), because everything here is public the moment it's pushed, and the weekly update every session adds (§4.2). This file covers only how the site works.
 
