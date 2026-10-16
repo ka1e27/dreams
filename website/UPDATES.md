@@ -23,6 +23,7 @@ HOW TO ADD AN UPDATE (anyone on the team, or a Claude Code session)
 - **Kyle:** Designed a new PCB, V3.1, to get the boat on the water before the full V3 board and to try out the Pico-based electronics planned for it. It pairs the Raspberry Pi 5 with a Raspberry Pi Pico 2 in place of the Teensy, runs from one 10S Li-ion pack, and has CAN for the motor controllers, RC control, GPS and hull leak sensors. Then moved the full V3 board to two Pico 2s as well: one runs the motors, winch and RC, the other the sensors, GPS and the pod link. They talk to the Pi over its GPIO pins, so its USB ports stay free for cameras. All three boards now share one KiCad parts library, and each board's layout rules are written up beside it. The full V3 board now runs from two 10S Li-ion packs as well, with an optional small backup battery that keeps the computers on if the main packs go off. Then dropped its barometer (the sonar gives depth) and shrank it to 122.1 × 95.5 mm, with every cable connector on an edge.
 - **Kyle:** Gave every week on the website's Updates page its own page, with the full story and photos.
 - **Kyle:** Picked the drive motors: two Flipsky 5048 200 KV sensored outrunners, each on a Flipsky VESC-based controller that talks to the boat's board over CAN.
+- **Kyle:** Logan Chen joined the team to run our marketing.
 - **Matthew:** Put the V3 boat's SolidWorks model on the Boat page in 3D: spin it, take it apart and slice through the hulls and bridge.
 
 ## Week of Oct 5, 2026
