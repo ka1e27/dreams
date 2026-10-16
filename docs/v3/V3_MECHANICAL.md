@@ -39,7 +39,7 @@ tether). Carrier rev F (2026-10-14, Kyle's picks) fixes that:
   caps.
 - **+15V from U15** (Pololu D36V6F15) for the A4988 stepper (which tops out at 35 V) and, through F1,
   the pod tether. 600 mA in all, so the stepper gets about 0.45 A.
-- **Optional 4S backup on J18** (underside, plug from below), diode-ORed with the 10S rail into the
+- **Optional 4S backup on J18** (top side, left edge), diode-ORed with the 10S rail into the
   5 V buck. It only keeps the Pi, Picos, sensors and radios up while the 10S bus is off.
 
 The details are in `Boat_PCB/CLAUDE.md` and `docs/v3/V3_DESIGN_BRIEF.md`.

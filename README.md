@@ -23,7 +23,7 @@ attempt hit.
 
 | Board | Folder | What it is |
 |---|---|---|
-| **V3 carrier** (rev F) | [`Boat_PCB/Boat_PCB_V3/`](Boat_PCB/Boat_PCB_V3/) | The main board: Pi 5 and two Pico 2s, running from 10S Li-ion. 130.6 × 95.5 mm, 4 layers (JLC04161H-7628, 1 oz outer / 0.5 oz inner, ENIG), 140 footprints, fully routed |
+| **V3 carrier** (rev F) | [`Boat_PCB/Boat_PCB_V3/`](Boat_PCB/Boat_PCB_V3/) | The main board: Pi 5 and two Pico 2s, running from 10S Li-ion. 122.1 × 95.5 mm, 4 layers (JLC04161H-7628, 1 oz outer / 0.5 oz inner, ENIG), 140 footprints, fully routed |
 | **V3.1 starter carrier** (2026-10-10) | [`Boat_PCB/Boat_PCB_V3_1/`](Boat_PCB/Boat_PCB_V3_1/) | An interim board to get the boat moving before the full carrier. It keeps the Pi 5 and the 5 V buck, uses one Raspberry Pi Pico 2 instead of the full board's two, and runs from one 10S Li-ion pack. CAN chain for the VESCs, RC input, GPS, an on-board SHT41, a Qwiic port for the TMP119, hull leak probes, ESC headers and the pod tether, on a 98 × 67 mm 2-layer board. See [`docs/v3/V3_1_STARTER_CARRIER.md`](docs/v3/V3_1_STARTER_CARRIER.md) |
 | **Pod** | [`Boat_PCB/Pod_PCB_V3/`](Boat_PCB/Pod_PCB_V3/) | A Seeed XIAO ESP32-S3 on its own board, on the winch tether |
 | Shared library | [`Boat_PCB/lib/`](Boat_PCB/lib/) | The `dreams_v3` KiCad library all three boards use |

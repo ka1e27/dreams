@@ -36,7 +36,7 @@ What exists is the V3 hardware design and the knowledge behind it. The software 
 | **Pod** | The pod board (`Pod_PCB_V3`): a XIAO ESP32-S3 on the winch tether |
 | **Pico A, Pico B** | The carrier's control MCU (U1) and sensor MCU (U14), both Raspberry Pi Pico 2 (RP2350) |
 | **10S bus** | Two 10S 10 Ah Li-ion packs in parallel (30–42 V). It feeds the drives (off-board), the electronics (J13) and the winch (J14, through the P-FET kill) |
-| **4S backup** | An optional 4S Li-ion pack on J18 (underside). It only keeps the 5 V side up (Pi, Picos, sensors, radios) while the 10S bus is off |
+| **4S backup** | An optional 4S Li-ion pack on J18 (left edge). It only keeps the 5 V side up (Pi, Picos, sensors, radios) while the 10S bus is off |
 | **+15V** | U15's output: the A4988's motor supply and, through F1, the pod tether |
 
 The system, as the carrier wires it:
