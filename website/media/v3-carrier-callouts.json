@@ -8,8 +8,8 @@
       "U14"
     ],
     "side": "bottom",
-    "x": 0.8652,
-    "y": 0.6701
+    "x": 0.8559,
+    "y": 0.6702
   },
   {
     "id": "pi5",
@@ -19,7 +19,7 @@
       "J12"
     ],
     "side": "top",
-    "x": 0.5923,
+    "x": 0.5639,
     "y": 0.4219
   },
   {
@@ -32,8 +32,8 @@
       "JP1"
     ],
     "side": "top",
-    "x": 0.6681,
-    "y": 0.1256
+    "x": 0.645,
+    "y": 0.1257
   },
   {
     "id": "mux",
@@ -44,7 +44,7 @@
       "J4"
     ],
     "side": "top",
-    "x": 0.7531,
+    "x": 0.7359,
     "y": 0.5406
   },
   {
@@ -56,7 +56,7 @@
       "J2"
     ],
     "side": "top",
-    "x": 0.9153,
+    "x": 0.9094,
     "y": 0.1644
   },
   {
@@ -67,8 +67,8 @@
       "J1"
     ],
     "side": "top",
-    "x": 0.3361,
-    "y": 0.6335
+    "x": 0.9697,
+    "y": 0.2539
   },
   {
     "id": "sbus",
@@ -79,20 +79,20 @@
       "F3"
     ],
     "side": "top",
-    "x": 0.3201,
+    "x": 0.3301,
     "y": 0.9571
   },
   {
     "id": "power-in",
     "label": "Battery inputs",
-    "detail": "Two XT60 connectors take separate battery packs, one for the electronics and one for the winch. A 5 V buck regulator on the underside powers the Pi and Teensy.",
+    "detail": "Two XT60 connectors take the boat's 10S battery bus: one feed for the electronics, and one for the winch used in the later sample-collection stage. A 5 V buck regulator module on the left powers the Pi and both Picos.",
     "refs": [
       "J13",
       "J14",
       "A2"
     ],
     "side": "top",
-    "x": 0.1627,
+    "x": 0.174,
     "y": 0.0639
   },
   {
@@ -106,7 +106,7 @@
       "R33"
     ],
     "side": "top",
-    "x": 0.1053,
+    "x": 0.1126,
     "y": 0.2172
   },
   {
@@ -119,19 +119,19 @@
       "D9"
     ],
     "side": "top",
-    "x": 0.356,
+    "x": 0.3808,
     "y": 0.1843
   },
   {
     "id": "backup",
     "label": "Backup battery input",
-    "detail": "An optional small 4S battery plugs in on the underside. If the main packs go off, it keeps the Pi, both Picos and the radios running.",
+    "detail": "An optional small 4S battery plugs in at the board's left edge. If the main packs go off, it keeps the Pi, both Picos and the radios running.",
     "refs": [
       "J18",
       "D13"
     ],
-    "side": "bottom",
-    "x": 0.3637,
-    "y": 0.7885
+    "side": "top",
+    "x": 0.0418,
+    "y": 0.5037
   }
 ]

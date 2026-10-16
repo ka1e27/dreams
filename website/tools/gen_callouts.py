@@ -16,7 +16,7 @@ data = json.loads((SITE / "media" / "v3-carrier-callouts.json").read_text(encodi
 
 # Site-specific wording (V3 doesn't use the winch; the hardware stays for later sampling)
 DETAIL = {
-    "power-in": "Two XT60 connectors take the boat's 10S battery bus: one feed for the electronics, and one for the winch used in the later sample-collection stage. A 5 V buck regulator on the underside powers the Pi and both Picos.",
+    "power-in": "Two XT60 connectors take the boat's 10S battery bus: one feed for the electronics, and one for the winch used in the later sample-collection stage. A 5 V buck regulator module on the left powers the Pi and both Picos.",
     "power-monitors": "Two INA228 chips with shunt resistors measure voltage and current on the electronics and winch feeds.",
     "winch-kill": "A P-channel MOSFET switches power to the winch controller and fails safe: if the control Pico resets or loses power, the winch is off. Kept on the board for the later sample-collection stage.",
 }
@@ -40,7 +40,7 @@ def figure(with_legend):
     fig = (
         '      <figure class="annotated reveal">\n'
         '        <div class="board-top">\n'
-        '          <picture><source type="image/webp" srcset="media/v3-carrier-top.webp"><img src="media/v3-carrier-top.png" alt="Top view of the D.R.E.A.M.S V3 carrier board, rev F, with numbered callouts" width="1800" height="1316" loading="lazy"></picture>\n'
+        '          <picture><source type="image/webp" srcset="media/v3-carrier-top.webp"><img src="media/v3-carrier-top.png" alt="Top view of the D.R.E.A.M.S V3 carrier board, rev F, with numbered callouts" width="1800" height="1408" loading="lazy"></picture>\n'
         f'          <ol class="pins" aria-label="Board callouts">{pins}</ol>\n'
         '        </div>\n'
         '        <figcaption class="label board-cap">V3 carrier board · rev F · top view · tap a number</figcaption>\n'

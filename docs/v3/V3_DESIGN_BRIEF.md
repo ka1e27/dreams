@@ -43,7 +43,7 @@ k = 0.048 external, **0.024 internal**.
 | Winch | **20 A** | 20 A blade fuse, 14 AWG adapter (V2's `docs/battery_architecture.md`, at `v2-final`) |
 | Electronics feed (J13, 10S) | 5 A fuse; real load ≈ **1 A** | Pololu D36V50F5 buck (through D12) + U15 (A4988 stepper and pod) |
 | `+15V` rail | **0.6 A** | U15's ceiling: the pod takes ≈ 0.13 A, so the stepper gets ≈ 0.45 A |
-| 4S backup (J18) | ≈ **2.3 A** worst case | The D36V50F5 at full load from 12 V, through D13 (B360B, 3 A) and one 1 mm top-side track, no vias |
+| 4S backup (J18) | ≈ **2.3 A** worst case | The D36V50F5 at full load from 12 V, through D13 (B360B, 3 A) and a 1 mm track with one via |
 | `+5V` rail | **5.5 A** | The D36V50F5's ceiling |
 | `+3V3` rail | **0.3 A** | Pico A's 3V3 pin (the RT6150 on the Pico, shared with the RP2350 itself) |
 | Pod branch (F1) | **0.40 A hold**, fed from `+15V` | Bel Fuse 0ZRE0040FF1A PTC. At 15 V the pod draws ≈ 0.13 A, and the smaller part trips faster on a tether short. The feed runs on In2: 0.8 mm along the top edge, ≈ 0.6 A at a 10 °C rise on 0.5 oz. Since rev F it carries U15's +15V, not the pack |

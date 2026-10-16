@@ -382,5 +382,16 @@
 			(xyz 0 0 0)
 		)
 	)
+	(model "${KIPRJMOD}/../lib/dreams_v3.3dshapes/Pololu_D36V50F5_module.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
 	(embedded_fonts no)
 )

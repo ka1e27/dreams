@@ -48,7 +48,7 @@ ENTRIES = [
     ("v2", "V2 · Vision", "tested", "Stereo tracking on the bench", "Per-object depth from a stereo pair, with YOLOv8 detection.", "log-stereo", "Stereo camera rig on the test bench"),
     ("v2", "V2 · Software", "built", "Command-center dashboard", "Ran on the Pi 5. Now a live demo you can try.", "log-dashboard", "The V2 command-center dashboard"),
     ("v2", "V2 · Bench", "failed", "Bench testing", "Exposed flaws in motor control, power and safety. We redesigned the whole system.", None, "V2 → V3"),
-    ("v3", "V3 · Fall 2026", "designed", "Carrier board, rev F", "130.6 × 95.5 mm, 4 layers, 140 parts, fully routed.", "log-v3-carrier", "3D render of the V3 carrier board"),
+    ("v3", "V3 · Fall 2026", "designed", "Carrier board, rev F", "122.1 × 95.5 mm, 4 layers, 140 parts, fully routed.", "log-v3-carrier", "3D render of the V3 carrier board"),
     ("v3", "V3 · Fall 2026", "designed", "Sensor-pod board, rev B", "48 × 63 mm. Talks to the boat over an RS-485 tether.", "log-v3-pod", "3D render of the V3 sensor-pod board"),
     ("v3", "V3 · Hull", "incad", "Modular hull", "The new V3 hull, in CAD now.", None, "In CAD"),
     ("v3", "V3 · Software", "planned", "Firmware", "Autonomous waypoint navigation, surface sampling and depth logging.", None, "Next"),

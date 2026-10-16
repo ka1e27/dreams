@@ -5,7 +5,7 @@ no per-machine library setup. Assembled 2026-08-04 against **KiCad 10.0.5**.
 
 - `dreams_v3.kicad_sym` — **59 symbols**
 - `dreams_v3.pretty/` — **59 footprints**
-- `dreams_v3.3dshapes/` — 2 STEP models
+- `dreams_v3.3dshapes/` — 5 STEP models: 2 from SnapEDA and 3 simple stand-ins for the Pololu modules
 
 The carrier (`../Boat_PCB_V3/`), the pod (`../Pod_PCB_V3/`) and the V3.1 starter carrier
 (`../Boat_PCB_V3_1/`) all use it: each board's lib tables point here through `${KIPRJMOD}/../lib/`.
@@ -45,8 +45,8 @@ It lived in `Boat_PCB_V3/lib/` until 2026-10-14.
 - `Pololu_D36V50F5`'s pin-name texts are keep-upright. At 270° that flips them onto the pads, so the
   V3.1 board turns keep-upright off on its own copy; the library is unchanged.
 
-The board is **fully placed and routed**: 140 footprints on a 130.6 × 95.5 mm 4-layer board (rev F,
-condensed 2026-10-15).
+The board is **fully placed and routed**: 140 footprints on a 122.1 × 95.5 mm 4-layer board (rev F,
+narrowed 2026-10-15).
 
 See [`../../../docs/v3/V3_DESIGN_BRIEF.md`](../../../docs/v3/V3_DESIGN_BRIEF.md) for the decisions,
 the current budget and the layout traps found the hard way on the first attempt.
@@ -63,8 +63,9 @@ out" are all still current — those are the part worth keeping.
   top-view photo. The old footprint had the lone third M2 hole at the VOUT end (Pololu puts it at the
   EN/PG end) and its header rows 0.48 mm off the hole line. Mounted the natural way, with all three
   screws, that reversed the pinout end-for-end: VIN and VRP landed on GND and the pack drove backwards
-  through the regulator. The footprint is a top view; on the board it is flipped onto B.Cu for an
-  underside module fitted components-away.
+  through the regulator. The footprint is a top view. The carrier had it flipped onto B.Cu for an
+  underside module fitted components-away until 2026-10-15; it's on the top side now, unflipped,
+  module components up.
 - **`Conn_XT60_M18` pin numbering follows the XT60 convention:** pin 1 is the notched (chamfered)
   end, which is negative, and pin 2 is the flat end, which is positive. The molded + sits at the flat
   end. The old symbol had + on pin 1, which put + on the notched end of KiCad's AMASS footprints.
@@ -190,6 +191,7 @@ BOTTOM 6–15), identical numbering, same pin-1 position, same 0.5 mm pitch. KiC
 | `SeeedStudio_XIAO_ESP32S3` footprint | `gitlab.fabcloud.org/ricardo.marques/kicad` | **not stated** — check before redistributing |
 | `TJA1051T`, `TCA9548APWR`, `INA228`, `INA226`, `SHT4x` symbols + 8 footprints | KiCad 10.0.5 stock libraries | CC-BY-SA-4.0 + KiCad library exception |
 | `ADXL375` symbol | derived from KiCad `Sensor_Motion:ADXL343` | CC-BY-SA-4.0 + KiCad library exception |
+| `Pololu_D36V50F5_module`, `Pololu_A4988_carrier`, `Pololu_D36V6F15_module` STEP models | made for this repo: plain coloured boxes, no vendor data | no third-party terms |
 
 KiCad's library exception permits use in a design without licensing the design under CC-BY-SA. The
 copied library files themselves remain under their original terms.
@@ -205,6 +207,13 @@ model silently misleads mechanical fit checks. `Teensy41` pointed at an undefine
 and was retargeted to `${KIPRJMOD}/../lib/dreams_v3.3dshapes/Teensy_4.1_Assembly.STEP`; drop XenGi's
 19 MB STEP there if you want it. `BMP390`, `MODULE_XIAO_ESP32_S3` and `SeeedStudio_XIAO_ESP32S3` have
 no model — SnapEDA did not ship one for those.
+
+The three Pololu modules (`Pololu_D36V50F5`, `Pololu_Breakout-16_15.2x20.3mm` for the A4988 and
+`Pololu_D36V6F5`) carry stand-in models made here (2026-10-15): boxes for the module board, its main
+parts and its header, at the height it sits on an 8.5 mm socket (the D36V50F5 and the A4988) or on
+its own header (the D36V6F15). They show the modules in renders and rough clearances, not exact
+dimensions. KiCad 10.0.5 has no `Module/Pololu_Breakout-16` model, so the A4988 footprint's old
+reference never resolved; it points at the stand-in now.
 
 ## Nothing left to source
 
