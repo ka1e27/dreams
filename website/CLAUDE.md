@@ -6,8 +6,9 @@ Static site for the D.R.E.A.M.S autonomous survey boat. It lives in the `website
 
 ## Weekly update pages
 
-- `UPDATES.md` (in `website/`) holds the short weekly bullets. The site's Updates page (`updates.html`) reads it live, so editing it is all it takes. The rules for writing bullets are in the root `CLAUDE.md` §4.2.
-- The full story goes in `updates/<YYYY-MM-DD>.md` (the week's Monday): `# Headline`, one or two intro sentences, then `## Sections` with text and photos. Once the file exists, the week on the Updates page links to `week.html?w=<YYYY-MM-DD>`, which shows the bullets, the write-up and the photos. Photos on adjacent lines share a row and open full size when clicked.
+- `UPDATES.md` (in `website/`) holds every week under `## Week ending <Mon> <day>, <year>` (its Friday): one paragraph, one to three photo lines, then the bullets. The rules for writing it are in the root `CLAUDE.md` §4.2.
+- **A week comes out on its Friday at 5 pm Boston time.** `site.js` (`RELEASE_HOUR`, `isOut`) hides it on both pages until then, so the team adds to it all week. `?preview` on either page shows it early.
+- The Updates page (`updates.html`) shows each week's paragraph and up to three photos; the whole card opens `week.html?w=<YYYY-MM-DD>` (the Friday), which shows the photos, the bullets ("What each of us did") and the longer write-up from `updates/<YYYY-MM-DD>.md` if there is one: `# Headline`, then `## Sections` with text and photos. Photos on adjacent lines share a row and open full size when clicked. Old `## Week of <Monday>` headings and `?w=<Monday>` links still work; they're read as that week's Friday.
 - Photos: put the sources in `images/updates/` (git-ignored), add them to `UPDATES` in `tools/build_images.py`, run it, and link the `img/upd-<week>-<name>-1600.jpg` it writes (the page picks the 900 px and WebP copies itself). The script re-encodes images, which drops their location data.
 
 ## Editing the site
