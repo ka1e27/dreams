@@ -192,23 +192,41 @@
   });
 
   /* ── Weekly updates ───────────────────────────────────────────────────────
-     UPDATES.md has the short version of every week (the team edits it on GitHub). A week with a
-     write-up in updates/<YYYY-MM-DD>.md (its Monday) links to week.html?w=<YYYY-MM-DD>, which
-     shows both, with the write-up's photos in a gallery that opens full size. */
+     UPDATES.md holds every week, newest first, under "## Week ending <Mon> <day>, <year>" (its Friday):
+     one paragraph, then its photos, then everyone's bullets. The Updates page shows each week's
+     paragraph and photos, and the card opens week.html?w=<YYYY-MM-DD>: the whole week, plus the longer
+     write-up in updates/<YYYY-MM-DD>.md if there is one. A week comes out on its Friday at 5 pm Boston
+     time; until then neither page shows it. Add ?preview to either page's URL to see it early. */
   const GH_UPD = 'https://github.com/ka1e27/dreams/blob/main/website/UPDATES.md';
   const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-  const weekSlug = (date) => {        // "Oct 12, 2026" -> "2026-10-12"
+  const RELEASE_HOUR = 17;            // 5 pm, Boston time, on the week's Friday
+  const toSlug = (date) => {          // "Oct 16, 2026" -> "2026-10-16"
     const m = date.match(/^([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})$/i);
     const mo = m ? MONTHS.indexOf(m[1].toLowerCase()) : -1;
     return mo < 0 ? '' : `${m[3]}-${String(mo + 1).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
   };
+  const addDays = (slug, n) => { const [y, mo, d] = slug.split('-').map(Number); return new Date(Date.UTC(y, mo - 1, d + n)).toISOString().slice(0, 10); };
+  const dayName = (slug, opts) => new Date(`${slug}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', ...opts });
+  const boston = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date()).map(p => [p.type, p.value]));
+  const today = `${boston.year}-${boston.month}-${boston.day}`;
+  const preview = new URLSearchParams(location.search).has('preview');
+  const isOut = (slug) => preview || slug < today || (slug === today && +boston.hour >= RELEASE_HOUR);
+  const IMG_LINE = /^\s*!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+"([^"]*)")?\s*\)\s*$/;
   const parseWeeks = (md) => md.replace(/<!--[\s\S]*?-->/g, '').replace(/^# .*$/m, '')
     .split(/^## /m).map(s => s.trim()).filter(Boolean).map(w => {
-      const nl = w.indexOf('\n');
-      const title = (nl < 0 ? w : w.slice(0, nl)).trim();
-      const m = title.match(/^week of\s+(.*)$/i);
-      return { title, date: m ? m[1] : '', slug: m ? weekSlug(m[1]) : '', body: nl < 0 ? '' : w.slice(nl + 1) };
-    });
+      const lines = w.split('\n'), title = lines.shift().trim();
+      let m = title.match(/^week ending\s+(?:fri(?:day)?,?\s+)?(.+)$/i), slug = m ? toSlug(m[1]) : '';
+      if (!slug && (m = title.match(/^week of\s+(.+)$/i)) && toSlug(m[1])) slug = addDays(toSlug(m[1]), 4);   // an old heading, dated by its Monday
+      const b = lines.findIndex(l => /^\s*[-*+]\s/.test(l)), top = b < 0 ? lines : lines.slice(0, b);
+      return {
+        title, slug,
+        para: top.filter(l => !IMG_LINE.test(l)).join('\n').trim(),
+        pics: top.map(l => l.match(IMG_LINE)).filter(Boolean).map(([, alt, src, cap]) => ({ alt, src, cap: cap || alt })),
+        bullets: b < 0 ? '' : lines.slice(b).join('\n').trim(),
+      };
+    }).filter(w => !w.slug || isOut(w.slug));
+  const weekHref = (slug) => `week.html?w=${slug}${preview ? '&preview' : ''}`;
   const getText = (url) => fetch(url, { cache: 'no-cache' }).then(r => (r.ok ? r.text() : null)).catch(() => null);
   const writeUp = (slug) => getText(`updates/${slug}.md`);
   const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -221,25 +239,29 @@
       `<img src="${b}-900.jpg" srcset="${b}-900.jpg 900w, ${b}-1600.jpg 1600w" sizes="${sizes}" alt="" loading="${loading}" decoding="async"></picture>`;
   };
 
+  const fits = (src) => /\.(png|svg)$/i.test(src);       // renders and logos are shown whole, not cropped
+  const thumbs = (pics) => `<div class="week-pics" aria-hidden="true">${pics.slice(0, 3).map(p =>
+    `<div class="wk-pic${fits(p.src) ? ' fit' : ''}">${photo(p.src, '(max-width: 680px) 30vw, 230px')}</div>`).join('')}</div>`;
+
   const upd = document.querySelector('[data-updates]');
   if (upd) {
     const fail = () => { upd.innerHTML = `<p class="lead">The updates didn't load. Read them <a href="${GH_UPD}">on GitHub</a>.</p>`; };
     getText(upd.dataset.src).then(md => {
       if (md == null || !window.marked) return fail();
       const weeks = parseWeeks(md);
-      if (!weeks.length) { upd.innerHTML = '<p class="lead">No updates yet.</p>'; return; }
+      if (!weeks.length) { upd.innerHTML = '<p class="lead">The first weekly update comes out on Friday.</p>'; return; }
       upd.innerHTML = weeks.map(w => {
-        const head = w.date ? `<span class="label">Week of</span><h2>${w.date}</h2>` : `<h2>${w.title}</h2>`;
-        return `<article class="week reveal"${w.slug ? ` data-slug="${w.slug}"` : ''}><div class="week-date">${head}</div><div class="week-body">${window.marked.parse(w.body)}</div></article>`;
+        const date = w.slug ? `<span class="label">Week ending</span><h2>${dayName(w.slug, { month: 'short', day: 'numeric', year: 'numeric' })}</h2>` : `<h2>${esc(w.title)}</h2>`;
+        const more = w.slug ? `<a class="week-more" href="${weekHref(w.slug)}">See the full week →</a>` : '';
+        // the paragraph and its photos; a week with no paragraph yet shows its bullets instead
+        return `<article class="week reveal${more ? ' has-more' : ''}"${w.slug ? ` data-slug="${w.slug}"` : ''}><div class="week-date">${date}</div>` +
+          `<div class="week-body">${window.marked.parse(w.para || w.bullets)}${w.pics.length ? thumbs(w.pics) : ''}${more}</div></article>`;
       }).join('');
-      // weeks with a write-up become links to it, with its first photo
-      upd.querySelectorAll('.week[data-slug]').forEach(card => writeUp(card.dataset.slug).then(full => {
-        if (!full) return;
-        const pics = [...full.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)/g)].map(m => m[1]);
-        const n = pics.length ? ` · ${pics.length} photo${pics.length > 1 ? 's' : ''}` : '';
-        card.classList.add('has-more');
-        card.querySelector('.week-body').insertAdjacentHTML('beforeend', `<a class="week-more" href="week.html?w=${card.dataset.slug}">Read the full week${n} →</a>`);
-        if (pics.length) card.insertAdjacentHTML('beforeend', `<div class="week-thumb" aria-hidden="true">${photo(pics[0], '(max-width: 680px) 100vw, 240px')}</div>`);
+      // a week with no photos of its own borrows its write-up's
+      weeks.filter(w => w.slug && !w.pics.length).forEach(w => writeUp(w.slug).then(full => {
+        const pics = full ? [...full.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)/g)].map(m => ({ src: m[1] })) : [];
+        const more = upd.querySelector(`.week[data-slug="${w.slug}"] .week-more`);
+        if (pics.length && more) more.insertAdjacentHTML('beforebegin', thumbs(pics));
       }));
     });
   }
@@ -274,48 +296,57 @@
     }
   };
 
-  /* week.html?w=YYYY-MM-DD */
+  /* week.html?w=YYYY-MM-DD (the week's Friday) */
   const wk = document.querySelector('[data-week]');
   if (wk) {
-    const slug = new URLSearchParams(location.search).get('w') || '';
+    let slug = new URLSearchParams(location.search).get('w') || '';
+    const valid = /^\d{4}-\d{2}-\d{2}$/.test(slug);
+    if (valid && new Date(`${slug}T12:00:00Z`).getUTCDay() === 1) slug = addDays(slug, 4);   // older links used the week's Monday
     const head = document.querySelector('[data-week-head]');
     const missing = (msg) => { wk.innerHTML = `<p class="lead">${msg} See <a href="updates.html">all the weekly updates</a>.</p>`; };
-    Promise.all([getText('UPDATES.md'), /^\d{4}-\d{2}-\d{2}$/.test(slug) ? writeUp(slug) : Promise.resolve(null)]).then(([md, full]) => {
+    Promise.all([getText('UPDATES.md'), valid && isOut(slug) ? writeUp(slug) : Promise.resolve(null)]).then(([md, full]) => {
       if (!window.marked) return missing("This week didn't load.");
-      const weeks = md ? parseWeeks(md) : [];
+      if (valid && !isOut(slug)) return missing(`This week's update comes out on ${dayName(slug, { weekday: 'long', month: 'long', day: 'numeric' })}.`);
+      const weeks = md ? parseWeeks(md).filter(w => w.slug) : [];
       const i = weeks.findIndex(w => w.slug === slug);
       const week = weeks[i];
       if (!week && !full) return missing("We couldn't find that week.");
-      const date = week ? `Week of ${week.date}` : `Week of ${slug}`;
-      document.title = `${date} — D.R.E.A.M.S`;
-      head.querySelector('[data-wk-kicker]').textContent = date;
+      const label = `Week ending ${dayName(slug, { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}`;
+      document.title = `${label} — D.R.E.A.M.S`;
+      head.querySelector('[data-wk-kicker]').textContent = label;
 
-      // the write-up: "# Headline", a short intro paragraph, then sections; image-only paragraphs become galleries
+      // the write-up, if there is one: "# Headline", then sections; image-only paragraphs become galleries
       const body = document.createElement('div');
       body.innerHTML = full ? window.marked.parse(full) : '';
       const h1 = body.querySelector('h1');
-      head.querySelector('[data-wk-title]').textContent = h1 ? h1.textContent : date;
+      head.querySelector('[data-wk-title]').textContent = h1 ? h1.textContent : `The week ending ${dayName(slug, { month: 'long', day: 'numeric' })}`;
       if (h1) h1.remove();
-      const intro = body.firstElementChild;
-      if (intro && intro.tagName === 'P' && !intro.querySelector('img')) {
-        const lead = head.querySelector('[data-wk-lead]');
-        lead.innerHTML = intro.innerHTML; lead.hidden = false; intro.remove();
-      }
+      // the lead is the week's paragraph; an older write-up's own opening paragraph gives way to it
+      const intro = body.firstElementChild, introText = intro && intro.tagName === 'P' && !intro.querySelector('img');
+      const lead = head.querySelector('[data-wk-lead]');
+      if (week && week.para) { lead.innerHTML = window.marked.parseInline(week.para); lead.hidden = false; if (introText) intro.remove(); }
+      else if (introText) { lead.innerHTML = intro.innerHTML; lead.hidden = false; intro.remove(); }
+
+      const figure = (p, one) => `<figure><button type="button" class="ph" data-full="${esc(p.src)}" data-alt="${esc(p.alt)}" data-cap="${esc(p.cap)}" aria-label="Open photo: ${esc(p.alt || 'photo')}">` +
+        `${photo(p.src, one ? '(max-width: 900px) 100vw, 860px' : '(max-width: 680px) 100vw, 430px')}</button>${p.cap ? `<figcaption>${esc(p.cap)}</figcaption>` : ''}</figure>`;
+      const gallery = (pics) => `<div class="gallery${pics.length === 1 ? ' one' : ''}">${pics.map(p => figure(p, pics.length === 1)).join('')}</div>`;
+      const shown = new Set((week ? week.pics : []).map(p => p.src));     // a photo the week already shows isn't repeated below
       body.querySelectorAll('p').forEach(p => {
         const imgs = [...p.querySelectorAll('img')];
         if (!imgs.length || p.textContent.trim()) return;
+        const pics = imgs.map(im => ({ src: im.getAttribute('src'), alt: im.getAttribute('alt') || '', cap: im.getAttribute('title') || im.getAttribute('alt') || '' })).filter(x => !shown.has(x.src));
+        if (!pics.length) return p.remove();
         const g = document.createElement('div');
-        g.className = `gallery${imgs.length === 1 ? ' one' : ''}`;
-        g.innerHTML = imgs.map(im => {
-          const src = im.getAttribute('src'), alt = im.getAttribute('alt') || '', capText = im.getAttribute('title') || alt;
-          return `<figure><button type="button" class="ph" data-full="${esc(src)}" data-alt="${esc(alt)}" data-cap="${esc(capText)}" aria-label="Open photo: ${esc(alt || 'photo')}">` +
-            `${photo(src, imgs.length === 1 ? '(max-width: 900px) 100vw, 860px' : '(max-width: 680px) 100vw, 430px')}</button>${capText ? `<figcaption>${esc(capText)}</figcaption>` : ''}</figure>`;
-        }).join('');
-        p.replaceWith(g);
+        g.innerHTML = gallery(pics);
+        p.replaceWith(g.firstElementChild);
       });
 
+      // the week's photos, what each of us did, then the write-up
+      const bullets = week && week.bullets ? `<section class="wk-short"><span class="label">What each of us did</span><div class="week-body">${window.marked.parse(week.bullets)}</div></section>` : '';
+      wk.innerHTML = `${week && week.pics.length ? gallery(week.pics) : ''}${bullets}<article class="wk-body">${body.innerHTML}</article><nav class="wk-nav" aria-label="Other weeks"></nav>`;
+
       // the first photo moves into the page head's blob (it still opens full size, first in the viewer)
-      const first = body.querySelector('.gallery figure');
+      const first = wk.querySelector('.gallery figure');
       let cover = null;
       if (first) {
         const b = first.querySelector('.ph'), g = first.parentElement;
@@ -329,10 +360,6 @@
         const show = () => { if (hi.naturalWidth) head.style.setProperty('--ar', (hi.naturalWidth / hi.naturalHeight).toFixed(3)); bg.hidden = false; };
         if (hi.complete) show(); else hi.addEventListener('load', show, { once: true });
       }
-
-      const short = week && week.body.trim() ? `<aside class="wk-short"><span class="label">This week in short</span><div class="week-body">${window.marked.parse(week.body)}</div></aside>` : '';
-      const none = full ? '' : '<p class="wk-none">There\'s no longer write-up for this week yet.</p>';
-      wk.innerHTML = `${short}${none}<article class="wk-body">${body.innerHTML}</article><nav class="wk-nav" aria-label="Other weeks"></nav>`;
       lightbox([...(cover ? [cover] : []), ...wk.querySelectorAll('.gallery .ph')]);
       // each photo sizes its slot from its own proportions, so a row of mixed photos lines up without cropping
       wk.querySelectorAll('.gallery img').forEach(im => {
@@ -340,12 +367,9 @@
         if (im.complete) fit(); else im.addEventListener('load', fit, { once: true });
       });
 
-      // older and newer weeks that have write-ups of their own
-      const nav = wk.querySelector('.wk-nav');
-      const link = (w, rel) => w ? writeUp(w.slug).then(t => t ? `<a class="wk-${rel}" href="week.html?w=${w.slug}"><span class="label">${rel === 'older' ? '← Older' : 'Newer →'}</span><strong>Week of ${w.date}</strong></a>` : '') : Promise.resolve('');
-      Promise.all([link(i >= 0 ? weeks[i + 1] : null, 'older'), link(i > 0 ? weeks[i - 1] : null, 'newer')]).then(([older, newer]) => {
-        nav.innerHTML = `${older || '<span></span>'}<a class="wk-all btn btn-ghost" href="updates.html">All updates</a>${newer || '<span></span>'}`;
-      });
+      // the older and newer weeks that are out
+      const link = (w, rel) => w ? `<a class="wk-${rel}" href="${weekHref(w.slug)}"><span class="label">${rel === 'older' ? '← Older' : 'Newer →'}</span><strong>Week ending ${dayName(w.slug, { month: 'short', day: 'numeric' })}</strong></a>` : '<span></span>';
+      wk.querySelector('.wk-nav').innerHTML = `${link(i >= 0 ? weeks[i + 1] : null, 'older')}<a class="wk-all btn btn-ghost" href="updates.html">All updates</a>${link(i > 0 ? weeks[i - 1] : null, 'newer')}`;
     });
   }
 

@@ -108,23 +108,29 @@ committing.
 
 ### 4.2 Weekly updates: document your work
 
-The team posts weekly updates on https://ka1e27.github.io/dreams/updates.html. The page reads
-`website/UPDATES.md` live. After meaningful work anywhere in this repo (boat hardware, PCBs,
-firmware, CAD, testing, sponsors, the site), add to it before finishing:
+The team posts weekly updates on https://ka1e27.github.io/dreams/updates.html, read from
+`website/UPDATES.md`. A week runs Saturday to Friday and **comes out on its Friday at 5 pm Boston
+time**; the site hides it until then, so add to it as you go. After meaningful work anywhere in this
+repo (boat hardware, PCBs, firmware, CAD, testing, sponsors, the site), add to it before finishing:
 
 1. **Pull first** (`git pull`). Matthew and the others edit this file too.
-2. **Find the week:** `## Week of <Mon> <day>, <year>`, using the Monday. If it's missing, add it at
-   the top, just under the instructions comment. Newest week first.
+2. **Find the week:** `## Week ending <Mon> <day>, <year>`, dated by the week's Friday (work on a
+   Saturday goes in the next Friday's week). If it's missing, add it at the top, just under the
+   instructions comment. Newest week first.
 3. **One short bullet per project:** `- **Name:** what was built, tested, decided or broken.` Use the
    name of the person you're working with (Kyle unless told otherwise). Kyle wants these very short,
    so fold later work on the same project into its bullet instead of adding more.
-4. **Write for the public:** true and specific, no hype. Follow §4.1. Don't say who wrote the code
+4. **Keep the week's paragraph true.** It goes right under the heading, before one to three photo
+   lines and the bullets, and with the photos it's all the Updates page shows: a few sentences that
+   sum the week up. Write it if the week has none, and update it when your work changes the story.
+5. **Write for the public:** true and specific, no hype. Follow §4.1. Don't say who wrote the code
    or mention AI tools.
-5. **Only add.** Never rewrite other people's bullets.
-6. **Commit it with your other changes.** Pushing `main` publishes it.
+6. **Only add.** Never rewrite other people's bullets.
+7. **Commit it with your other changes.** Pushing `main` publishes it, but the week only shows from
+   its Friday.
 
-For the full story with photos, add `website/updates/<YYYY-MM-DD>.md` (the week's Monday); the week
-then gets its own page. The format and the photo pipeline are in `website/CLAUDE.md`.
+For the full story with photos, add `website/updates/<YYYY-MM-DD>.md` (the week's Friday); it shows on
+the week's own page under the bullets. The format and the photo pipeline are in `website/CLAUDE.md`.
 
 ### 4.3 Don't port V2 values
 
