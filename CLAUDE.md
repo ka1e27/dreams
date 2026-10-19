@@ -120,6 +120,8 @@ repo (boat hardware, PCBs, firmware, CAD, testing, sponsors, the site), add to i
 3. **One short bullet per project:** `- **Name:** what was built, tested, decided or broken.` Use the
    name of the person you're working with (Kyle unless told otherwise). Kyle wants these very short,
    so fold later work on the same project into its bullet instead of adding more.
+   Credit everyone who did the work (`- **Kyle and Matthew:** ...`), and start team news, like someone
+   joining, with `- **Team:**`, not one person's name.
 4. **Keep the week's paragraph true.** It goes right under the heading, before one to three photo
    lines and the bullets, and with the photos it's all the Updates page shows: a few sentences that
    sum the week up. Write it if the week has none, and update it when your work changes the story.
