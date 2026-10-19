@@ -31,7 +31,7 @@ ENTRIES = [
     ("v1", "V1 · Deck", "built", "Grace on deck", "Our 3D print of the Grace figure that Rocky makes in Project Hail Mary. Printed for fun.", "log-deck-figure", "A white 3D-printed figure of Grace from Project Hail Mary sitting on V1's clear acrylic deck"),
     ("v1", "V1 · Hull", "built", "Epoxy-sealing the printed hull", "PLA hulls sealed with marine epoxy.", "log-epoxy", "Brushing marine epoxy onto a printed hull"),
     ("v1", "V1 · Hull", "built", "The sealed hull", "Glossy after its epoxy coat, black at the bow and red behind.", "log-hull-coat", "A printed V1 hull section held up after its epoxy coat, black at the bow and red behind"),
-    ("v1", "V1 · London", "built", "A workshop in our room", "A hull section cures over a drop sheet while the build takes over the desk.", "log-dorm", "Our room in London set up as a workshop, with a hull section hanging over a taped-down drop sheet"),
+    ("v1", "V1 · London", "built", "A workshop in London", "A hull section cures over a drop sheet while the build takes over the desk.", "log-dorm", "A room in London set up as a workshop, with a hull section hanging over a taped-down drop sheet"),
     ("v1", "V1 · Winch", "built", "The sensor-deployment winch", "Lowers the pod to the bottom to sample.", "log-winch", "The V1 winch that lowers the sensor pod"),
     ("v1", "V1 · Winch", "tested", "Weight-testing the winch", "A load on the line, with the winch run from the RC transmitter.", "log-winch-test", "", "media/v1-winch-test.mp4"),
     ("v1", "V1 · Propulsion", "failed", "Jet drive", "An early jet-propulsion experiment. A dead end, but a useful one.", "log-jet", "Line drawing of an early jet-propulsion unit"),
