@@ -22,8 +22,9 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Oct 23, 2026
 
-We tidied up the website: the home page now says up front that D.R.E.A.M.S was founded by students at Northeastern University, and the team page and build log got a few corrections.
+We ran the first CFD on the V3 hull: at 2.5 knots the catamaran needs about 13 N of thrust, and at 3.5 knots about 36 N as its bow wave builds, close to what our sizing model predicted. We also tidied up the website, which now says up front that D.R.E.A.M.S was founded by students at Northeastern University.
 
+- **Kyle:** Ran CFD on the V3 catamaran in SolidWorks Flow Simulation at 1, 2.5 and 3.5 knots with the hulls trimmed 2.5° stern-down: about 13 N of drag at 2.5 knots and 36 N at 3.5 knots, within about 20% of the sizing model, so the drive has plenty of headroom.
 - **Kyle:** Put "Founded by students at Northeastern University" on the home page, set Logan's major to Business Administration and Psychology, and corrected how the site describes where V1 was built.
 
 ## Week ending Oct 16, 2026
