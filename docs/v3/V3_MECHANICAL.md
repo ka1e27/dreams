@@ -370,6 +370,17 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
   a ~15 minute close-to-ice window works for them and the lab, and whether bottles filled from a Van
   Dorn still get the triple rinse (~0.5 L more, so a ~2.5 L tube).
 - **Muddy River site data:** depths, bridge and culvert clearances, launch points, where it ices.
+- **A fuller CFD study** (first runs in §5.6). The runs so far hold the hull at a guessed depth and trim, with no
+  convergence criteria, no drive legs and calm water. Still needed:
+  - run each speed at the depth where the support force matches the real weight (~306 N), with the trim
+    set where the pitching moment about the CG is zero;
+  - a full drag curve from 1 to 5 kn, with convergence goals, plus a mesh-refinement check so the
+    numbers don't depend on the mesh;
+  - the outdrive legs, pods and the sensor pod's tether, which the hull-only runs leave out;
+  - the hull-spacing question above: 500 mm and 700 mm on centre, since spacing changes how the two
+    hulls' waves interact;
+  - turning, a crosswind and small waves (chop on the Muddy River), for steering and stability margins;
+  - the single-hull setup, which currently lets flow pass through the hull.
 - **Tests before relying on the numbers:** bond a thrust pad on a sealed PLA coupon and load it
   (119 N in rev E); pull-test a printed rib boss and a heat-set insert; soak a sealed test piece for a
   week; confirm the outdrive's thrust on the stand.
