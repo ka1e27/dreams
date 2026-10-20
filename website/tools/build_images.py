@@ -183,6 +183,7 @@ UPDATES = {
     "upd-2026-10-12-bottom": "2026-10-12-v31-bottom.png",
     "upd-2026-10-12-below": "2026-10-12-v31-below.png",
     "upd-2026-10-12-side": "2026-10-12-v31-side.png",
+    "upd-2026-10-23-cfd": "2026-10-23-cfd-3-5kn.png",       # Kyle's Flow Simulation run, 3.5 kn at 2.5 deg (screenshot, upscaled to 1600)
 }
 for slug, name in UPDATES.items():
     if ONLY and slug not in ONLY:

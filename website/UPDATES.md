@@ -24,6 +24,8 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 We ran the first CFD on the V3 hull: at 2.5 knots the catamaran needs about 13 N of thrust, and at 3.5 knots about 36 N as its bow wave builds, close to what our sizing model predicted. We also tidied up the website, which now says up front that D.R.E.A.M.S was founded by students at Northeastern University.
 
+![CFD of the V3 catamaran at 3.5 knots, hulls trimmed 2.5° stern-down](img/upd-2026-10-23-cfd-1600.jpg)
+
 - **Kyle:** Ran CFD on the V3 catamaran in SolidWorks Flow Simulation at 1, 2.5 and 3.5 knots with the hulls trimmed 2.5° stern-down: about 13 N of drag at 2.5 knots and 36 N at 3.5 knots, within about 20% of the sizing model, so the drive has plenty of headroom.
 - **Kyle:** Put "Founded by students at Northeastern University" on the home page, set Logan's major to Business Administration and Psychology, and corrected how the site describes where V1 was built.
 
