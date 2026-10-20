@@ -213,6 +213,41 @@ From Matthew's rev E reports:
 - A wider hull buys payload back at a cost in power. A quick run on the rev D model at 985 mm
   (2026-10-14) put 300 mm hulls at rev D's freeboard for about twice its cruise power.
 
+### 5.6 CFD check of the hull drag (Kyle, 2026-10-19)
+
+Kyle ran the catamaran (the SolidWorks hulls and bridge, no drive legs) in SolidWorks Flow Simulation,
+in calm fresh water with the hull held at a fixed depth and trim. Y is the direction of travel and Z
+is up, so drag is the Y force and the water's support is the Z force.
+
+| Speed | Trim (stern down) | Drag (Y) | Support (Z) | Model, hulls only, no margin | Notes |
+|---|---|---|---|---|---|
+| 1 kn (0.51 m/s) | 2.5° | ~3 N | 327 N | ~1–1.5 N | Below the run's noise: the side force read 3.8 N |
+| 2.5 kn (1.29 m/s) | 2.5° | 12–14 N | 290 N | ~17 N | Last values ~11.6 N, after a mid-run spike |
+| 2.5 kn (1.29 m/s) | 7.5° | 27 N | 426 N | | Too deep: Z is ~43 kg against the 31.2 kg design |
+| 3.5 kn (1.80 m/s) | 2.5° | 36 N | 250 N | ~30 N | Settled cleanly (current and average agree) |
+
+"Model" is `mechanical/reports/propulsion_report.md` (friction × form factor, wave and transom drag),
+read between its rows without the 15 % margin or the drive legs.
+
+What it shows:
+
+- **The model holds up.** CFD is within about 20 % of it, slightly under at 2.5 kn and slightly over at
+  3.5 kn. Once the margin and the drive legs are added back, the model covers both.
+- **The wave-drag hump is real.** Drag nearly triples between 2.5 and 3.5 kn (Froude number 0.42 to
+  0.59). Cruise near 2.5 kn (1.3 m/s), as §5.5 already says.
+- **Power has headroom.** 36 N at 1.8 m/s is ~65 W at the hulls, roughly 150 W from the packs with
+  drive losses: inside the 200–300 W per side the drive was sized for.
+- **Trim matters.** At 2.5 kn, 7.5° of stern-down trim doubled the drag compared with 2.5°, so keep the
+  packs and the heavy parts near the design LCG (0.414 m forward of the transom, §5.2).
+- **The boat squats as it speeds up.** Z falls from 327 N (1 kn) to 290 N (2.5 kn) to 250 N (3.5 kn) at
+  the same fixed depth. A free-floating boat would sit lower: about 15–20 mm at 3.5 kn, so the real drag
+  there is probably nearer 40 N.
+
+Still to do: rerun 3.5 kn with the hull lowered until Z is ~300 N, add a torque-about-X goal at the CG
+to find the trim where the pitching moment is zero (try 2.5° and 3.5°), set convergence criteria on
+the goals, and add 2, 4 and 5 kn for a full drag curve. A single-hull run at 4 kn showed flow passing
+through the inside of the hull, so check that the hull is a solid in that project before using it.
+
 ## 6. Water sampling and sensors
 
 ### 6.1 How a sample gets taken (proposal)
