@@ -19,7 +19,7 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,500..800&family=Figtree:wght@400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=f5ee85b3">
+<link rel="stylesheet" href="styles.css?v=1037e0c1">
 <link rel="preload" as="image" href="img/docks-portrait-800.webp" type="image/webp" fetchpriority="high">
 </head>
 <body data-page="home">
@@ -60,6 +60,21 @@
     <div class="wrap">
       <p class="label" id="name-h">What D.R.E.A.M.S stands for</p>
       <p class="name-line"><b>D</b>ata <b>R</b>ecovery for <b>E</b>nvironmental <b>A</b>nd <b>M</b>arine <b>S</b>urveillance</p>
+    </div>
+  </section>
+
+  <!-- Latest weekly update: site.js fills it from UPDATES.md with the newest week that's out (Fridays, 5 pm Boston).
+       It stays hidden without JavaScript or if the file doesn't load. -->
+  <section class="latest-band" aria-labelledby="latest-h" data-latest data-src="UPDATES.md" hidden>
+    <div class="wrap">
+      <div class="latest">
+        <div class="latest-pic" data-latest-pic aria-hidden="true"></div>
+        <div class="latest-copy">
+          <p class="label" id="latest-h">Latest update&nbsp;· <span data-latest-date></span></p>
+          <p class="latest-para" data-latest-para></p>
+          <div class="latest-links"><a class="more" data-latest-link href="updates.html">Read the full week →</a><a class="latest-all" href="updates.html">All updates</a></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -218,7 +233,7 @@
         <h2 id="partners-h" class="mt-18">Help us get V3 on the water.</h2>
         <p class="lead" style="margin-top:22px">We've built the boat ourselves so far. To finish V3 we're looking for funding, a mentor in the field, and places to machine and fabricate what we design.</p>
         <div class="talks">
-          <div class="talk"><span class="chip tested">Sponsor</span><div><strong>PCBWay</strong><span>PCB fabrication</span></div></div>
+          <div class="talk"><span class="chip tested">Sponsor</span><div><a class="talk-logo" href="https://www.pcbway.com/" target="_blank" rel="noopener"><picture><source type="image/webp" srcset="img/partners/pcbway.webp"><img src="img/partners/pcbway.png" alt="PCBWay" width="720" height="202" loading="lazy"></picture></a><span>PCB fabrication</span></div></div>
           <div class="talk"><span class="chip live">In conversation</span><div><strong>Charles River Watershed Association (CRWA)</strong><span>Data collection</span></div></div>
           <div class="talk"><span class="chip live">In conversation</span><div><strong>Port of Oakland</strong><span>Sediment sampling</span></div></div>
         </div>
@@ -250,6 +265,6 @@
 </main>
 
 <div id="footer"><noscript><footer class="footer"><div class="wrap"><p>Contact: <a href="mailto:DREAMSboatproject@gmail.com">DREAMSboatproject@gmail.com</a>&nbsp;· <a href="mailto:tran.kyl@northeastern.edu">Kyle Tran&nbsp;· tran.kyl@northeastern.edu</a>&nbsp;· <a href="mailto:hong.matt@northeastern.edu">Matthew Hong&nbsp;· hong.matt@northeastern.edu</a></p></div></footer></noscript></div>
-<script src="site.js?v=ee70e2f0"></script>
+<script src="site.js?v=1ace68dc"></script>
 </body>
 </html>

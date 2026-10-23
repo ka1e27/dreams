@@ -266,6 +266,25 @@
     });
   }
 
+  /* Home page: the newest week that's out, as one card (its paragraph as plain text and its first photo).
+     It follows the same Friday 5 pm release as the Updates page, and stays hidden if nothing loads. */
+  const latest = document.querySelector('[data-latest]');
+  if (latest) {
+    getText(latest.dataset.src).then(md => {
+      const w = md ? parseWeeks(md).find(x => x.slug && x.para) : null;
+      if (!w) return;
+      const plain = (s) => s.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/[*_`]+/g, '').replace(/\s+/g, ' ').trim();
+      latest.querySelector('[data-latest-date]').textContent = `Week ending ${dayName(w.slug, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      latest.querySelector('[data-latest-para]').textContent = plain(w.para);
+      latest.querySelector('[data-latest-link]').href = weekHref(w.slug);
+      const box = latest.querySelector('[data-latest-pic]'), pic = w.pics[0];
+      if (pic) { box.innerHTML = photo(pic.src, '(max-width: 680px) 90vw, 320px'); box.classList.toggle('fit', fits(pic.src)); }
+      else box.remove();
+      latest.hidden = false;
+    });
+  }
+
   /* Full-size photo viewer for a week's gallery (Esc closes, arrow keys step through) */
   const lightbox = (buttons) => {
     if (!buttons.length) return;
