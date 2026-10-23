@@ -22,12 +22,13 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Oct 23, 2026
 
-We ran the first CFD on the V3 hull: at 2.5 knots the catamaran needs about 13 N of thrust, and at 3.5 knots about 36 N as its bow wave builds, close to what our sizing model predicted. We also tidied up the website, which now says up front that D.R.E.A.M.S was founded by students at Northeastern University.
+We ran the first CFD on the V3 hull: at 2.5 knots the catamaran needs about 13 N of thrust, and at 3.5 knots about 36 N as its bow wave builds, close to what our sizing model predicted. We also ran three toroidal prop designs through the same simulation, which showed how much thrust a prop loses to cavitation and to spinning the wrong way, and that a bigger prop isn't more efficient on its own.
 
 ![CFD of the V3 catamaran at 3.5 knots, hulls trimmed 2.5° stern-down](img/upd-2026-10-23-cfd-1600.jpg)
+![CFD of one of the toroidal props: water drawn into the prop and pushed out as a jet](img/upd-2026-10-23-prop-1600.jpg)
 
 - **Kyle:** Ran CFD on the V3 catamaran in SolidWorks Flow Simulation at 1, 2.5 and 3.5 knots with the hulls trimmed 2.5° stern-down: about 13 N of drag at 2.5 knots and 36 N at 3.5 knots, within about 20% of the sizing model, so the drive has plenty of headroom.
-- **Kyle:** Put "Founded by students at Northeastern University" on the home page, set Logan's major to Business Administration and Psychology, and corrected how the site describes where V1 was built.
+- **Kyle:** Ran CFD on three toroidal prop designs, 85, 90 and 140 mm across: the 90 and 140 mm props came out about equally efficient, spinning a prop the wrong way cost it over a third of its thrust, and turning on cavitation cut the 90 mm prop's thrust by 35–50%.
 
 ## Week ending Oct 16, 2026
 
