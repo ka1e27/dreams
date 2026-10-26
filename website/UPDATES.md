@@ -20,6 +20,12 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 - On GitHub: open this file, click the pencil icon, edit, then "Commit changes".
 -->
 
+## Week ending Oct 30, 2026
+
+This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin.
+
+- **Kyle:** Ran nearly 50 more prop CFD runs, mostly tuning a 130 mm, three-loop toroidal prop one change at a time (blade angles, fin length, how far the roots lean out, section thickness). The shaft power it needs at 2.5 knots fell from about 47 W per prop to about 26 W, and the latest version has thicker roots to make it strong enough to 3D print in tough resin.
+
 ## Week ending Oct 23, 2026
 
 We ran the first CFD on the V3 hull: at 2.5 knots the catamaran needs about 13 N of thrust, and at 3.5 knots about 36 N as its bow wave builds, close to what our sizing model predicted. We also ran three toroidal prop designs through the same simulation, which showed how much thrust a prop loses to cavitation and to spinning the wrong way, and that a bigger prop isn't more efficient on its own.
