@@ -25,7 +25,7 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin.
 
 - **Kyle:** Ran nearly 50 more prop CFD runs, mostly tuning a 130 mm, three-loop toroidal prop one change at a time (blade angles, fin length, how far the roots lean out, section thickness). The shaft power it needs at 2.5 knots fell from about 47 W per prop to about 26 W, and the latest version has thicker roots to make it strong enough to 3D print in tough resin.
-- **Kyle:** Added Nolan's and Caleb's emails to the Team page.
+- **Kyle:** Added Nolan's and Caleb's emails to the Team page and listed them as team engineers.
 
 ## Week ending Oct 23, 2026
 
