@@ -18,6 +18,7 @@ Rev E took up the first row; the rest still need carrying into the model and the
 | Topic | Rev D says | Now | What it means |
 |---|---|---|---|
 | **Hull length and printing** | 1300 mm hulls, each tub and lid in 3 segments (520 / 260 / 520 mm), split at the frames, printed on end on the Giga (800 × 800 × 1000 mm) | **940 mm hulls** (975 mm over the rails), each tub and lid printed in one piece, stern down, on the Giga (Matthew's rev E, 2026-10-05; the SolidWorks model on the website matches; Kyle confirmed 940 mm on 2026-10-14) | Done in rev E: the bridge moved 185 mm aft for level trim (frames at x 335 / 595, hub at 425), printed-in ring frames replace the segment bulkheads, and every check was re-run (§3). The shorter hull costs payload and power: +4 kg before the lid joint is within 60 mm of the water (rev D +15), and ~144 W for both drives at 1.5 m/s (rev D 94 W), so cruise near 1.3 m/s (~92 W) (§5.5) |
+| **Hull spacing** | 700 mm on centre (920 mm overall), in rev D and rev E's model and loads | **500 mm on centre** (733 mm overall), as in the SolidWorks model on the website (Kyle, 2026-10-28) | Re-run the model at 500 mm: the clear tunnel drops from 480 to 280 mm, the arch frames get shorter, and transverse stability falls, since GM_T grows with the square of the spacing. The §3 numbers are still rev E's 700 mm until then |
 | **Sealing** | Glassed outside (200 g/m² E-glass, a second layer on keel, chines and stem), 2 coats of epoxy inside | Epoxy only, no fibreglass, on the first boat (Kyle, 2026-10-14) | Use the printing and epoxy steps in §5.1 without the glass. Rev E has no segment seams to cover, but the soak test still matters. Matthew's `docs/hull_printing_and_sealing.md` weighs the sealing options |
 | **Outdrive mount** | Printed ABS for now; mill a 6061 one later | Motor mounts machined from metal (Kyle, 2026-10-14) | Go straight to the metal version of the mount in §4.3 |
 | **Pod** | A 1.2 kg "V1-style box" placeholder | Probably not 3D printed, since it must be very watertight (Kyle, 2026-10-14) | Re-weigh it and check its size against the 240 × 301 mm garage opening once it's designed |
@@ -70,7 +71,7 @@ The details are in `Boat_PCB/CLAUDE.md` and `docs/v3/V3_DESIGN_BRIEF.md`.
 
 | | Rev E (940 mm, now) | Rev D (1300 mm) |
 |---|---|---|
-| Hulls | 940 × 220 × 250 mm each (975 mm and 255 mm over the rail), 700 mm apart on centre, 480 mm clear tunnel, 920 mm overall | 1300 mm long, same section and spacing |
+| Hulls | 940 × 220 × 250 mm each (975 mm and 255 mm over the rail), 700 mm apart on centre, 480 mm clear tunnel, 920 mm overall (the build uses 500 mm, §1) | 1300 mm long, same section and spacing |
 | Printing | Tub and lid each in one piece, stern down (970 / 975 mm tall on the Giga's 1000 mm) | 3 segments each, split at the frames |
 | Hull shape | 12° deadrise, R50 chine and deck edge; bow taper from 470 mm forward of the transom; keel rocker from 658 mm (stem keel +100 mm); keel rises to +40 mm at the transom from 376 mm | The same fractions of a 1300 mm hull |
 | Volume | 37.3 L per hull; 75 kg of buoyancy with both hulls just under | 51.6 L; 103 kg |
@@ -113,7 +114,8 @@ still assume rev D's three packs; the plan is now 10S (§1). Robot arm mass is *
 
 - **Two 1/4 in 6061-T6 arch frames**, 50 mm deep, laser or waterjet cut from
   `mechanical/cad/arch_frame_plate.dxf`, at 335 and 595 mm forward of the transom (rev D: 520 /
-  780), right over 8 mm ribs in the lids. 700 mm foot to foot. A flat landing printed into the lid
+  780), right over 8 mm ribs in the lids. 700 mm foot to foot at rev E's spacing (shorter at the
+  build's 500 mm, §1). A flat landing printed into the lid
   deck carries each foot over the bow taper.
 - **Feet:** a 300 × 140 × 6 mm 6061 plate each side, on a 1.5 mm EPDM pad on the lid deck. 8 × M6
   × 60 A4 per foot come up from inside the lid through full-depth Ø20 bosses in the rib, so the rib
@@ -354,9 +356,8 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
 
 ## 7. Open questions
 
-- **Hull spacing:** the SolidWorks model on the website (`Boat.V2.1`) has the 940 mm hulls 500 mm apart
-  on centre (733 mm overall), but rev E's model and its loads use 700 mm (920 mm overall). Settle
-  which, and re-run the model if it's 500.
+- **Re-run the model at 500 mm hull spacing** (decided 2026-10-28, §1): stability, the arch frames
+  and their loads, and the drag, which all still assume 700 mm.
 - **Fitting the picked motor** (§1). The 5048 200KV replaces rev C's 380 KV pick. Raise the
   motor axis ~5 mm in the outdrive drawings so the can clears the cover, confirm the motor's shaft
   diameter for the pulley bore, and set both controllers to 10S and the same limits in VESC
@@ -377,8 +378,7 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
   - a full drag curve from 1 to 5 kn, with convergence goals, plus a mesh-refinement check so the
     numbers don't depend on the mesh;
   - the outdrive legs, pods and the sensor pod's tether, which the hull-only runs leave out;
-  - the hull-spacing question above: 500 mm and 700 mm on centre, since spacing changes how the two
-    hulls' waves interact;
+  - the 500 mm hull spacing (§1), since spacing changes how the two hulls' waves interact;
   - turning, a crosswind and small waves (chop on the Muddy River), for steering and stability margins;
   - the single-hull setup, which currently lets flow pass through the hull.
 - **Tests before relying on the numbers:** bond a thrust pad on a sealed PLA coupon and load it
