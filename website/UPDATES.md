@@ -22,9 +22,9 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Oct 30, 2026
 
-This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin. We also settled the hull spacing at 500 mm.
+This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin, and we geared the drive 2:1 to suit it. We also settled the hull spacing at 500 mm.
 
-- **Kyle:** Ran nearly 50 more prop CFD runs, mostly tuning a 130 mm, three-loop toroidal prop one change at a time (blade angles, fin length, how far the roots lean out, section thickness). The shaft power it needs at 2.5 knots fell from about 47 W per prop to about 26 W, and the latest version has thicker roots to make it strong enough to 3D print in tough resin.
+- **Kyle:** Ran nearly 50 more prop CFD runs, mostly tuning a 130 mm, three-loop toroidal prop one change at a time (blade angles, fin length, how far the roots lean out, section thickness). The shaft power it needs at 2.5 knots fell from about 47 W per prop to about 26 W, and the latest version has thicker roots to make it strong enough to 3D print in tough resin. Then geared the drive to match: a 15 mm belt from a 15-tooth pulley on the motor to a 30-tooth one on the prop (2:1), and a custom 150 KV motor.
 - **Kyle:** Settled the hull spacing at 500 mm between the hull centres, as in our SolidWorks model, so the boat is 733 mm wide. The design model still uses 700 mm and gets re-run at 500 next.
 - **Kyle:** Added Nolan's and Caleb's emails to the Team page and listed them as team engineers.
 

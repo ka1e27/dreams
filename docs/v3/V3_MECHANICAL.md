@@ -25,7 +25,8 @@ Rev E took up the first row; the rest still need carrying into the model and the
 | **Electronics** | Pi 5 on the carrier with a Teensy 4.1 | The carrier (rev F) uses two Pico 2s; the V3.1 starter uses one | The boat starts on V3.1 (next row) |
 | **Battery** | Three packs, as the carrier is wired: a 12S ~10 Ah drive pack in the port hull, and 15–21 V electronics and winch packs in the starboard hull | **V3.1: one 10S 10 Ah Li-ion pack** (30–42 V, ~360 Wh) runs everything. **Full V3: two 10S 10 Ah packs in parallel,** plus an optional 4S Li-ion backup for the electronics (Kyle, 2026-10-14). Carrier rev F is built for this (§1.1) | Redo the mass budget and trim for the packs, and pick their hulls. Rough run time on the 940 mm hull, from ~325 Wh usable per pack and counting ~35 W of electronics (about 2 A at 15–21 V, brief §2): V3.1 ~5 h at 1.0 m/s, ~2.6 h at 1.3 m/s and ~1.8 h at 1.5 m/s; full V3 about double |
 | **Drive power** | ~94 W for both drives at 1.5 m/s, ~381 W at 3 m/s, ~110 N bollard | Kyle sized V3's drive at 200–300 W per side, belt-driven motors on deck (week of Oct 5) | Same layout. Rev E's shorter hull needs ~144 W at 1.5 m/s and ~434 W at 3 m/s for both drives, inside Kyle's 200–300 W per side |
-| **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink) | On the 10S pack, 200 KV gives ~7,200 rpm unloaded at 36 V nominal and ~6,000 near empty (30 V). Rev D needs ~3,900 rpm at the prop for 3 m/s through its 1:1 belt, so there's headroom. Rev D's 150–200 KV range was for 12S, which is ~185–245 KV at 10S, so 200 KV sits inside it. The controller's 8–60 V (3–13S) covers 10S, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the motor pulley's bore to the shaft (not confirmed yet) |
+| **Drive motor and controller** | Rev C's 380 KV outrunner, picked for 18 V; the KV for 12S left open (§7) | **Picked** (Kyle, 2026-10-14), two of each: a Flipsky Battle Hardened 5048 200KV 1300 W sensored outrunner, on a Flipsky Mini FSESC4.20 50A (VESC 4.12 based, aluminium heat sink). **Now a custom 150 KV winding of the same motor** (Kyle, 2026-10-29, not ordered yet), driving through the 2:1 belt in the next row | Sized for F27, the 130 mm three-loop toroidal prop from Kyle's prop CFD in Flow Simulation (October 2026): ~26 W per prop at 2.4 kn (80 rad/s) and ~100 W for 19 N at 3.4 kn (125 rad/s). Through 2:1, 150 KV can turn the prop 1.66× faster than that 3.4 kn point near empty (30 V) and 2× at 36 V nominal; ~90 KV would be the floor. KV barely changes the motor's efficiency (a rewind of the same frame loses about the same heat at a given torque); on the same gearing, 150 KV draws a quarter less current than 200 KV: ~3.1 A at cruise and ~7.8 A at 3.4 kn. The controller's 8–60 V (3–13S) covers 10S, and it talks CAN. Raise the motor axis ~5 mm so the 50 mm can fits the cover, and match the 15T pulley's bore to the shaft (not confirmed yet) |
+| **Outdrive belt and pulleys** | A 193-tooth HTD 3M-9 belt (9 mm) on 20T pulleys, 1:1 (§4.3) | **A 15 mm HTD 3M belt from a 15T pulley on the motor to a 30T on the prop shaft, 2:1** (Kyle, 2026-10-29) | At 3.4 kn the belt pulls ~60 N (85 N on 20T at 1:1), with ~7.4 teeth in mesh on the 15T. The 193-tooth belt would need the axles 255.65 mm apart (259.5 now); a 196-tooth (588 mm) gives 260.15 mm. The pod grows from 32 to ~42 mm around the 30T, and the wider belt makes it ~6 mm longer: taper its tail to the prop's 25 mm hub over ~45–50 mm (no steeper than ~12–15°), with no step at the hub. The leg grows from 28 to ~38 mm thick at the bottom and can taper toward the 15T at the top. In VESC Tool, set the motor current max from the belt's rated pull (~7.7 N per amp on the 15T at 150 KV) and cap the motor at ~3,500 rpm (183 rad/s at the prop) until the prop is tested above 125 rad/s. The drawings and `hull_sizing.py` still draw 20T/20T and a 9 mm belt |
 | **Test site** | Muddy River as the design target (Matthew, 2026-09-30) | Confirmed with CRWA: water temperature and depth on the Muddy River where people can't walk; water testing from the thaw, about March 2027; CRWA only uses data from sensors that meet NIST standards (Kyle, 2026-10-14) | Agrees. Any sensor upgrade in §6 has to meet the NIST rule |
 
 ### 1.1 Two 10S packs on the carrier (rev F)
@@ -144,7 +145,8 @@ still assume rev D's three packs; the plan is now 10S (§1). Robot arm mass is *
   transom. Motor axis 300 mm and prop axis 41 mm above the baseline: a 193-tooth HTD 3M-9 belt (579
   mm) on 20T pulleys. The drive overhangs the transom by 161 mm.
 - **Belt:** at 3 m/s it runs ~3880 rpm and ~0.40 N·m per drive, near a 9 mm belt's rating on a 20T
-  pulley. Use a 15 mm belt for long fast runs; cruise at 1.5 m/s is well inside it.
+  pulley. Use a 15 mm belt for long fast runs; cruise at 1.5 m/s is well inside it. **Now a 15 mm
+  belt geared 2:1, 15T to 30T (§1),** which changes the pod, the leg and the belt length.
 - **Why not kick-up:** rev C's tilt head hit its own bracket at ~13°, and the 3D model's cover
   overlapped the bracket at rest.
 
@@ -358,10 +360,11 @@ dissolved oxygen, turbidity, conductivity, and nutrient loading (so flow too).
 
 - **Re-run the model at 500 mm hull spacing** (decided 2026-10-28, §1): stability, the arch frames
   and their loads, and the drag, which all still assume 700 mm.
-- **Fitting the picked motor** (§1). The 5048 200KV replaces rev C's 380 KV pick. Raise the
-  motor axis ~5 mm in the outdrive drawings so the can clears the cover, confirm the motor's shaft
-  diameter for the pulley bore, and set both controllers to 10S and the same limits in VESC
-  Tool, since they share the CAN bus.
+- **Fitting the picked motor** (§1). The 5048 replaces rev C's 380 KV pick, now as a custom
+  150 KV winding on a 15T/30T belt. Raise the motor axis ~5 mm in the outdrive drawings so the can
+  clears the cover, confirm the motor's shaft diameter for the 15T's bore, redraw the pod and leg
+  for the 30T and pick the belt length, and set both controllers to 10S and the same limits in VESC
+  Tool (motor current from the belt, a speed cap), since they share the CAN bus.
 - **Does Kyle's arm go on the boat?** With water samples on the winch and sediment on the pod, the
   arm is left with surface grabs. Without it the boat is ~10 kg lighter. With it: rev D had +15 kg
   of payload, but rev E has +4 kg, so the arm doesn't fit on 940 × 220 hulls as they are.
