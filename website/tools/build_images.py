@@ -163,6 +163,8 @@ emit("omar", flatten(load(OLD / "dreams-omar.jpg")), [1200, 800])
 emit("omar-team", flatten(load(OLD / "dreams-omar-team.jpg")), [1200, 800])  # the team with Omar and V1
 emit("kyle-tran", cover(flatten(load(OLD / "team" / "kyle-tran.jpg")), 4 / 5, (0.5, 0.2)), [900, 600])
 emit("matthew-hong", cover(flatten(load(OLD / "team" / "matthew-hong-headshot.jpg")), 4 / 5, (0.5, 0.15)), [900, 600])
+emit("caleb-kong", cover(flatten(load(OLD / "team" / "caleb-headshot.jpg")), 4 / 5, (0.5, 0.2)), [320])  # source is 400 x 400, so one size
+emit("dr-eams", load(OLD / "team" / "dr-eams.png"), [400], alpha=True)  # the mascot, cut out of a Procreate close-up onto a clear 4:5 card
 
 # Wide versions of the 2026-10-08 photos (team page workshop, contact page header)
 emit("room-workshop", flatten(load(OLD / "dreams-v1-room-workshop.jpg")), [1600, 1000], q=78)
