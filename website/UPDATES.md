@@ -22,12 +22,16 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Oct 30, 2026
 
-This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin, and we geared the drive 2:1 to suit it. We also settled the hull spacing at 500 mm.
+This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation, most of them on one 130 mm, three-loop toroidal design changed one thing at a time, cut the shaft power it needs at our 2.5-knot cruise from about 47 W per prop to about 26 W. The newest version also has thicker roots, to make it strong enough to 3D print in tough resin, and we geared the drive 2:1 to suit it. We also settled the hull spacing at 500 mm. Caleb, Kyle and Nolan started designing the propulsion system, and we set the plan for our first water-quality data: temperature, depth and GPS location.
 
 - **Kyle:** Ran nearly 50 more prop CFD runs, mostly tuning a 130 mm, three-loop toroidal prop one change at a time (blade angles, fin length, how far the roots lean out, section thickness). The shaft power it needs at 2.5 knots fell from about 47 W per prop to about 26 W, and the latest version has thicker roots to make it strong enough to 3D print in tough resin. Then geared the drive to match: a 15 mm belt from a 15-tooth pulley on the motor to a 30-tooth one on the prop (2:1), and a custom 150 KV motor.
 - **Kyle:** Settled the hull spacing at 500 mm between the hull centres, as in our SolidWorks model, so the boat is 733 mm wide. The design model still uses 700 mm and gets re-run at 500 next.
 - **Kyle:** Added Nolan's and Caleb's emails to the Team page and listed them as team engineers.
 - **Team:** Dr. Eams joined as our unofficial mascot, and Caleb's photo went up on the Team page.
+- **Caleb, Kyle and Nolan:** Started designing the propulsion system.
+- **Matthew:** Kept strengthening the hulls so they can survive the conditions they might meet on the water.
+- **Team:** Set the plan for our first water-quality data: water temperature, depth and GPS location, from sensors factory-tested on NIST-traceable equipment. We'll test in the lab until the boat is ready, then on the water.
+- **Team:** Still talking with the Marine Science Institute in Redwood City, CA, about a possible program with their students.
 
 ## Week ending Oct 23, 2026
 
