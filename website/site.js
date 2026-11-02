@@ -193,7 +193,7 @@
 
   /* ── Weekly updates ───────────────────────────────────────────────────────
      UPDATES.md holds every week, newest first, under "## Week ending <Mon> <day>, <year>" (its Friday):
-     one paragraph, then its photos, then everyone's bullets. The Updates page shows each week's
+     one paragraph, then its photos, then the team's bullets. The Updates page shows each week's
      paragraph and photos, and the card opens week.html?w=<YYYY-MM-DD>: the whole week, plus the longer
      write-up in updates/<YYYY-MM-DD>.md if there is one. A week comes out on its Friday at 5 pm Boston
      time; until then neither page shows it. Add ?preview to either page's URL to see it early. */
@@ -360,8 +360,8 @@
         p.replaceWith(g.firstElementChild);
       });
 
-      // the week's photos, what each of us did, then the write-up
-      const bullets = week && week.bullets ? `<section class="wk-short"><span class="label">What each of us did</span><div class="week-body">${window.marked.parse(week.bullets)}</div></section>` : '';
+      // the week's photos, what we did, then the write-up
+      const bullets = week && week.bullets ? `<section class="wk-short"><span class="label">What we did</span><div class="week-body">${window.marked.parse(week.bullets)}</div></section>` : '';
       wk.innerHTML = `${week && week.pics.length ? gallery(week.pics) : ''}${bullets}<article class="wk-body">${body.innerHTML}</article><nav class="wk-nav" aria-label="Other weeks"></nav>`;
 
       // the first photo moves into the page head's blob (it still opens full size, first in the viewer)

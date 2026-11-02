@@ -117,16 +117,18 @@ repo (boat hardware, PCBs, firmware, CAD, testing, sponsors, the site), add to i
 2. **Find the week:** `## Week ending <Mon> <day>, <year>`, dated by the week's Friday (work on a
    Saturday goes in the next Friday's week). If it's missing, add it at the top, just under the
    instructions comment. Newest week first.
-3. **One short bullet per project:** `- **Name:** what was built, tested, decided or broken.` Use the
-   name of the person you're working with (Kyle unless told otherwise). Kyle wants these very short,
-   so fold later work on the same project into its bullet instead of adding more.
-   Credit everyone who did the work (`- **Kyle and Matthew:** ...`), and start team news, like someone
-   joining, with `- **Team:**`, not one person's name.
+3. **One short bullet per project:** `- What was built, tested, decided or broken.` Write it for the
+   team, with no name in front. Name people in the sentence only when it matters who did it, such as
+   someone joining or work the team wants credited to certain people (`- Nolan drew the new logo.`).
+   Kyle wants these very short, so fold later work on the same project into its bullet instead of
+   adding more.
 4. **Keep the week's paragraph true.** It goes right under the heading, before one to three photo
    lines and the bullets, and with the photos it's all the Updates page shows: a few sentences that
    sum the week up. Write it if the week has none, and update it when your work changes the story.
 5. **Write for the public:** true and specific, no hype. Follow §4.1. Don't say who wrote the code
-   or mention AI tools.
+   or mention AI tools. Write for someone outside the team, like a sponsor or a partner who has never
+   seen the boat: plain words, numbers with units, and every technical term explained the first time
+   (CFD, toroidal).
 6. **Only add.** Never rewrite other people's bullets.
 7. **Commit it with your other changes.** Pushing `main` publishes it, but the week only shows from
    its Friday.
