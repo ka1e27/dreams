@@ -29,7 +29,7 @@ This week went into the props. Nearly 50 CFD runs in SolidWorks Flow Simulation,
 - **Kyle:** Added Nolan's and Caleb's emails to the Team page and listed them as team engineers.
 - **Team:** Dr. Eams joined as our unofficial mascot, and Caleb's photo went up on the Team page.
 - **Caleb, Kyle and Nolan:** Started designing the propulsion system.
-- **Matthew:** Kept strengthening the hulls so they can survive the conditions they might meet on the water.
+- **Team:** Kept strengthening the hulls so they can survive the conditions they might meet on the water.
 - **Team:** Set the plan for our first water-quality data: water temperature, depth and GPS location, from sensors factory-tested on NIST-traceable equipment. We'll test in the lab until the boat is ready, then on the water.
 - **Team:** Still talking with the Marine Science Institute in Redwood City, CA, about a possible program with their students.
 
