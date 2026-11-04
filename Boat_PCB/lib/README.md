@@ -102,6 +102,9 @@ out" are all still current — those are the part worth keeping.
   - `RaspberryPi_5_GPIO_Socket_2x20`: the `PIN1` text moved to F.Fab, because it landed on neighbouring
     pads. The square pad 1 still marks pin 1.
   - `D_DO-35`: the silk `K` is gone. The cathode band marks polarity, and the letter collided with J14.
+- **`RaspberryPi_5_GPIO_Socket_2x20` mounting holes are 2.7 mm** (2026-11-04), the Pi 5's own size
+  (M2.5); they were 3.2 mm. Same positions, 49 × 58 mm apart. Both the carrier (J12) and V3.1 (J2)
+  carry the new size.
 
 Registered via each project's own `sym-lib-table` / `fp-lib-table` (beside its `.kicad_pro`), using
 `${KIPRJMOD}`-relative paths so the library travels with the repo.

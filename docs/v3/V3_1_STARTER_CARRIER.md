@@ -41,6 +41,14 @@ through its own off-board buck, and this board takes it on J1.
 - **Pi 5:** face down on the 40-pin socket and its four standoff holes (30 mm standoffs), with the
   USB and Ethernet end at the board's right edge. The header carries power only. The Pi talks to the
   Pico over a USB cable, which also flashes it.
+- **Pi standoffs and socket height:** the four holes are 2.7 mm, the same as the Pi's (M2.5), each
+  inside a 6 mm circle with no copper on either side, so a 6 mm round standoff fits at all four. With
+  its header fully seated, the Pi sits 2.5 mm above the socket's top (the header's plastic base), so
+  on 30 mm standoffs the socket's top must be about 27.5 mm above the board. A standard 8.5 mm socket
+  is far too short: use a tall socket or a stacking header on one, or size the standoffs to the socket
+  (standoff = socket height + 2.5 mm). Going below about 26 mm puts the Pi's USB and Ethernet jacks
+  (about 16 mm) onto SW1, the test points and D4, unless SW1 is a low (5 mm) switch; the cooler
+  (Geekworm H505, about 12 mm) needs about 23 mm.
 - **Pi cooling:** face down, the Pi's SoC faces the board. Only short parts are left under it (about
   9 mm at most), so on 30 mm standoffs there's about 20 mm for a heatsink or cooler.
 - **Pico 2:** socketed on the underside, hanging under the board, so a Pico, Pico 2 or a W variant
