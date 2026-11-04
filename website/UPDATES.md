@@ -23,6 +23,12 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 - On GitHub: open this file, click the pencil icon, edit, then "Commit changes".
 -->
 
+## Week ending Nov 6, 2026
+
+We got our starter circuit board (V3.1) closer to ordering. Its four mounting holes for the Raspberry Pi 5 computer now match the Pi's own 2.7 mm holes, and we worked out how tall the Pi's supports and socket need to be to clear its cooler and plugs.
+
+- Matched the starter board's and the full board's Raspberry Pi mounting holes to the Pi 5's 2.7 mm holes (they were 3.2 mm), and worked out the support (standoff) and socket heights: the Pi hangs face down 30 mm above the board, so its socket has to stand about 27.5 mm tall.
+
 ## Week ending Oct 30, 2026
 
 This week went into the propellers. In nearly 50 computer flow simulations (CFD), we improved one propeller design a step at a time and cut the power it needs at our 2.5-knot cruising speed from about 47 W to about 26 W. Caleb, Kyle and Nolan started designing the propulsion system, and we settled the boat's width at 733 mm. We also set the plan for our first water-quality data: water temperature, depth and GPS location.
