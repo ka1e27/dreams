@@ -21434,7 +21434,7 @@
 		)
 	)
 	(symbol
-		(lib_id "power:+3V3")
+		(lib_id "power:+5V")
 		(at 15.24 367.03 90)
 		(unit 1)
 		(body_style 1)
@@ -21454,7 +21454,7 @@
 				)
 			)
 		)
-		(property "Value" "+3V3"
+		(property "Value" "+5V"
 			(at 15.24 370.03 0)
 			(do_not_autoplace no)
 			(effects

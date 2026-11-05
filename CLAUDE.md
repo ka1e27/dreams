@@ -158,6 +158,9 @@ re-deriving it. That is the mistake to avoid. Reading V2: §9.
 - **The +3V3 rail is Pico A's 3V3 pin** (keep the load under 300 mA), as it was the Teensy's. Pico B's
   3V3 pin is left open, so two regulator outputs are never tied. So fit Pico A whenever Pico B runs:
   the sensors, pull-ups and RS-485 transceiver Pico B talks to are powered from Pico A.
+- **The GPS (J1) runs from +5V since 2026-11-04,** not +3V3: the M10-25Q is a 5 V module. Its UART
+  and I²C are still 3.3 V logic. Check that its TX idles at 3.3 V before plugging it in: Pico B's
+  GP5 isn't 5 V tolerant.
 - **The winch kill is fail-safe OFF, and its net name reads backwards.** Driving `WINCH_KILL`
   (Pico A GP9) **high** turns the winch *on*: a BSS138 pulls the high-side P-FET's gate down. Low,
   floating, or Pico A held in reset all leave the winch off, because a 4.7k pulls the net to ground
