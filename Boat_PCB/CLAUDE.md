@@ -11,7 +11,7 @@ apply here too, and the firmware-facing pin maps are there (§5 carrier, §6 V3.
 
 | Board | Folder | Rev | Baseline as of | Size | Footprints | ERC | DRC | Unconnected | Parity |
 |---|---|---|---|---|---|---|---|---|---|
-| Carrier | `Boat_PCB_V3/` | F, 10S power, narrowed | 2026-10-15 | 122.1 × 95.5 mm | 140; 8 on the underside: U15, D12, D13, D5, both Picos, SW1, SW2 | 0 | 0 | 0 | 0 |
+| Carrier | `Boat_PCB_V3/` | F, 10S power, narrowed | 2026-11-04 | 122.1 × 95.5 mm | 140; 8 on the underside: U15, D12, D13, D5, both Picos, SW1, SW2 | 0 | 0 | 0 | 0 |
 | V3.1 starter carrier | `Boat_PCB_V3_1/` | A | 2026-10-12 | 98 × 67 mm, 2 layers | 75; 21 on the underside | 0 | 0 | 0 | 0 |
 | Pod | `Pod_PCB_V3/` | B | 2026-09-29 | 48 × 63 mm | | 0 | 0 | 0 | 0 |
 
@@ -147,6 +147,13 @@ underneath in the middle. Every cable connector is now on an edge, and the board
 - **Copper after A2 moved:** D12 to A2's VIN, D13 to VIN and J18 to D13 are maze runs at 1.0 mm;
   Freerouting did the rest. Tracks are now 4209 mm, with 142 vias.
 
+### GPS on 5 V (2026-11-04)
+
+J1 pin 4 (the GPS supply) moved from +3V3 to +5V: the SEQURE M10-25Q is sold as a 5 V module, as
+V3.1's J6 already wires it. Its UART and I²C stay 3.3 V logic. Pin 4 used to tie straight into the
+In2 +3V3 plane; it now has a 0.5 mm F.Cu run to U3 pin 3 (+5V), 46 mm, no vias: left from J1 at
+45°, up beside J1's upper pins, then along y 16.05 under U13's body and over U3's top end.
+
 ### Copper you can't see from the top
 
 - The pod fuse F1's feed is a 0.8 mm track on In2 along y 1.6 above the top-edge connectors. Since
@@ -165,6 +172,7 @@ underneath in the middle. Every cable connector is now on an edge, and the board
 
 ### Locked copper: keep it if you re-route
 
+- J1 pin 4's +5V run to U3 pin 3 (2026-11-04).
 - The rev D power block.
 - That In2 track to F1.
 - The D10/D11 +5V stubs.

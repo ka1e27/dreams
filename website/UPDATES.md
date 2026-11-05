@@ -25,9 +25,9 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Nov 6, 2026
 
-We got our starter circuit board (V3.1) closer to ordering. Its four mounting holes for the Raspberry Pi 5 computer now match the Pi's own 2.7 mm holes, and we worked out how tall the Pi's supports and socket need to be to clear its cooler and plugs.
+We got our starter circuit board (V3.1) closer to ordering. Its four mounting holes for the Raspberry Pi 5 computer now match the Pi's own 2.7 mm holes, and we worked out how tall the Pi's supports and socket need to be to clear its cooler and plugs. We also checked the full board (V3) before ordering and moved its GPS plug from 3.3 V to 5 V, because our GPS module runs on 5 V.
 
-- Matched the starter board's and the full board's Raspberry Pi mounting holes to the Pi 5's 2.7 mm holes (they were 3.2 mm), and worked out the support (standoff) and socket heights: the Pi hangs face down 30 mm above the board, so its socket has to stand about 27.5 mm tall.
+- Matched the starter board's and the full board's Raspberry Pi mounting holes to the Pi 5's 2.7 mm holes (they were 3.2 mm), and worked out the support (standoff) and socket heights: the Pi hangs face down 30 mm above the board, so its socket has to stand about 27.5 mm tall. On the full board, the GPS plug now gets 5 V instead of 3.3 V, the voltage our GPS module is made for.
 
 ## Week ending Oct 30, 2026
 
