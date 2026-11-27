@@ -337,7 +337,7 @@ async function start() {
   const stopSpin = () => { controls.autoRotate = false; $('bx-spin').setAttribute('aria-pressed', 'false'); };
 
   /* load the model */
-  const gltf = await new GLTFLoader().loadAsync('media/boat-v3.glb').catch(() => null);
+  const gltf = await new GLTFLoader().loadAsync('media/boat-v3.glb?v=8c3d55cf').catch(() => null);
   if (!gltf) { fail('The 3D model didn’t load. Reload the page to try again.'); return; }
   const root = gltf.scene;
   root.traverse(o => {
