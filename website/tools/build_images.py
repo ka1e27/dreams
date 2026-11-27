@@ -191,6 +191,9 @@ UPDATES = {
     "upd-2026-11-27-stress": "2026-11-27-stress.png",       # stress check of the truss, highest of five load cases (2x render)
     "upd-2026-11-27-optimizer": "2026-11-27-optimizer.png", # topology optimization of the truss at 40 % material (2x render)
     "upd-2026-11-27-cad": "2026-11-27-bridge-cad.png",      # Matthew's SolidWorks bridge with the truss inside (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-boat": "2026-11-27-boat.png",           # Matthew's SolidWorks catamaran: bridge on both hulls, one lid on (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-brackets": "2026-11-27-brackets.png",   # the bridge's foot over the aluminum brackets in the hull rim (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-stern": "2026-11-27-stern.png",         # the arch from behind (screenshot crop, upscaled to 1600)
 }
 for slug, name in UPDATES.items():
     if ONLY and slug not in ONLY:
