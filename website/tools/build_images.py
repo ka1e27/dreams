@@ -187,6 +187,10 @@ UPDATES = {
     "upd-2026-10-12-side": "2026-10-12-v31-side.png",
     "upd-2026-10-23-cfd": "2026-10-23-cfd-3-5kn.png",       # Kyle's Flow Simulation run, 3.5 kn at 2.5 deg (screenshot, upscaled to 1600)
     "upd-2026-10-23-prop": "2026-10-23-prop-jet.png",       # Kyle's toroidal prop run: flow lines into the prop and its jet (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-pattern": "2026-11-27-pattern.png",     # bridge truss pattern, drawn to scale inside the bridge (2x render)
+    "upd-2026-11-27-stress": "2026-11-27-stress.png",       # stress check of the truss, highest of five load cases (2x render)
+    "upd-2026-11-27-optimizer": "2026-11-27-optimizer.png", # topology optimization of the truss at 40 % material (2x render)
+    "upd-2026-11-27-cad": "2026-11-27-bridge-cad.png",      # Matthew's SolidWorks bridge with the truss inside (screenshot crop, upscaled to 1600)
 }
 for slug, name in UPDATES.items():
     if ONLY and slug not in ONLY:

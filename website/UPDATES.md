@@ -23,6 +23,15 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 - On GitHub: open this file, click the pencil icon, edit, then "Commit changes".
 -->
 
+## Week ending Nov 27, 2026
+
+This week we designed the aluminum trusses that hold the boat's two hulls together. A truss is a frame of triangles that carries a lot of load for little weight, and two of them run through our 3D-printed bridge from one hull to the other. They stop the hulls twisting when one meets a wave before the other, and stop them spreading apart or folding in. A computer optimization showed where the metal does the most work. A stress check of the final design showed each truss is 37% lighter than a solid plate and can take about four times the worst load we expect.
+
+![The truss drawn to scale inside the 3D-printed bridge (dashed): a zig-zag across the middle and three round holes in each curved end](img/upd-2026-11-27-pattern-1600.jpg)
+![Stress in the truss under the worst loads we expect: darker blue is higher, and the highest, 66 MPa, is about a quarter of what it takes to bend this aluminum for good](img/upd-2026-11-27-stress-1600.jpg)
+
+- Designed the two aluminum trusses inside the bridge: 243 g each, 37% lighter than solid plates, and able to take about four times the worst loads we expect. The printed bridge will split into front and back halves that slide over them.
+
 ## Week ending Nov 6, 2026
 
 We got our starter circuit board (V3.1) closer to ordering. Its four mounting holes for the Raspberry Pi 5 computer now match the Pi's own 2.7 mm holes, and we worked out how tall the Pi's supports and socket need to be to clear its cooler and plugs. We also checked the full board (V3) before ordering and moved its GPS plug from 3.3 V to 5 V, because our GPS module runs on 5 V.
