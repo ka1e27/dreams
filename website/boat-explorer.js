@@ -1,15 +1,17 @@
 /* Boat page: the V3 boat in 3D (section #explore).
-   media/boat-v3.glb is exported from our SolidWorks model through its API: six parts, colours from the CAD,
-   metres, Y up. Spin it, pull it apart, slice it bow to stern or port to starboard, and read why each part
+   media/boat-v3.glb is converted from a STEP export of our SolidWorks model: nine parts, metres, Y up; the
+   colours are set here. Spin it, pull it apart, slice it bow to stern or port to starboard, and read why each part
    is built the way it is. three.js (pinned by the import map in boat.html) loads only when the section
    comes near the screen. */
 
 /* ---------- content ---------- */
-const SWATCH = { hull: '#C00000', deck: '#F2F4F5', bridge: '#FFC0C0', name: '#E4E4E4' };
+const SWATCH = { hull: '#C00000', deck: '#F2F4F5', bridge: '#FFC0C0', truss: '#8C939B', bracket: '#A9B0B7', name: '#E4E4E4' };
 const GROUPS = [
   { name: 'Hulls', ids: ['hull-port', 'hull-stbd'] },
   { name: 'Deck plates', ids: ['deck-port', 'deck-stbd'] },
   { name: 'Bridge', ids: ['bridge'] },
+  { name: 'Trusses', ids: ['truss-front', 'truss-back'] },
+  { name: 'Brackets', ids: ['brackets'] },
   { name: 'Name', ids: ['name'] },
 ];
 const HULL = {
@@ -35,32 +37,57 @@ const DECK = {
   ],
   history: [['V3', 'New: each hull gets its own removable plate.']],
 };
+const TRUSS = {
+  facts: [['Span', '559 mm'], ['Height', '93 mm'], ['Band', '45 mm deep'], ['Material', '6061-T6 aluminum']],
+  why: [
+    'Printed plastic alone isn’t stiff or strong enough to hold two hulls together in waves. Two aluminum trusses inside the bridge do that job: they stop the hulls twisting when one meets a wave first, and stop them spreading apart or folding in.',
+    'A Warren truss across the middle: ten diagonals zig-zag between 6 mm edges, the pattern a computer optimization picked for these loads.',
+    'Three 18 mm holes along the middle of each curve, where the metal carries the least. Every inside corner is rounded, because cracks start at sharp corners.',
+    'In our stress check, the highest stress is about a quarter of what it takes to bend this aluminum for good.',
+    '2 mm smaller than the inside of the bridge all round, so the printed halves can slide over it.',
+  ],
+  history: [['V3', 'New: aluminum trusses inside a printed bridge.']],
+};
 const PARTS = {
   'hull-port': { group: 'Hull', side: 'Port', title: 'Port hull', kind: 'hull',
-    facts: [['Length', '940 mm'], ['Width', '220 mm'], ['Depth', '253 mm'], ['Walls', '6 mm']], why: HULL.why, history: HULL.history },
+    facts: [['Length', '940 mm'], ['Width', '220 mm'], ['Depth', '248 mm'], ['Walls', '6 mm']], why: HULL.why, history: HULL.history },
   'hull-stbd': { group: 'Hull', side: 'Starboard', title: 'Starboard hull', kind: 'hull',
-    facts: [['Length', '940 mm'], ['Width', '222 mm'], ['Depth', '255 mm'], ['Walls', '6 mm']],
-    why: [...HULL.why, 'A row of bosses inside takes the screws that hold the deck plate down.', 'It carries the boat’s name near the stern.'],
+    facts: [['Length', '940 mm'], ['Width', '220 mm'], ['Depth', '248 mm'], ['Walls', '6 mm']],
+    why: [...HULL.why, 'A row of bosses inside takes the screws that hold the deck plate down.', 'Pockets in its rim hold the aluminum brackets the trusses bolt to.', 'It carries the boat’s name near the stern.'],
     history: HULL.history },
   'deck-port': { group: 'Deck plate', side: 'Port', title: 'Port deck plate', kind: 'deck', ...DECK },
   'deck-stbd': { group: 'Deck plate', side: 'Starboard', title: 'Starboard deck plate', kind: 'deck', ...DECK },
   'bridge': { group: 'Bridge', side: 'Across the hulls', title: 'Bridge', kind: 'bridge',
-    facts: [['Span', '602 mm'], ['Length', '335 mm'], ['Height', '119 mm above deck'], ['Walls', '10 mm']],
+    facts: [['Span', '596 mm'], ['Length', '330 mm'], ['Height', '118 mm above deck'], ['Walls', '10 mm']],
     why: [
       'The bridge arches from hull to hull instead of lying flat, so it stays high above the water and leaves the space between the hulls open.',
       'The look comes from commercial survey catamarans such as the EvoLogics Sonobot.',
       'A hollow shell with 10 mm walls. Each end stands on a hull’s deck plate.',
-      'It sits toward the stern, from 25 mm ahead of the middle of the hulls to 310 mm behind it.',
+      'Two aluminum trusses inside it carry the loads that hold the hulls together, so the printed shell only has to cover them.',
+      'It splits into front and back halves that slide over the trusses from either end and meet in the middle. The middle of the front half is left off this model, so you can see the trusses inside.',
+      'It sits toward the stern, from 22 mm ahead of the middle of the hulls to 308 mm behind it.',
     ],
-    history: [['V1', 'A clear acrylic deck tied the hulls together and carried the winch.'], ['V3', 'A raised arch.']] },
+    history: [['V1', 'A clear acrylic deck tied the hulls together and carried the winch.'], ['V3', 'A raised arch with two aluminum trusses inside.']] },
+  'truss-front': { group: 'Truss', side: 'Front', title: 'Front truss', kind: 'truss', facts: TRUSS.facts,
+    why: [...TRUSS.why, 'Fourteen M4 bolts hold the bridge’s front half to this truss, into brass inserts in pegs on the bridge’s walls.'], history: TRUSS.history },
+  'truss-back': { group: 'Truss', side: 'Back', title: 'Back truss', kind: 'truss', facts: TRUSS.facts,
+    why: [...TRUSS.why, 'Cut the same as the front truss. The back half of the bridge is held by screws along its seam with the front half, so it isn’t bolted to this truss.'], history: TRUSS.history },
+  'brackets': { group: 'Brackets', side: 'Starboard hull', title: 'Hull brackets', kind: 'bracket',
+    facts: [['Plate', '6.3 mm aluminum'], ['Front', '206 × 117 mm'], ['Back', '204 × 100 mm']],
+    why: [
+      'Each truss foot bolts down through the deck plate into one of these brackets.',
+      'They sit flush in pockets in the hull’s rim, so the deck plate still closes flat and seals on its foam gasket.',
+      'Only the starboard hull’s pair is drawn so far.',
+    ],
+    history: [['V3', 'New, with the trusses.']] },
   'name': { group: 'Name', side: 'Starboard', title: 'Dr. Eams', kind: 'name',
     facts: [['Letters', '7'], ['Height', '30 mm'], ['Raised', '5 mm'], ['Length', '190 mm']],
     why: ['The boat’s name, a play on D.R.E.A.M.S.', 'Raised letters near the stern on the starboard hull.'], history: [] },
 };
-const OVERVIEW = [['Length', '963 mm'], ['Beam', '733 mm'], ['Height', '368 mm'], ['Hulls', '940 mm long'], ['Hull spacing', '500 mm'], ['Clear between', '279 mm']];
+const OVERVIEW = [['Length', '963 mm'], ['Beam', '733 mm'], ['Height', '365 mm'], ['Hulls', '940 mm long'], ['Hull spacing', '500 mm'], ['Clear between', '280 mm']];
 
 /* geometry, in metres: +x starboard, +y up, -z toward the bow */
-const EXPLODE = { 'hull-port': [-0.17, 0, 0], 'hull-stbd': [0.17, 0, 0], 'deck-port': [-0.17, 0.17, 0], 'deck-stbd': [0.17, 0.17, 0], 'bridge': [0, 0.4, 0], 'name': [0.23, 0, 0] };
+const EXPLODE = { 'hull-port': [-0.17, 0, 0], 'hull-stbd': [0.17, 0, 0], 'deck-port': [-0.17, 0.17, 0], 'deck-stbd': [0.17, 0.17, 0], 'bridge': [0, 0.4, 0], 'truss-front': [0, 0.1, -0.08], 'truss-back': [0, 0.1, 0.08], 'brackets': [0.17, 0.085, 0], 'name': [0.23, 0, 0] };
 const VIEWS = { iso: [1, 0.62, -0.62], side: [1, 0.04, 0], bow: [0.3, 0.2, -1], top: [0, 1, 0.012], below: [0.25, -1, 0.05], cutz: [0.45, 0.42, -1], cutx: [-1, 0.36, 0.3] };
 /* layer views: the cut keeps what lies aft of it (z) or to starboard of it (x) */
 const CUTS = { z: { normal: [0, 0, 1], start: 0.143, view: 'cutz' }, x: { normal: [1, 0, 0], start: -0.25, view: 'cutx' } };
@@ -178,6 +205,8 @@ async function start() {
     hull: new THREE.MeshPhysicalMaterial({ color: SWATCH.hull, roughness: 0.42, clearcoat: 0.8, clearcoatRoughness: 0.1 }),   // epoxy gloss
     deck: new THREE.MeshStandardMaterial({ color: SWATCH.deck, roughness: 0.5 }),
     bridge: new THREE.MeshStandardMaterial({ color: SWATCH.bridge, roughness: 0.46 }),
+    truss: new THREE.MeshStandardMaterial({ color: SWATCH.truss, roughness: 0.38, metalness: 0.65 }),
+    bracket: new THREE.MeshStandardMaterial({ color: SWATCH.bracket, roughness: 0.38, metalness: 0.65 }),
     name: new THREE.MeshStandardMaterial({ color: SWATCH.name, roughness: 0.32, metalness: 0.15 }),
   };
   for (const m of Object.values(MATS)) Object.assign(m, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, clipShadows: true });

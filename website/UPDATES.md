@@ -32,6 +32,7 @@ This week we designed the aluminum trusses that hold the boat's two hulls togeth
 ![Stress in the truss under the worst loads we expect: darker blue is higher, and the highest, 66 MPa, is about a quarter of what it takes to bend this aluminum for good](img/upd-2026-11-27-stress-1600.jpg)
 
 - Designed the two aluminum trusses inside the bridge, about 310 g each and able to take about four times the worst loads we expect, the brackets in the hull rims they bolt to, and the 14 bolts that hold the printed bridge on. The bridge will split into front and back halves that slide over the trusses, with a 2 mm gap all round.
+- The 3D boat on the website's Boat page now comes from the latest CAD, with the two trusses inside the bridge and the brackets in the starboard hull's rim. Pull it apart to see them.
 
 ## Week ending Nov 6, 2026
 
