@@ -64,7 +64,7 @@ const PARTS = {
       'The look comes from commercial survey catamarans such as the EvoLogics Sonobot.',
       'A hollow shell with 10 mm walls. Each end stands on a hull’s deck plate.',
       'Two aluminum trusses inside it carry the loads that hold the hulls together, so the printed shell only has to cover them.',
-      'It splits into front and back halves that slide over the trusses from either end and meet in the middle.',
+      'It splits into front and back halves that slide over the trusses from either end and meet in the middle. The middle of the front half is left off this model, so you can see the trusses inside.',
       'It sits toward the stern, from 22 mm ahead of the middle of the hulls to 308 mm behind it.',
     ],
     history: [['V1', 'A clear acrylic deck tied the hulls together and carried the winch.'], ['V3', 'A raised arch with two aluminum trusses inside.']] },
