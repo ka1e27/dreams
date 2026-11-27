@@ -194,6 +194,7 @@ UPDATES = {
     "upd-2026-11-27-boat": "2026-11-27-boat.png",           # Matthew's SolidWorks catamaran: bridge on both hulls, one lid on (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-brackets": "2026-11-27-brackets.png",   # the bridge's foot over the aluminum brackets in the hull rim (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-stern": "2026-11-27-stern.png",         # the arch from behind (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-lid": "2026-11-27-lid.png",             # a hull lid's corner from underneath: lip, gasket groove, lowered middle (screenshot crop, upscaled to 1600)
 }
 for slug, name in UPDATES.items():
     if ONLY and slug not in ONLY:

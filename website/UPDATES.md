@@ -25,12 +25,13 @@ HOW WEEKLY UPDATES WORK (anyone on the team, or a Claude Code session)
 
 ## Week ending Nov 27, 2026
 
-This week we designed the aluminum trusses that hold the boat's two hulls together. A truss is a frame of triangles that carries a lot of load for little weight, and two of them run through our 3D-printed bridge from one hull to the other. They stop the hulls twisting when one meets a wave before the other, and stop them spreading apart or folding in. A computer optimization showed where the metal does the most work. A stress check of the final design showed each truss is 37% lighter than a solid plate and can take about four times the worst load we expect.
+This week we designed the aluminum trusses that hold the boat's two hulls together, and the brackets that fix them to the hulls. A truss is a frame of triangles that carries a lot of load for little weight, and two of them run through our 3D-printed bridge from one hull to the other. They stop the hulls twisting when one meets a wave before the other, and stop them spreading apart or folding in. A computer optimization showed where the metal does the most work. A stress check of the final design showed each truss is 37% lighter than a solid plate and can take about four times the worst load we expect.
 
+![Our catamaran in 3D (SolidWorks): the pink bridge arches from one red hull to the other. The near hull has its lid on, with Dr. Eams on its side.](img/upd-2026-11-27-boat-1600.jpg)
 ![The truss drawn to scale inside the 3D-printed bridge (dashed): a zig-zag across the middle and three round holes in each curved end](img/upd-2026-11-27-pattern-1600.jpg)
 ![Stress in the truss under the worst loads we expect: darker blue is higher, and the highest, 66 MPa, is about a quarter of what it takes to bend this aluminum for good](img/upd-2026-11-27-stress-1600.jpg)
 
-- Designed the two aluminum trusses inside the bridge: 243 g each, 37% lighter than solid plates, and able to take about four times the worst loads we expect. The printed bridge will split into front and back halves that slide over them.
+- Designed the two aluminum trusses inside the bridge, 243 g each and able to take about four times the worst loads we expect, and the brackets in the hull rims they bolt to. The printed bridge will split into front and back halves that slide over the trusses.
 
 ## Week ending Nov 6, 2026
 
