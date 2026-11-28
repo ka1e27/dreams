@@ -193,6 +193,7 @@ UPDATES = {
     "upd-2026-11-27-truss": "2026-11-27-truss.png",         # Matthew's SolidWorks truss (dark) inside the bridge, 2 mm gap and bolt holes (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-cutaway": "2026-11-27-cutaway.png",     # the catamaran with the bridge's middle cut away to show both trusses (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-front": "2026-11-27-front.png",         # the catamaran from the front: truss inside the bridge on both hulls (screenshot crop, upscaled to 1600)
+    "upd-2026-11-27-open": "2026-11-27-hull-open.png",      # the catamaran with one lid off and the bridge's front half hidden: truss on a rim bracket (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-boat": "2026-11-27-boat.png",           # Matthew's SolidWorks catamaran: bridge on both hulls, one lid on (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-brackets": "2026-11-27-brackets.png",   # the bridge's foot over the aluminum brackets in the hull rim (screenshot crop, upscaled to 1600)
     "upd-2026-11-27-stern": "2026-11-27-stern.png",         # the arch from behind (screenshot crop, upscaled to 1600)
